@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"gopkg.in/itchio/rsync-go.v0"
+	"github.com/itchio/wharf.proto/rsync"
 )
 
 type LogEntry struct {
