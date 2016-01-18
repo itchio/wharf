@@ -1,9 +1,11 @@
-package rsync
+package rsync_test
 
 import (
 	"bytes"
 	"math/rand"
 	"testing"
+
+	"github.com/itchio/wharf.proto/rsync"
 )
 
 type RandReader struct {
@@ -110,8 +112,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := &RSync{}
-	rsDelta := &RSync{}
+	rs := &rsync.RSync{}
+	rsDelta := &rsync.RSync{}
 	for _, p := range pairs {
 		(&p.Source).Fill()
 		(&p.Target).Fill()
@@ -119,25 +121,25 @@ func Test_GenData(t *testing.T) {
 		sourceBuffer := bytes.NewReader(p.Source.Data)
 		targetBuffer := bytes.NewReader(p.Target.Data)
 
-		sig := make([]BlockHash, 0, 10)
-		err := rs.CreateSignature(targetBuffer, func(bl BlockHash) error {
+		sig := make([]rsync.BlockHash, 0, 10)
+		err := rs.CreateSignature(targetBuffer, func(bl rsync.BlockHash) error {
 			sig = append(sig, bl)
 			return nil
 		})
 		if err != nil {
 			t.Errorf("Failed to create signature: %s", err)
 		}
-		opsOut := make(chan Operation)
+		opsOut := make(chan rsync.Operation)
 		go func() {
 			var blockCt, blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
-			err := rsDelta.CreateDelta(sourceBuffer, sig, func(op Operation) error {
+			err := rsDelta.CreateDelta(sourceBuffer, sig, func(op rsync.Operation) error {
 				switch op.Type {
-				case OpBlockRange:
+				case rsync.OpBlockRange:
 					blockRangeCt++
-				case OpBlock:
+				case rsync.OpBlock:
 					blockCt++
-				case OpData:
+				case rsync.OpData:
 					// Copy data buffer so it may be reused in internal buffer.
 					b := make([]byte, len(op.Data))
 					copy(b, op.Data)
@@ -171,4 +173,11 @@ func Test_GenData(t *testing.T) {
 		p.Source.Data = nil
 		p.Target.Data = nil
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
