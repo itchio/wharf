@@ -25,11 +25,11 @@ type symlinkEntry struct {
 }
 
 var regulars = []regEntry{
-	{"foo/file_f", 124},
-	{"foo/dir_a/baz", 623},
-	{"foo/dir_b/zoom", 421},
-	{"foo/file_z", 371},
-	{"foo/dir_a/bazzz", 6230},
+	{"foo/file_f", 50},
+	{"foo/dir_a/baz", 10},
+	{"foo/dir_b/zoom", 30},
+	{"foo/file_z", 40},
+	{"foo/dir_a/bazzz", 20},
 }
 
 var symlinks = []symlinkEntry{
@@ -40,7 +40,7 @@ var symlinks = []symlinkEntry{
 var filler = []byte{42}
 
 func mktestdir(t *testing.T) string {
-	tmpPath, err := ioutil.TempDir("tmp", "megafile_walk")
+	tmpPath, err := ioutil.TempDir(".", "megafile_walk")
 	must(t, err)
 
 	must(t, os.RemoveAll(tmpPath))

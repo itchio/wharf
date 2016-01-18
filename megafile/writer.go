@@ -27,4 +27,9 @@ func (w *Writer) Seek(offset int64, whence int) (int64, error) {
 	return 0, errors.New("stub")
 }
 
+func (w *Writer) Close() error {
+	return nil
+}
+
 var _ io.WriteSeeker = (*Writer)(nil)
+var _ io.Closer = (*Writer)(nil)
