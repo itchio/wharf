@@ -1,6 +1,7 @@
-// RSync/RDiff variant implementation.
+// Package rsync is a pure go implementation of a variant the rsync algorithm
 //
-// Original algorithm found at: http://www.samba.org/~tridge/phd_thesis.pdf
+// Forked from: https://bitbucket.org/kardianos/rsync/
+// Original algorithm: http://www.samba.org/~tridge/phd_thesis.pdf
 //
 // Definitions
 //   Source: The final content.
