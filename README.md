@@ -1,6 +1,7 @@
 # wharf.proto
 
 ![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)
+[![Build Status](https://ci.itch.ovh/buildStatus/icon?job=wharf.proto)](https://ci.itch.ovh/job/wharf.proto)
 
 wharf is a part of the itch.io infrastructure that allows pushing incremental
 updates with minimal network usage.
