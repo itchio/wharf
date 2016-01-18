@@ -1,6 +1,7 @@
 package megafile_test
 
 import (
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +28,9 @@ func must(t *testing.T, err error) {
 }
 
 func Test_Walk(t *testing.T) {
-	tmpPath := "tmp"
+	tmpPath, err := ioutil.TempDir("tmp", "megafile_walk")
+	must(t, err)
+
 	regulars := []regEntry{
 		{"foo/file_f", 124},
 		{"foo/dir_a/baz", 623},
