@@ -25,7 +25,16 @@ func Test_Write(t *testing.T) {
 
 	info2, err := megafile.Walk(wmpPath, 16)
 	must(t, err)
-	assert.Equal(t, info, info2, "Created same directory structure")
+	assert.Equal(t, info, info2, "creates same directory structure")
+
+	blanks := make([]byte, 0)
+	for i := int64(0); i < info.NumBlocks; i++ {
+		blanks = appendFiller(blanks, 0xf, info.BlockSize)
+	}
+
+	written, err := w.Write(blanks)
+	t.Logf("written %d, err %s", written, err)
+	must(t, err)
 
 	must(t, w.Close())
 }

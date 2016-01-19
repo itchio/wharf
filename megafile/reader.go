@@ -84,25 +84,10 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	blockSize := int64(r.info.BlockSize)
 	totalSize := blockSize * int64(r.info.NumBlocks)
 
-	var newOffset int64
-
-	switch whence {
-	case os.SEEK_SET:
-		newOffset = offset
-	case os.SEEK_CUR:
-		newOffset = r.offset + offset
-	case os.SEEK_END:
-		newOffset = totalSize - offset
-	}
-
+	newOffset, err := seekToNewOffset(r.offset, totalSize, offset, whence)
 	fmt.Printf("Seek() - newOffset = %d\n", newOffset)
-
-	if newOffset < 0 {
-		newOffset = 0
-	}
-
-	if newOffset >= totalSize {
-		return 0, io.EOF
+	if err != nil {
+		return 0, err
 	}
 
 	blockIndex := newOffset / blockSize
@@ -130,49 +115,10 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 
 	fmt.Printf("Seek() - no reader\n")
 
-	// binary search to find the file that contains our block
-	lb := 0
-	rb := len(r.info.Files)
-
-	fmt.Printf("Seek() - lb = %d, rb = %d\n", lb, rb)
-
-	for {
-		mb := (lb + rb) / 2
-		if mb == lb || mb == rb {
-			fmt.Printf("Seek() - found at %d\b", r.fileIndex)
-			// found it!
-			r.fileIndex = mb
-			break
-		}
-
-		fmt.Printf("Seek() - lb = %d, mb = %d, rb = %d\n", lb, mb, rb)
-
-		file = r.info.Files[mb]
-		if blockIndex < file.BlockIndex {
-			fmt.Printf("Seek() - blockIndex %d < file.BlockIndex %d, picking left\n", blockIndex, file.BlockIndex)
-			// pick the left half of our search interval (move the right boundary)
-			rb = mb
-		} else if blockIndex >= file.BlockIndexEnd {
-			fmt.Printf("Seek() - blockIndex %d > file.BlockIndexEnd %d, picking right\n", blockIndex, file.BlockIndexEnd)
-			// pick the right half of our search interval (move the left boundary)
-			lb = mb
-		} else {
-			fmt.Printf("Seek() - found at %d\b", r.fileIndex)
-			// found it!
-			r.fileIndex = mb
-			break
-		}
-	}
-
-	// skip over empty files
-	for r.info.Files[r.fileIndex].BlockIndexEnd == r.info.Files[r.fileIndex].BlockIndex {
-		fmt.Printf("Seek() - skipping over empty file at %d\n", r.fileIndex)
-		r.fileIndex++
-	}
-
+	r.fileIndex = r.info.blockIndexToFileIndex(blockIndex)
 	fmt.Printf("Seek() - fileIndex = %d\n", r.fileIndex)
 
-	err := r.Close()
+	err = r.Close()
 	if err != nil {
 		return 0, err
 	}
