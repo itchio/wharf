@@ -39,8 +39,8 @@ var symlinks = []symlinkEntry{
 
 var filler = []byte{42}
 
-func mktestdir(t *testing.T) string {
-	tmpPath, err := ioutil.TempDir(".", "megafile_walk")
+func mktestdir(t *testing.T, name string) string {
+	tmpPath, err := ioutil.TempDir(".", name)
 	must(t, err)
 
 	must(t, os.RemoveAll(tmpPath))

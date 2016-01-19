@@ -10,7 +10,8 @@ import (
 )
 
 func Test_Read(t *testing.T) {
-	tmpPath := mktestdir(t)
+	tmpPath := mktestdir(t, "read")
+	defer os.RemoveAll(tmpPath)
 
 	info, err := megafile.Walk(tmpPath, 16)
 	must(t, err)
@@ -22,6 +23,4 @@ func Test_Read(t *testing.T) {
 
 	assert.Equal(t, len(all), 234, "reader has right length")
 	r.Close()
-
-	must(t, os.RemoveAll(tmpPath))
 }

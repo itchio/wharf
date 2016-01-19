@@ -9,7 +9,8 @@ import (
 )
 
 func Test_Walk(t *testing.T) {
-	tmpPath := mktestdir(t)
+	tmpPath := mktestdir(t, "walk")
+	defer os.RemoveAll(tmpPath)
 
 	info, err := megafile.Walk(tmpPath, 16)
 	must(t, err)
@@ -39,6 +40,4 @@ func Test_Walk(t *testing.T) {
 		assert.Equal(t, symlink.Newname, info.Symlinks[i].Path, "symlink should be at correct path")
 		assert.Equal(t, symlink.Oldname, info.Symlinks[i].Dest, "symlink should point to correct path")
 	}
-
-	must(t, os.RemoveAll(tmpPath))
 }
