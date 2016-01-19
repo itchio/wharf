@@ -17,6 +17,7 @@ func must(t *testing.T, err error) {
 type regEntry struct {
 	Path string
 	Size int
+	Byte byte
 }
 
 type symlinkEntry struct {
@@ -25,19 +26,17 @@ type symlinkEntry struct {
 }
 
 var regulars = []regEntry{
-	{"foo/file_f", 50},
-	{"foo/dir_a/baz", 10},
-	{"foo/dir_b/zoom", 30},
-	{"foo/file_z", 40},
-	{"foo/dir_a/bazzz", 20},
+	{"foo/file_f", 50, 0xd},
+	{"foo/dir_a/baz", 10, 0xa},
+	{"foo/dir_b/zoom", 30, 0xc},
+	{"foo/file_z", 40, 0xe},
+	{"foo/dir_a/bazzz", 20, 0xb},
 }
 
 var symlinks = []symlinkEntry{
 	{"file_z", "foo/file_m"},
 	{"dir_a/baz", "foo/file_o"},
 }
-
-var filler = []byte{42}
 
 func mktestdir(t *testing.T, name string) string {
 	tmpPath, err := ioutil.TempDir(".", "tmp_"+name)
@@ -51,6 +50,7 @@ func mktestdir(t *testing.T, name string) string {
 		file, err := os.Create(fullPath)
 		must(t, err)
 
+		filler := []byte{entry.Byte}
 		for i := 0; i < entry.Size; i++ {
 			_, err := file.Write(filler)
 			must(t, err)
