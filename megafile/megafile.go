@@ -19,8 +19,8 @@ type File struct {
 	Mode os.FileMode
 
 	Size          int64
-	BlockIndex    uint64
-	BlockIndexEnd uint64
+	BlockIndex    int64
+	BlockIndexEnd int64
 }
 
 // Directories are empty directories we
@@ -41,7 +41,7 @@ type RepoInfo struct {
 	BlockSize int
 
 	// Total number of blocks
-	NumBlocks uint64
+	NumBlocks int64
 
 	// All directories, empty or not, in any order
 	Dirs []Dir
@@ -59,7 +59,7 @@ func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
 	Symlinks := make([]Symlink, 0, 0)
 	Files := make([]File, 0, 0)
 
-	BlockIndex := uint64(0)
+	BlockIndex := int64(0)
 
 	onEntry := func(FullPath string, fi os.FileInfo, err error) error {
 		// we shouldn't encounter any error crawling the repo
@@ -86,11 +86,11 @@ func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
 			Dirs = append(Dirs, d)
 		} else if Mode.IsRegular() {
 			Size := fi.Size()
-			NumBlocks := uint64(Size) / uint64(BlockSize)
-			if uint64(Size)%uint64(BlockSize) != 0 {
+			NumBlocks := Size / int64(BlockSize)
+			if Size%int64(BlockSize) != 0 {
 				NumBlocks++
 			}
-			BlockIndexEnd := BlockIndex + uint64(NumBlocks)
+			BlockIndexEnd := BlockIndex + NumBlocks
 
 			f := File{Path, Mode, Size, BlockIndex, BlockIndexEnd}
 			Files = append(Files, f)

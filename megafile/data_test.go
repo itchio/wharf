@@ -40,7 +40,7 @@ var symlinks = []symlinkEntry{
 var filler = []byte{42}
 
 func mktestdir(t *testing.T, name string) string {
-	tmpPath, err := ioutil.TempDir(".", name)
+	tmpPath, err := ioutil.TempDir(".", "tmp_"+name)
 	must(t, err)
 
 	must(t, os.RemoveAll(tmpPath))
