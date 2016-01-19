@@ -40,26 +40,41 @@ func (r *Reader) Read(p []byte) (int, error) {
 	}
 
 	file := r.info.Files[r.fileIndex]
+	fileAlignedBoundary := file.BlockIndexEnd * blockSize
 	fmt.Printf("Read() - in file %s\n", file.Path)
 
-	fileBoundary := file.BlockIndexEnd * blockSize
-	fmt.Printf("Read() - file boundary: %d\n", fileBoundary)
-
 	numFiles := len(r.info.Files)
-	for r.offset == fileBoundary && r.fileIndex < numFiles {
-		fmt.Printf("Read() - at file boundary, seeking\n")
+	if r.offset == fileAlignedBoundary && r.fileIndex < numFiles {
+		fmt.Printf("Read() - offset %d = file boundary %d, seeking\n", r.offset, fileAlignedBoundary)
 		_, err := r.Seek(r.offset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
 		}
+
+		file = r.info.Files[r.fileIndex]
+		fileAlignedBoundary = file.BlockIndexEnd * blockSize
 	}
 
-	// bytesLeftInFile := fileBoundary - r.offset
-	// copied := min(int64(len(p)), bytesLeftInFile)
+	fileRealBoundary := file.BlockIndex*blockSize + file.Size
+	fmt.Printf("Read() - file boundaries: real %d, aligned %d\n", fileRealBoundary, fileAlignedBoundary)
 
 	n, err := r.reader.Read(p)
-	fmt.Printf("read %d / %s\n", n, err)
+	fmt.Printf("Read() - got %d bytes, err = %s, new offset = %d\n", n, err, r.offset)
 
+	if err == io.EOF {
+		paddingBytesLeft := fileAlignedBoundary - r.offset
+		copied := min(int64(len(p)), paddingBytesLeft)
+		fmt.Printf("Read() - %d padding bytes left, copying %d\n", paddingBytesLeft, copied)
+
+		// pad with 0s
+		for i := int64(0); i < copied; i++ {
+			p[i] = 0
+		}
+		r.offset += copied
+		return int(copied), nil
+	}
+
+	r.offset += int64(n)
 	return n, err
 }
 
@@ -86,20 +101,25 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 		newOffset = 0
 	}
 
+	if newOffset >= totalSize {
+		return 0, io.EOF
+	}
+
 	blockIndex := newOffset / blockSize
 	file := r.info.Files[r.fileIndex]
 
 	fmt.Printf("Seek() - blockIndex = %d\n", blockIndex)
 
 	if r.reader != nil &&
-		file.BlockIndex <= blockIndex &&
+		blockIndex >= file.BlockIndex &&
 		blockIndex < file.BlockIndexEnd {
 
-		fmt.Printf("Seek() - has reader\n")
+		fmt.Printf("Seek() - has reader %s (%d <= %d < %d)\n", file.Path, file.BlockIndex, blockIndex, file.BlockIndexEnd)
 
 		fileOffset := file.BlockIndex * blockSize
 		inFileOffset := offset - fileOffset
 
+		fmt.Printf("Seek() - seeking infile to %d\n", inFileOffset)
 		_, err := r.reader.Seek(inFileOffset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
@@ -121,13 +141,16 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 		fmt.Printf("Seek() - lb = %d, mb = %d, rb = %d\n", lb, mb, rb)
 
 		file = r.info.Files[mb]
-		if file.BlockIndex < blockIndex {
+		if blockIndex < file.BlockIndex {
+			fmt.Printf("Seek() - blockIndex %d < file.BlockIndex %d, picking left\n", blockIndex, file.BlockIndex)
 			// pick the left half of our search interval (move the right boundary)
 			rb = mb
-		} else if file.BlockIndexEnd > blockIndex {
+		} else if blockIndex >= file.BlockIndexEnd {
+			fmt.Printf("Seek() - blockIndex %d > file.BlockIndexEnd %d, picking right\n", blockIndex, file.BlockIndexEnd)
 			// pick the right half of our search interval (move the left boundary)
 			lb = mb
 		} else {
+			fmt.Printf("Seek() - found at %d\b", r.fileIndex)
 			// found it!
 			r.fileIndex = mb
 			break
@@ -136,6 +159,7 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 
 	// skip over empty files
 	for r.info.Files[r.fileIndex].BlockIndexEnd == r.info.Files[r.fileIndex].BlockIndex {
+		fmt.Printf("Seek() - skipping over empty file at %d\n", r.fileIndex)
 		r.fileIndex++
 	}
 

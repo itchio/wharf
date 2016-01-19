@@ -21,6 +21,6 @@ func Test_Read(t *testing.T) {
 	all, err := ioutil.ReadAll(r)
 	must(t, err)
 
-	assert.Equal(t, len(all), 234, "reader has right length")
+	assert.Equal(t, len(all), info.BlockSize*int(info.NumBlocks), "reader has right length")
 	r.Close()
 }
