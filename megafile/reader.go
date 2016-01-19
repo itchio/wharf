@@ -136,9 +136,15 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 
 	fmt.Printf("Seek() - lb = %d, rb = %d\n", lb, rb)
 
-	found := false
-	for rb-lb > 1 {
+	for {
 		mb := (lb + rb) / 2
+		if mb == lb || mb == rb {
+			fmt.Printf("Seek() - found at %d\b", r.fileIndex)
+			// found it!
+			r.fileIndex = mb
+			break
+		}
+
 		fmt.Printf("Seek() - lb = %d, mb = %d, rb = %d\n", lb, mb, rb)
 
 		file = r.info.Files[mb]
@@ -154,13 +160,8 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 			fmt.Printf("Seek() - found at %d\b", r.fileIndex)
 			// found it!
 			r.fileIndex = mb
-			found = true
 			break
 		}
-	}
-
-	if !found {
-		r.fileIndex = lb
 	}
 
 	// skip over empty files
