@@ -1,7 +1,6 @@
 package megafile
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,7 +27,7 @@ func (info *RepoInfo) NewReader(basePath string) *Reader {
 }
 
 func (r *Reader) Read(p []byte) (int, error) {
-	fmt.Printf("Read(p [%d]byte)\n", len(p))
+	megaprint("Read(p [%d]byte)\n", len(p))
 
 	blockSize := int64(r.info.BlockSize)
 
@@ -41,7 +40,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 
 	file := r.info.Files[r.fileIndex]
 	fileAlignedBoundary := file.BlockIndexEnd * blockSize
-	fmt.Printf("Read() - in file %s\n", file.Path)
+	megaprint("Read() - in file %s\n", file.Path)
 
 	numFiles := len(r.info.Files)
 	if r.offset == fileAlignedBoundary {
@@ -49,7 +48,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 
-		fmt.Printf("Read() - offset %d = file boundary %d, file Index = %d / %d seeking\n", r.offset, fileAlignedBoundary, r.fileIndex, numFiles)
+		megaprint("Read() - offset %d = file boundary %d, file Index = %d / %d seeking\n", r.offset, fileAlignedBoundary, r.fileIndex, numFiles)
 		_, err := r.Seek(r.offset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
@@ -60,15 +59,15 @@ func (r *Reader) Read(p []byte) (int, error) {
 	}
 
 	fileRealBoundary := file.BlockIndex*blockSize + file.Size
-	fmt.Printf("Read() - file boundaries: real %d, aligned %d\n", fileRealBoundary, fileAlignedBoundary)
+	megaprint("Read() - file boundaries: real %d, aligned %d\n", fileRealBoundary, fileAlignedBoundary)
 
 	n, err := r.reader.Read(p)
-	fmt.Printf("Read() - got %d bytes, err = %s, new offset = %d\n", n, err, r.offset)
+	megaprint("Read() - got %d bytes, err = %s, new offset = %d\n", n, err, r.offset)
 
 	if err == io.EOF {
 		paddingBytesLeft := fileAlignedBoundary - r.offset
 		copied := min(int64(len(p)), paddingBytesLeft)
-		fmt.Printf("Read() - %d padding bytes left, copying %d\n", paddingBytesLeft, copied)
+		megaprint("Read() - %d padding bytes left, copying %d\n", paddingBytesLeft, copied)
 
 		// pad with 0s
 		for i := int64(0); i < copied; i++ {
@@ -83,13 +82,13 @@ func (r *Reader) Read(p []byte) (int, error) {
 }
 
 func (r *Reader) Seek(offset int64, whence int) (int64, error) {
-	fmt.Printf("Seek(offset %d, whence %d)\n", offset, whence)
+	megaprint("Seek(offset %d, whence %d)\n", offset, whence)
 
 	blockSize := int64(r.info.BlockSize)
 	totalSize := blockSize * int64(r.info.NumBlocks)
 
 	newOffset, err := seekToNewOffset(r.offset, totalSize, offset, whence)
-	fmt.Printf("Seek() - newOffset = %d\n", newOffset)
+	megaprint("Seek() - newOffset = %d\n", newOffset)
 	if err != nil {
 		return 0, err
 	}
@@ -97,18 +96,18 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	blockIndex := newOffset / blockSize
 	file := r.info.Files[r.fileIndex]
 
-	fmt.Printf("Seek() - blockIndex = %d\n", blockIndex)
+	megaprint("Seek() - blockIndex = %d\n", blockIndex)
 
 	if r.reader != nil &&
 		blockIndex >= file.BlockIndex &&
 		blockIndex < file.BlockIndexEnd {
 
-		fmt.Printf("Seek() - has reader %s (%d <= %d < %d)\n", file.Path, file.BlockIndex, blockIndex, file.BlockIndexEnd)
+		megaprint("Seek() - has reader %s (%d <= %d < %d)\n", file.Path, file.BlockIndex, blockIndex, file.BlockIndexEnd)
 
 		fileOffset := file.BlockIndex * blockSize
 		inFileOffset := offset - fileOffset
 
-		fmt.Printf("Seek() - seeking infile to %d\n", inFileOffset)
+		megaprint("Seek() - seeking infile to %d\n", inFileOffset)
 		_, err := r.reader.Seek(inFileOffset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
@@ -117,10 +116,10 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 		return newOffset, nil
 	}
 
-	fmt.Printf("Seek() - no reader\n")
+	megaprint("Seek() - no reader\n")
 
 	r.fileIndex = r.info.blockIndexToFileIndex(blockIndex)
-	fmt.Printf("Seek() - fileIndex = %d\n", r.fileIndex)
+	megaprint("Seek() - fileIndex = %d\n", r.fileIndex)
 
 	err = r.Close()
 	if err != nil {
@@ -128,7 +127,7 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	file = r.info.Files[r.fileIndex]
-	fmt.Printf("Seek() - opening %s\n", file.Path)
+	megaprint("Seek() - opening %s\n", file.Path)
 
 	fullPath := filepath.Join(r.basePath, file.Path)
 	reader, err := os.Open(fullPath)
@@ -139,8 +138,8 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	fileOffset := file.BlockIndex * blockSize
 	inFileOffset := newOffset - fileOffset
 
-	fmt.Printf("Seek() - newOffset = %d, fileOffset = %d\n", newOffset, fileOffset)
-	fmt.Printf("Seek() - seeking to %d\n", inFileOffset)
+	megaprint("Seek() - newOffset = %d, fileOffset = %d\n", newOffset, fileOffset)
+	megaprint("Seek() - seeking to %d\n", inFileOffset)
 
 	_, err = reader.Seek(inFileOffset, os.SEEK_SET)
 	if err != nil {
@@ -150,7 +149,7 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	r.reader = reader
 	r.offset = newOffset
 
-	fmt.Printf("Seek() - all done, newOffset = %d\n", newOffset)
+	megaprint("Seek() - all done, newOffset = %d\n", newOffset)
 
 	return newOffset, nil
 }
