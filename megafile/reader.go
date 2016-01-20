@@ -44,8 +44,12 @@ func (r *Reader) Read(p []byte) (int, error) {
 	fmt.Printf("Read() - in file %s\n", file.Path)
 
 	numFiles := len(r.info.Files)
-	if r.offset == fileAlignedBoundary && r.fileIndex < numFiles {
-		fmt.Printf("Read() - offset %d = file boundary %d, seeking\n", r.offset, fileAlignedBoundary)
+	if r.offset == fileAlignedBoundary {
+		if r.fileIndex >= numFiles-1 {
+			return 0, io.EOF
+		}
+
+		fmt.Printf("Read() - offset %d = file boundary %d, file Index = %d / %d seeking\n", r.offset, fileAlignedBoundary, r.fileIndex, numFiles)
 		_, err := r.Seek(r.offset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
