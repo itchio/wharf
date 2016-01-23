@@ -64,7 +64,11 @@ func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
 	onEntry := func(FullPath string, fi os.FileInfo, err error) error {
 		// we shouldn't encounter any error crawling the repo
 		if err != nil {
-			return err
+			if os.IsPermission(err) {
+				// ignore
+			} else {
+				return err
+			}
 		}
 
 		Path, err := filepath.Rel(BasePath, FullPath)
