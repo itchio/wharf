@@ -19,7 +19,7 @@ type Channel struct {
 	bw *enc.BrotliWriter
 	br *dec.BrotliReader
 
-	wc *counter.Counter
+	wc *counter.CounterWriter
 
 	genc *gob.Encoder
 	gdec *gob.Decoder
@@ -41,7 +41,7 @@ func (c *Conn) OpenChannel(chType string, payload interface{}) (*Channel, error)
 	params := enc.NewBrotliParams()
 	params.SetQuality(brotliTransportQuality)
 
-	wc := counter.New(ch)
+	wc := counter.NewWriter(ch)
 	bw := enc.NewBrotliWriter(params, wc)
 
 	br := dec.NewBrotliReader(ch)
