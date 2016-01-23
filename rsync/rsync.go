@@ -207,7 +207,7 @@ func (r *RSync) CreateDelta(source io.Reader, signature []BlockHash, ops Operati
 	}
 	buffer := r.buffer
 
-	// A single β hashes may correlate with a many unique hashes.
+	// A single β-hash may correlate with many unique hashes.
 	hashLookup := make(map[uint32][]BlockHash, len(signature))
 	for _, h := range signature {
 		key := h.WeakHash
@@ -237,7 +237,7 @@ func (r *RSync) CreateDelta(source io.Reader, signature []BlockHash, ops Operati
 		prevOp = nil
 	}()
 
-	// Combine OpBlock into OpBlockRange. To do this store the previous
+	// Combine OpBlock into OpBlockRange. To achieve this, we store the previous
 	// non-data operation and determine if it can be extended.
 	enqueue := func(op Operation) (err error) {
 		switch op.Type {
