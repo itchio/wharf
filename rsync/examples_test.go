@@ -32,11 +32,11 @@ func Example() {
 
 	go func() {
 		defer close(opsOut)
-		rs.CreateDelta(targetReader, sig, writeOperation)
+		rs.InventRecipe(targetReader, sig, writeOperation)
 	}()
 
 	srcWriter, _ := os.Open("content-v2-reconstructed.bin")
 	srcReader.Seek(0, os.SEEK_SET)
 
-	rs.ApplyDelta(srcWriter, srcReader, opsOut)
+	rs.ApplyRecipe(srcWriter, srcReader, opsOut)
 }

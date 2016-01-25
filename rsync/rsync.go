@@ -28,9 +28,8 @@ type OpType byte
 
 const (
 	OpBlock OpType = iota
-	OpData
-	OpHash
 	OpBlockRange
+	OpData
 )
 
 // Instruction to mutate target to align to source.
@@ -123,7 +122,7 @@ func (r *RSync) CreateSignature(target io.Reader, sw SignatureWriter) error {
 }
 
 // Apply the difference to the target.
-func (r *RSync) ApplyDelta(alignedTarget io.Writer, target io.ReadSeeker, ops chan Operation) error {
+func (r *RSync) ApplyRecipe(alignedTarget io.Writer, target io.ReadSeeker, ops chan Operation) error {
 	if r.BlockSize <= 0 {
 		r.BlockSize = DefaultBlockSize
 	}
@@ -189,9 +188,8 @@ func (r *RSync) ApplyDelta(alignedTarget io.Writer, target io.ReadSeeker, ops ch
 // Create the operation list to mutate the target signature into the source.
 // Any data operation from the OperationWriter must have the data copied out
 // within the span of the function; the data buffer underlying the operation
-// data is reused. The sourceSum create a complete hash sum of the source if
-// present.
-func (r *RSync) CreateDelta(source io.Reader, signature []BlockHash, ops OperationWriter) (err error) {
+// data is reused.
+func (r *RSync) InventRecipe(source io.Reader, signature []BlockHash, ops OperationWriter) (err error) {
 	if r.BlockSize <= 0 {
 		r.BlockSize = DefaultBlockSize
 	}
@@ -315,9 +313,6 @@ func (r *RSync) CreateDelta(source io.Reader, signature []BlockHash, ops Operati
 				lastRun = true
 
 				data.head = validTo
-			}
-			if n == 0 {
-				break
 			}
 		}
 

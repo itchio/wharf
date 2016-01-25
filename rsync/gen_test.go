@@ -133,7 +133,7 @@ func Test_GenData(t *testing.T) {
 		go func() {
 			var blockCt, blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
-			err := rsDelta.CreateDelta(sourceBuffer, sig, func(op rsync.Operation) error {
+			err := rsDelta.InventRecipe(sourceBuffer, sig, func(op rsync.Operation) error {
 				switch op.Type {
 				case rsync.OpBlockRange:
 					blockRangeCt++
@@ -159,7 +159,7 @@ func Test_GenData(t *testing.T) {
 		result := new(bytes.Buffer)
 
 		targetBuffer.Seek(0, 0)
-		err = rs.ApplyDelta(result, targetBuffer, opsOut)
+		err = rs.ApplyRecipe(result, targetBuffer, opsOut)
 		if err != nil {
 			t.Errorf("Failed to apply delta: %s", err)
 		}
