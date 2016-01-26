@@ -15,6 +15,14 @@ by developers who want a CLI interface to itch.io
   * <https://github.com/itchio/butler>
   * <https://github.com/itchio/itch>
 
+## Regenerating protobuf code
+
+```bash
+protoc --go_out=. pwr/*.proto
+```
+
+protobuf v3 is required, as we use the 'proto3' syntax.
+
 ## License
 
 Licensed under MIT License, see `LICENSE` for details.

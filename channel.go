@@ -5,7 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/itchio/wharf.proto/counter"
+	"github.com/itchio/wharf/counter"
 
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/kothar/brotli-go.v0/dec"

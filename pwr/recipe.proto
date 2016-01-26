@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package io.itch.wharf.pwr;
+option go_package = "pwr";
+
+message RepoInfo {
+  int64 numBlocks = 16;
+
+  message Dir {
+    string path = 1;
+    int32 mode = 2;
+  }
+  repeated Dir dir = 1;
+
+  message File {
+    string path = 1;
+    int32 mode = 2;
+    int64 size = 3;
+    int64 blockIndex = 4;
+    int64 blockIndexEnd = 5;
+  }
+  repeated File file = 2;
+
+  message Symlink {
+    string path = 1;
+    int32 mode = 2;
+    string dest = 3;
+  }
+  repeated Symlink symlink = 3;
+}
+
+message RsyncBlock {
+  enum RsyncOpType {
+    BLOCK = 0;
+    BLOCK_RANGE = 1;
+    DATA = 2;
+  }
+  RsyncOpType type = 1;
+
+  int32 blockIndex = 2;
+  int32 blockIndexEnd = 3;
+  bytes data = 4;
+}
