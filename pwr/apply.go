@@ -18,13 +18,16 @@ var (
 )
 
 func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
+	fmt.Printf("applyRecipe\n")
 	rc := wire.NewReadContext(recipeReader)
 
 	header := &RecipeHeader{}
 	err := rc.ReadMessage(header)
 	if err != nil {
-		return err
+		return fmt.Errorf("while reading message: %s", err)
 	}
+
+	fmt.Printf("got header\n")
 
 	switch header.Version {
 	case RecipeHeader_V1:
@@ -47,17 +50,19 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 
 	targetInfo, err := readRepoInfo(brc)
 	if err != nil {
-		return err
+		return fmt.Errorf("while reading target info: %s", err)
 	}
+	fmt.Printf("got targetInfo\n")
 
 	sourceInfo, err := readRepoInfo(brc)
 	if err != nil {
-		return err
+		return fmt.Errorf("while reading source info: %s", err)
 	}
+	fmt.Printf("got sourceInfo\n")
 
 	sourceWriter, err := sourceInfo.NewWriter(output)
 	if err != nil {
-		return err
+		return fmt.Errorf("while making source writer: %s", err)
 	}
 
 	targetReader := targetInfo.NewReader(target)
@@ -84,36 +89,46 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 				errc <- err
 				return
 			}
+			fmt.Printf("got op %d\n", rop.Type)
+			hasOp := true
 
 			switch rop.Type {
-			case RsyncOp_HEY_YOU_DID_IT:
-				readingOps = false
-				break
-
 			case RsyncOp_BLOCK:
+				fmt.Printf("block\n")
 				op.Type = rsync.OpBlock
 				op.BlockIndex = rop.BlockIndex
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize)
 
 			case RsyncOp_BLOCK_RANGE:
+				fmt.Printf("blockRange\n")
 				op.Type = rsync.OpBlockRange
 				op.BlockIndex = rop.BlockIndex
 				op.BlockIndexEnd = rop.BlockIndexEnd
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize) * int64(op.BlockIndexEnd-op.BlockIndex)
 
 			case RsyncOp_DATA:
+				fmt.Printf("data\n")
 				op.Type = rsync.OpData
 				op.Data = rop.Data
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize)
 
 			default:
-				errc <- ErrUnknownRsyncOperation
-				return
+				hasOp = false
+				switch rop.Type {
+				case RsyncOp_HEY_YOU_DID_IT:
+					fmt.Printf("hey you did it!\n")
+					readingOps = false
+				default:
+					errc <- ErrUnknownRsyncOperation
+					return
+				}
 			}
 
-			totalOps++
-			opsCount[op.Type]++
-			ops <- op
+			if hasOp {
+				totalOps++
+				opsCount[op.Type]++
+				ops <- op
+			}
 		}
 
 		errc <- nil
