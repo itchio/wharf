@@ -19,7 +19,22 @@ by developers who want a CLI interface to itch.io
 
 Brotli-compressed stream of RSync operations.
 
-Directory is conceptually packed into a TAR-like container (tlc) where file content is aligned on a specific block size.
+File hierarchy is conceptually packed into a TAR-like container (TLC) where
+file content is aligned on a specific block size.
+
+## Comparison with traditional RSync
+
+**Con: All hashes must be computed & sent by receiver before sender can start sending any data**
+
+This only induces a significant delay on first wharf-powered transfer:
+
+  * Complete set of old files must be downloaded by wharf server
+  * Server must walk + hash entire TLC, gives that to sender
+  * Hashes are saved for subsequent transfers
+
+**Pro: Handles renames with no special code**
+
+This is love.
 
 ## Regenerating protobuf code
 
