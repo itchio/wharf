@@ -1,14 +1,17 @@
 package pwr
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+
+	"golang.org/x/crypto/sha3"
 
 	"gopkg.in/kothar/brotli-go.v0/enc"
 
 	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/rsync"
+	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 )
 
@@ -18,9 +21,7 @@ func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallba
 	r := info.NewReader(path)
 	defer r.Close()
 
-	rs := &rsync.RSync{
-		BlockSize: info.BlockSize,
-	}
+	rs := mkrsync()
 	signature = make([]rsync.BlockHash, 0, info.NumBlocks)
 
 	paddedBytes := info.NumBlocks * int64(BLOCK_SIZE)
@@ -42,11 +43,15 @@ func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallba
 	return signature, nil
 }
 
-func WriteDiff(signature []rsync.BlockHash, sourcePath string, targetInfo *tlc.RepoInfo,
-	sourceInfo *tlc.RepoInfo, patchWriter io.Writer, onProgress ProgressCallback, brotliParams *enc.BrotliParams) error {
+func WriteRecipe(
+	patchWriter io.Writer,
+	sourceInfo *tlc.RepoInfo, sourceReader io.Reader,
+	targetInfo *tlc.RepoInfo, signature []rsync.BlockHash,
+	onProgress ProgressCallback,
+	brotliParams *enc.BrotliParams) error {
 
-	sourceReader := sourceInfo.NewReader(sourcePath)
-	defer sourceReader.Close()
+	shakeHash := sha3.NewShake256()
+	teeReader := io.TeeReader(sourceReader, shakeHash)
 
 	wc := wire.NewWriteContext(patchWriter)
 
@@ -70,7 +75,7 @@ func WriteDiff(signature []rsync.BlockHash, sourcePath string, targetInfo *tlc.R
 	onSourceRead := func(count int64) {
 		onProgress(100.0 * float64(count) / float64(sourcePaddedBytes))
 	}
-	sourceReaderCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
+	sourceReaderCounter := counter.NewReaderCallback(onSourceRead, teeReader)
 
 	numOps := 0
 	wop := &RsyncOp{}
@@ -102,8 +107,27 @@ func WriteDiff(signature []rsync.BlockHash, sourcePath string, targetInfo *tlc.R
 		return nil
 	}
 
-	rs := &rsync.RSync{BlockSize: BLOCK_SIZE}
+	rs := mkrsync()
 	err = rs.InventRecipe(sourceReaderCounter, signature, opsWriter)
+	if err != nil {
+		return err
+	}
+
+	eop := &RsyncOp{}
+	eop.Type = RsyncOp_HEY_YOU_DID_IT
+	err = bwc.WriteMessage(eop)
+	if err != nil {
+		return err
+	}
+
+	var b bytes.Buffer
+	io.CopyN(&b, shakeHash, 64)
+
+	tlcHash := &Hash{}
+	tlcHash.Type = HashType_SHAKESUM256
+	tlcHash.Contents = b.Bytes()
+
+	err = bwc.WriteMessage(tlcHash)
 	if err != nil {
 		return err
 	}
@@ -113,7 +137,6 @@ func WriteDiff(signature []rsync.BlockHash, sourcePath string, targetInfo *tlc.R
 		return err
 	}
 
-	onProgress(100.0)
 	return nil
 }
 

@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/kothar/brotli-go.v0/dec"
 
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/rsync"
+	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 )
 
@@ -17,7 +17,7 @@ var (
 	ErrUnknownRsyncOperation = errors.New("Unknown RSync operation")
 )
 
-func apply(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
+func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
 	rc := wire.NewReadContext(recipeReader)
 
 	header := &RecipeHeader{}
@@ -62,9 +62,7 @@ func apply(recipeReader io.Reader, target string, output string, onProgress Prog
 
 	targetReader := targetInfo.NewReader(target)
 
-	rs := &rsync.RSync{
-		BlockSize: sourceInfo.BlockSize,
-	}
+	rs := mkrsync()
 
 	ops := make(chan rsync.Operation)
 	errc := make(chan error, 1)

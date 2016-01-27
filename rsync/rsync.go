@@ -12,6 +12,7 @@ package rsync
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"hash"
 	"io"
 )
@@ -47,6 +48,10 @@ type BlockHash struct {
 	WeakHash   uint32
 }
 
+var (
+	ErrNilUniqueHasher error = errors.New("UniqueHasher is nil")
+)
+
 // Write signatures as they are generated.
 type SignatureWriter func(bl BlockHash) error
 type OperationWriter func(op Operation) error
@@ -58,7 +63,7 @@ type RSync struct {
 	BlockSize int
 	MaxDataOp int
 
-	// If this is nil a MD5 hash is used.
+	// This shouldn't be nil.
 	UniqueHasher hash.Hash
 
 	buffer []byte
@@ -83,7 +88,7 @@ func (r *RSync) CreateSignature(target io.Reader, sw SignatureWriter) error {
 		r.BlockSize = DefaultBlockSize
 	}
 	if r.UniqueHasher == nil {
-		r.UniqueHasher = md5.New()
+		return ErrNilUniqueHasher
 	}
 	var err error
 	var n int

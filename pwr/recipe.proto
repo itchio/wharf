@@ -75,3 +75,8 @@ message RsyncOp {
   uint64 blockIndexEnd = 3;
   bytes data = 4;
 }
+
+message Hash {
+  HashType type = 1;
+  bytes contents = 2;
+}
