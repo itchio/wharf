@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/itchio/wharf.proto/rsync"
+	"github.com/itchio/wharf/rsync"
 )
 
 type RandReader struct {

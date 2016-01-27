@@ -1,6 +1,6 @@
-// Package megafile allows treating entire directory structure as a
+// Package tlc allows treating entire directory structure as a
 // single file aligned on a fixed block size
-package megafile
+package tlc
 
 import (
 	"os"

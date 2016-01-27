@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/itchio/wharf.proto/counter"
+	"github.com/itchio/wharf/counter"
 	"github.com/stretchr/testify/assert"
 )
 

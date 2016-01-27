@@ -1,4 +1,4 @@
-package megafile
+package tlc
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ var (
 	ErrInvalid = errors.New("invalid arguments supplied")
 )
 
-var MEGAFILE_DEBUG = false
+var tlc_DEBUG = false
 
 func megaprint(format string, args ...interface{}) {
-	if MEGAFILE_DEBUG {
+	if tlc_DEBUG {
 		fmt.Printf(format, args...)
 		fmt.Print("\n")
 	}

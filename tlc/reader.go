@@ -1,4 +1,4 @@
-package megafile
+package tlc
 
 import (
 	"io"

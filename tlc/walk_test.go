@@ -1,10 +1,10 @@
-package megafile_test
+package tlc_test
 
 import (
 	"os"
 	"testing"
 
-	"github.com/itchio/wharf.proto/megafile"
+	"github.com/itchio/wharf/tlc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,7 +12,7 @@ func Test_Walk(t *testing.T) {
 	tmpPath := mktestdir(t, "walk")
 	defer os.RemoveAll(tmpPath)
 
-	info, err := megafile.Walk(tmpPath, 16)
+	info, err := tlc.Walk(tmpPath, 16)
 	must(t, err)
 
 	dirs := []string{

@@ -1,11 +1,11 @@
-package megafile_test
+package tlc_test
 
 import (
 	"io/ioutil"
 	"os"
 	"testing"
 
-	"github.com/itchio/wharf.proto/megafile"
+	"github.com/itchio/wharf/tlc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,16 +14,16 @@ func Test_Read(t *testing.T) {
 	defer os.RemoveAll(tmpPath)
 
 	t.Logf("walking sample dir")
-	info, err := megafile.Walk(tmpPath, 16)
+	info, err := tlc.Walk(tmpPath, 16)
 	must(t, err)
 
 	r := info.NewReader(tmpPath)
 
-	t.Logf("reading whole megafile")
+	t.Logf("reading whole tlc")
 	all, err := ioutil.ReadAll(r)
 	must(t, err)
 
-	t.Logf("testing megafile layout")
+	t.Logf("testing tlc layout")
 	assert.Equal(t, len(all), info.BlockSize*int(info.NumBlocks), "has right length")
 
 	expected := make([]byte, 0, 0)
@@ -35,7 +35,7 @@ func Test_Read(t *testing.T) {
 
 	assert.Equal(t, all, expected, "has padded file layout")
 
-	t.Logf("testing megafile random access")
+	t.Logf("testing tlc random access")
 	single := make([]byte, 1)
 
 	offset, err := r.Seek(0, os.SEEK_SET)
@@ -80,7 +80,7 @@ func Test_Read(t *testing.T) {
 	assert.Equal(t, read, 12, "reads entire second file padding")
 	assert.Equal(t, multi[:read], expectedMulti, "reads from second file padding")
 
-	t.Logf("closing megafile")
+	t.Logf("closing tlc")
 	must(t, r.Close())
 }
 

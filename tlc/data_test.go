@@ -1,4 +1,4 @@
-package megafile_test
+package tlc_test
 
 import (
 	"io/ioutil"

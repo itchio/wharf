@@ -3,7 +3,7 @@ package rsync_test
 import (
 	"os"
 
-	"github.com/itchio/wharf.proto/rsync"
+	"github.com/itchio/wharf/rsync"
 )
 
 func Example() {

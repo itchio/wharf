@@ -58,7 +58,7 @@ type RSync struct {
 	BlockSize int
 	MaxDataOp int
 
-	// If this is nil an MD5 hash is used.
+	// If this is nil a MD5 hash is used.
 	UniqueHasher hash.Hash
 
 	buffer []byte

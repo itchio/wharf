@@ -1,4 +1,4 @@
-package proto
+package wharf
 
 const (
 	/* from 0 (fastest) to 11 (most compressed) */

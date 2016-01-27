@@ -1,4 +1,4 @@
-package megafile_test
+package tlc_test
 
 import (
 	"io/ioutil"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/itchio/wharf.proto/megafile"
+	"github.com/itchio/wharf/tlc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,7 +15,7 @@ func Test_Write(t *testing.T) {
 	defer os.RemoveAll(tmpPath)
 
 	t.Logf("walking sample dir")
-	info, err := megafile.Walk(tmpPath, 16)
+	info, err := tlc.Walk(tmpPath, 16)
 	must(t, err)
 
 	t.Logf("creates writer with repo info")
@@ -27,7 +27,7 @@ func Test_Write(t *testing.T) {
 	must(t, err)
 
 	t.Logf("comparing directory structure")
-	info2, err := megafile.Walk(wmpPath, 16)
+	info2, err := tlc.Walk(wmpPath, 16)
 	must(t, err)
 	assert.Equal(t, info, info2, "creates same directory structure")
 

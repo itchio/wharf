@@ -3,41 +3,75 @@ syntax = "proto3";
 package io.itch.wharf.pwr;
 option go_package = "pwr";
 
+message RecipeHeader {
+  enum Version {
+    V1 = 0;
+  }
+  Version version = 1;
+
+  enum Compression {
+    UNCOMPRESSED = 0;
+    BROTLI = 1;
+  }
+  Compression compression = 2;
+
+  int32 compressionLevel = 3;
+}
+
 message RepoInfo {
   int64 numBlocks = 16;
 
   message Dir {
     string path = 1;
-    int32 mode = 2;
+    uint32 mode = 2;
   }
-  repeated Dir dir = 1;
+  repeated Dir dirs = 1;
 
   message File {
     string path = 1;
-    int32 mode = 2;
+    uint32 mode = 2;
     int64 size = 3;
     int64 blockIndex = 4;
     int64 blockIndexEnd = 5;
   }
-  repeated File file = 2;
+  repeated File files = 2;
 
   message Symlink {
     string path = 1;
-    int32 mode = 2;
+    uint32 mode = 2;
     string dest = 3;
   }
-  repeated Symlink symlink = 3;
+  repeated Symlink symlinks = 3;
 }
 
-message RsyncBlock {
-  enum RsyncOpType {
+enum HashType {
+  // librsync default
+  MD5 = 0;
+  // https://godoc.org/golang.org/x/crypto/sha3#ShakeSum256
+  SHAKESUM256 = 1;
+}
+
+message RsyncSignatureHeader {
+  uint64 blockCount = 1;
+  HashType hashType = 2;
+}
+
+message RsyncBlockHash {
+  uint64 index = 1;
+  bytes strongHash = 2;
+  uint32 weakHash = 3;
+}
+
+message RsyncOp {
+  enum Type {
     BLOCK = 0;
     BLOCK_RANGE = 1;
     DATA = 2;
+    HEY_YOU_DID_IT = 2049;
   }
-  RsyncOpType type = 1;
+  Type type = 1;
 
-  int32 blockIndex = 2;
-  int32 blockIndexEnd = 3;
+  uint64 blockIndex = 2;
+  uint64 blockIndexEnd = 3;
   bytes data = 4;
 }
