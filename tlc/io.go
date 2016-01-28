@@ -10,10 +10,10 @@ var (
 	ErrInvalid = errors.New("invalid arguments supplied")
 )
 
-var tlc_DEBUG = false
+var TLC_DEBUG = false
 
-func megaprint(format string, args ...interface{}) {
-	if tlc_DEBUG {
+func tlcprint(format string, args ...interface{}) {
+	if TLC_DEBUG {
 		fmt.Printf(format, args...)
 		fmt.Print("\n")
 	}
@@ -27,41 +27,41 @@ func (info *RepoInfo) blockIndexToFileIndex(blockIndex int64) int {
 	lb := 0
 	rb := len(info.Files)
 
-	// megaprint("offsetToFileIndex() - lb = %d, rb = %d", lb, rb)
+	// tlcprint("offsetToFileIndex() - lb = %d, rb = %d", lb, rb)
 
 	for {
 		mb := (lb + rb) / 2
 		if mb == lb || mb == rb {
 			// found it!
 			fileIndex = mb
-			// megaprint("offsetToFileIndex() - found at %d", fileIndex)
+			// tlcprint("offsetToFileIndex() - found at %d", fileIndex)
 			break
 		}
 
 		file = info.Files[mb]
 		if blockIndex < file.BlockIndex {
-			// megaprint("offsetToFileIndex() - blockIndex %d < file.BlockIndex %d, picking left", blockIndex, file.BlockIndex)
+			// tlcprint("offsetToFileIndex() - blockIndex %d < file.BlockIndex %d, picking left", blockIndex, file.BlockIndex)
 			// pick the left half of our search interval (move the right boundary)
 			rb = mb
 		} else if blockIndex >= file.BlockIndexEnd {
 			// pick the right half of our search interval (move the left boundary)
-			// megaprint("offsetToFileIndex() - blockIndex %d > file.BlockIndexEnd %d, picking right", blockIndex, file.BlockIndexEnd)
+			// tlcprint("offsetToFileIndex() - blockIndex %d > file.BlockIndexEnd %d, picking right", blockIndex, file.BlockIndexEnd)
 			lb = mb
 		} else {
 			// found it!
 			fileIndex = mb
-			// megaprint("offsetToFileIndex() - found at %d", fileIndex)
+			// tlcprint("offsetToFileIndex() - found at %d", fileIndex)
 			break
 		}
 	}
 
 	// skip over empty files
 	for info.Files[fileIndex].BlockIndexEnd == info.Files[fileIndex].BlockIndex {
-		// megaprint("offsetToFileIndex() - skipping over empty file at %d", fileIndex)
+		// tlcprint("offsetToFileIndex() - skipping over empty file at %d", fileIndex)
 		fileIndex++
 	}
 
-	// megaprint("offsetToFileIndex() - fileIndex = %d", fileIndex)
+	// tlcprint("offsetToFileIndex() - fileIndex = %d", fileIndex)
 
 	return fileIndex
 }

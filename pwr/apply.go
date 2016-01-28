@@ -18,7 +18,6 @@ var (
 )
 
 func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
-	fmt.Printf("applyRecipe\n")
 	rc := wire.NewReadContext(recipeReader)
 
 	header := &RecipeHeader{}
@@ -26,8 +25,6 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 	if err != nil {
 		return fmt.Errorf("while reading message: %s", err)
 	}
-
-	fmt.Printf("got header\n")
 
 	switch header.Version {
 	case RecipeHeader_V1:
@@ -39,8 +36,10 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 	var decompressReader io.Reader
 	switch header.Compression {
 	case RecipeHeader_UNCOMPRESSED:
+		fmt.Printf("Uncompressed formula\n")
 		decompressReader = recipeReader
 	case RecipeHeader_BROTLI:
+		fmt.Printf("Brotli-compressed formula\n")
 		decompressReader = dec.NewBrotliReader(recipeReader)
 	default:
 		return ErrUnknownCompression
@@ -52,13 +51,11 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 	if err != nil {
 		return fmt.Errorf("while reading target info: %s", err)
 	}
-	fmt.Printf("got targetInfo\n")
 
 	sourceInfo, err := readRepoInfo(brc)
 	if err != nil {
 		return fmt.Errorf("while reading source info: %s", err)
 	}
-	fmt.Printf("got sourceInfo\n")
 
 	sourceWriter, err := sourceInfo.NewWriter(output)
 	if err != nil {
@@ -86,28 +83,24 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 			rop.Reset()
 			err = brc.ReadMessage(rop)
 			if err != nil {
-				errc <- err
+				errc <- fmt.Errorf("while reading op message: %s", err)
 				return
 			}
-			fmt.Printf("got op %d\n", rop.Type)
 			hasOp := true
 
 			switch rop.Type {
 			case RsyncOp_BLOCK:
-				fmt.Printf("block\n")
 				op.Type = rsync.OpBlock
 				op.BlockIndex = rop.BlockIndex
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize)
 
 			case RsyncOp_BLOCK_RANGE:
-				fmt.Printf("blockRange\n")
 				op.Type = rsync.OpBlockRange
 				op.BlockIndex = rop.BlockIndex
 				op.BlockIndexEnd = rop.BlockIndexEnd
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize) * int64(op.BlockIndexEnd-op.BlockIndex)
 
 			case RsyncOp_DATA:
-				fmt.Printf("data\n")
 				op.Type = rsync.OpData
 				op.Data = rop.Data
 				opsBytes[op.Type] += int64(sourceInfo.BlockSize)
@@ -116,7 +109,6 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 				hasOp = false
 				switch rop.Type {
 				case RsyncOp_HEY_YOU_DID_IT:
-					fmt.Printf("hey you did it!\n")
 					readingOps = false
 				default:
 					errc <- ErrUnknownRsyncOperation

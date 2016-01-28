@@ -57,7 +57,8 @@ func WriteRecipe(
 
 	header := &RecipeHeader{}
 	header.Version = RecipeHeader_V1
-	header.Compression = RecipeHeader_BROTLI
+	// header.Compression = RecipeHeader_BROTLI
+	header.Compression = RecipeHeader_UNCOMPRESSED
 	header.CompressionLevel = 1
 
 	err := wc.WriteMessage(header)
@@ -65,8 +66,9 @@ func WriteRecipe(
 		return err
 	}
 
-	bw := enc.NewBrotliWriter(brotliParams, patchWriter)
-	bwc := wire.NewWriteContext(bw)
+	// bw := enc.NewBrotliWriter(brotliParams, patchWriter)
+	// bwc := wire.NewWriteContext(bw)
+	bwc := wc
 
 	writeRepoInfo(bwc, targetInfo)
 	writeRepoInfo(bwc, sourceInfo)
@@ -88,13 +90,16 @@ func WriteRecipe(
 		case rsync.OpBlock:
 			wop.Type = RsyncOp_BLOCK
 			wop.BlockIndex = op.BlockIndex
+
 		case rsync.OpBlockRange:
 			wop.Type = RsyncOp_BLOCK_RANGE
 			wop.BlockIndex = op.BlockIndex
 			wop.BlockIndexEnd = op.BlockIndexEnd
+
 		case rsync.OpData:
 			wop.Type = RsyncOp_DATA
 			wop.Data = op.Data
+
 		default:
 			return fmt.Errorf("unknown rsync op type: %d", op.Type)
 		}
@@ -132,10 +137,10 @@ func WriteRecipe(
 		return err
 	}
 
-	err = bw.Close()
-	if err != nil {
-		return err
-	}
+	// err = bw.Close()
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

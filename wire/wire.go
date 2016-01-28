@@ -2,7 +2,6 @@ package wire
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 
@@ -13,18 +12,12 @@ var ENDIANNESS = binary.LittleEndian
 
 const MSG_MAGIC = uint16(0xD3F1)
 
-var (
-	ErrInvalidMagic = errors.New("Invalid magic number")
-)
-
 type WriteContext struct {
 	writer io.Writer
-	buf    *proto.Buffer
 }
 
 func NewWriteContext(writer io.Writer) *WriteContext {
-	buf := proto.NewBuffer(nil)
-	return &WriteContext{writer, buf}
+	return &WriteContext{writer}
 }
 
 func (w *WriteContext) WriteMessage(msg proto.Message) error {
@@ -33,15 +26,17 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 		return err
 	}
 
-	w.buf.Reset()
-	w.buf.Marshal(msg)
-
-	err = binary.Write(w.writer, ENDIANNESS, uint32(len(w.buf.Bytes())))
+	buf, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.writer.Write(w.buf.Bytes())
+	err = binary.Write(w.writer, ENDIANNESS, uint32(len(buf)))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.writer.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -51,12 +46,10 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 
 type ReadContext struct {
 	reader io.Reader
-	buf    *proto.Buffer
 }
 
 func NewReadContext(reader io.Reader) *ReadContext {
-	buf := proto.NewBuffer(nil)
-	return &ReadContext{reader, buf}
+	return &ReadContext{reader}
 }
 
 func (r *ReadContext) ReadMessage(msg proto.Message) error {
@@ -67,7 +60,7 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 	}
 
 	if magic != MSG_MAGIC {
-		return ErrInvalidMagic
+		return fmt.Errorf("invalid magic number: %x", magic)
 	}
 
 	var length uint32
@@ -76,24 +69,14 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 		return fmt.Errorf("while reading length: %s", err)
 	}
 
-	r.buf.Reset()
-	capacity := uint32(cap(r.buf.Bytes()))
-	buf := r.buf.Bytes()
-
-	if capacity < length {
-		buf = make([]byte, int(length))
-	} else if capacity > length {
-		buf = buf[:length]
-	}
+	buf := make([]byte, length)
 
 	_, err = io.ReadFull(r.reader, buf)
 	if err != nil {
 		return fmt.Errorf("while readfull: %s", err)
 	}
 
-	r.buf.SetBuf(buf)
-
-	err = r.buf.Unmarshal(msg)
+	err = proto.Unmarshal(buf, msg)
 	if err != nil {
 		return fmt.Errorf("while decoding message: %s", err)
 	}
