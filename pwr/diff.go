@@ -15,8 +15,10 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
+// ProgressCallback is called periodically to announce the degree of completeness of an operation
 type ProgressCallback func(percent float64)
 
+// ComputeSignature returns the RSync signature of a tlc, given its path and repo info
 func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallback) (signature []rsync.BlockHash, err error) {
 	r := info.NewReader(path)
 	defer r.Close()
@@ -24,7 +26,7 @@ func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallba
 	rs := mkrsync()
 	signature = make([]rsync.BlockHash, 0, info.NumBlocks)
 
-	paddedBytes := info.NumBlocks * int64(BLOCK_SIZE)
+	paddedBytes := info.NumBlocks * int64(BlockSize)
 
 	onRead := func(count int64) {
 		onProgress(100.0 * float64(count) / float64(paddedBytes))
@@ -43,46 +45,89 @@ func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallba
 	return signature, nil
 }
 
+// WriteRecipe outputs a pwr (PowerWitch Recipe) to recipeWriter
 func WriteRecipe(
-	patchWriter io.Writer,
+	recipeWriter io.Writer,
 	sourceInfo *tlc.RepoInfo, sourceReader io.Reader,
 	targetInfo *tlc.RepoInfo, signature []rsync.BlockHash,
 	onProgress ProgressCallback,
 	brotliParams *enc.BrotliParams) error {
 
-	shakeHash := sha3.NewShake256()
+	shakeHash := sha3.NewShake128()
 	teeReader := io.TeeReader(sourceReader, shakeHash)
 
-	wc := wire.NewWriteContext(patchWriter)
+	wc := wire.NewWriteContext(recipeWriter)
 
 	header := &RecipeHeader{}
 	header.Version = RecipeHeader_V1
+
 	// header.Compression = RecipeHeader_BROTLI
 	header.Compression = RecipeHeader_UNCOMPRESSED
 	header.CompressionLevel = 1
+
+	header.FullHashType = HashType_SHAKESUM128
 
 	err := wc.WriteMessage(header)
 	if err != nil {
 		return err
 	}
 
-	// bw := enc.NewBrotliWriter(brotliParams, patchWriter)
+	// bw := enc.NewBrotliWriter(brotliParams, recipeWriter)
 	// bwc := wire.NewWriteContext(bw)
 	bwc := wc
 
 	writeRepoInfo(bwc, targetInfo)
 	writeRepoInfo(bwc, sourceInfo)
 
-	sourcePaddedBytes := sourceInfo.NumBlocks * int64(BLOCK_SIZE)
+	sourcePaddedBytes := sourceInfo.NumBlocks * int64(BlockSize)
 	onSourceRead := func(count int64) {
 		onProgress(100.0 * float64(count) / float64(sourcePaddedBytes))
 	}
 	sourceReaderCounter := counter.NewReaderCallback(onSourceRead, teeReader)
 
+	opsWriter := makeOpsWriter(bwc)
+
+	rs := mkrsync()
+	err = rs.InventRecipe(sourceReaderCounter, signature, opsWriter)
+	if err != nil {
+		return err
+	}
+
+	eop := &RsyncOp{}
+	eop.Type = RsyncOp_HEY_YOU_DID_IT
+	err = bwc.WriteMessage(eop)
+	if err != nil {
+		return err
+	}
+
+	var b bytes.Buffer
+	_, err = io.CopyN(&b, shakeHash, 32)
+	if err != nil {
+		return err
+	}
+
+	tlcHash := &Hash{}
+	tlcHash.Type = HashType_SHAKESUM128
+	tlcHash.Contents = b.Bytes()
+
+	err = bwc.WriteMessage(tlcHash)
+	if err != nil {
+		return err
+	}
+
+	// err = bw.Close()
+	// if err != nil {
+	// 	return err
+	// }
+
+	return nil
+}
+
+func makeOpsWriter(wc *wire.WriteContext) rsync.OperationWriter {
 	numOps := 0
 	wop := &RsyncOp{}
 
-	opsWriter := func(op rsync.Operation) error {
+	return func(op rsync.Operation) error {
 		numOps++
 		wop.Reset()
 
@@ -104,45 +149,13 @@ func WriteRecipe(
 			return fmt.Errorf("unknown rsync op type: %d", op.Type)
 		}
 
-		err := bwc.WriteMessage(wop)
+		err := wc.WriteMessage(wop)
 		if err != nil {
 			return err
 		}
 
 		return nil
 	}
-
-	rs := mkrsync()
-	err = rs.InventRecipe(sourceReaderCounter, signature, opsWriter)
-	if err != nil {
-		return err
-	}
-
-	eop := &RsyncOp{}
-	eop.Type = RsyncOp_HEY_YOU_DID_IT
-	err = bwc.WriteMessage(eop)
-	if err != nil {
-		return err
-	}
-
-	var b bytes.Buffer
-	io.CopyN(&b, shakeHash, 64)
-
-	tlcHash := &Hash{}
-	tlcHash.Type = HashType_SHAKESUM256
-	tlcHash.Contents = b.Bytes()
-
-	err = bwc.WriteMessage(tlcHash)
-	if err != nil {
-		return err
-	}
-
-	// err = bw.Close()
-	// if err != nil {
-	// 	return err
-	// }
-
-	return nil
 }
 
 func writeRepoInfo(bwc *wire.WriteContext, info *tlc.RepoInfo) error {

@@ -2,10 +2,12 @@ package pwr
 
 import "encoding/binary"
 
-var ENDIANNESS = binary.LittleEndian // gotta pick one
-var BLOCK_SIZE = 4 * 1024
+var endianness = binary.LittleEndian
 
 const (
-	PWR_MAGIC = int32(iota + 0xFEF5F00)
-	PWR_BROTLI
+	pwrMagic = int32(iota + 0xFEF5F00)
 )
+
+// BlockSize is a compromise between wasted hashing work (because of padding)
+// and inefficient diffs
+var BlockSize = 8 * 1024

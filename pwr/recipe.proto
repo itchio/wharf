@@ -16,6 +16,8 @@ message RecipeHeader {
   Compression compression = 2;
 
   int32 compressionLevel = 3;
+
+  HashType fullHashType = 4;
 }
 
 message RepoInfo {
@@ -47,8 +49,8 @@ message RepoInfo {
 enum HashType {
   // librsync default
   MD5 = 0;
-  // https://godoc.org/golang.org/x/crypto/sha3#ShakeSum256
-  SHAKESUM256 = 1;
+  // cf. https://godoc.org/golang.org/x/crypto/sha3
+  SHAKESUM128 = 1;
 }
 
 message RsyncSignatureHeader {

@@ -8,7 +8,7 @@ import (
 
 func mkrsync() *rsync.RSync {
 	return &rsync.RSync{
-		BlockSize:    BLOCK_SIZE,
+		BlockSize:    BlockSize,
 		UniqueHasher: md5.New(),
 	}
 }
