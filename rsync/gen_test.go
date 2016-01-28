@@ -2,6 +2,7 @@ package rsync_test
 
 import (
 	"bytes"
+	"crypto/md5"
 	"math/rand"
 	"testing"
 
@@ -112,8 +113,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := &rsync.RSync{}
-	rsDelta := &rsync.RSync{}
+	rs := &rsync.RSync{UniqueHasher: md5.New()}
+	rsDelta := &rsync.RSync{UniqueHasher: md5.New()}
 	for _, p := range pairs {
 		(&p.Source).Fill()
 		(&p.Target).Fill()
