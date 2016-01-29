@@ -1,6 +1,10 @@
 package pwr
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/itchio/wharf/sync"
+)
 
 var endianness = binary.LittleEndian
 
@@ -10,4 +14,8 @@ const (
 
 // BlockSize is a compromise between wasted hashing work (because of padding)
 // and inefficient diffs
-var BlockSize = 8 * 1024
+var BlockSize = 16 * 1024 // 16k
+
+func mksync() *sync.SyncContext {
+	return sync.NewContext(BlockSize)
+}

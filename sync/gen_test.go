@@ -1,12 +1,10 @@
-package rsync_test
+package sync_test
 
 import (
 	"bytes"
 	"crypto/md5"
 	"math/rand"
 	"testing"
-
-	"github.com/itchio/wharf/rsync"
 )
 
 type RandReader struct {
@@ -113,8 +111,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := &rsync.RSync{UniqueHasher: md5.New()}
-	rsDelta := &rsync.RSync{UniqueHasher: md5.New()}
+	rs := &sync.SyncContext{UniqueHasher: md5.New()}
+	rsDelta := &sync.SyncContext{UniqueHasher: md5.New()}
 	for _, p := range pairs {
 		(&p.Source).Fill()
 		(&p.Target).Fill()

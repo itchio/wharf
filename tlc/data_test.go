@@ -9,7 +9,7 @@ import (
 
 func must(t *testing.T, err error) {
 	if err != nil {
-		t.Error(err.Error())
+		t.Error("must failed: ", err.Error())
 		t.FailNow()
 	}
 }

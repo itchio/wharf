@@ -1,17 +1,15 @@
 package pwr
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	"golang.org/x/crypto/sha3"
+	"path/filepath"
 
 	"gopkg.in/kothar/brotli-go.v0/dec"
 
-	"github.com/itchio/wharf/rsync"
+	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 )
@@ -54,85 +52,69 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		return ErrIncompatibleRecipe
 	}
 
-	var shakeHash sha3.ShakeHash
-	switch header.FullHashType {
-	case HashType_SHAKESUM128:
-		shakeHash = sha3.NewShake128()
-	default:
-		return ErrIncompatibleRecipe
-	}
-
 	brc := wire.NewReadContext(decompressReader)
 
-	targetInfo, err := readRepoInfo(brc)
+	targetContainer, err := readContainer(brc)
 	if err != nil {
-		return fmt.Errorf("while reading target info: %s", err)
+		return fmt.Errorf("while reading target container: %s", err)
 	}
 
-	sourceInfo, err := readRepoInfo(brc)
+	sourceContainer, err := readContainer(brc)
 	if err != nil {
-		return fmt.Errorf("while reading source info: %s", err)
+		return fmt.Errorf("while reading source container: %s", err)
 	}
 
-	sourceWriter, err := sourceInfo.NewWriter(output)
-	if err != nil {
-		return fmt.Errorf("while making source writer: %s", err)
-	}
-	multiWriter := io.MultiWriter(sourceWriter, shakeHash)
+	targetPool := targetContainer.NewFilePool()
+	sourceContainer.Prepare(output)
 
-	targetReader := targetInfo.NewReader(target)
+	sctx := mksync()
+	sh := &SyncHeader{}
 
-	rs := mkrsync()
+	for fileIndex, f := range sourceContainer.Files {
+		sh.Reset()
+		err := brc.ReadMessage(sh)
+		if err != nil {
+			return err
+		}
 
-	ops := make(chan rsync.Operation)
-	errc := make(chan error, 1)
+		if sh.FileIndex != int64(fileIndex) {
+			return ErrMalformedRecipe
+		}
 
-	go readOps(brc, ops, errc)
+		ops := make(chan sync.Operation)
+		errc := make(chan error, 1)
+		go readOps(brc, ops, errc)
 
-	err = rs.ApplyRecipe(multiWriter, targetReader, ops)
-	if err != nil {
-		return fmt.Errorf("While applying recipe: %s", err.Error())
-	}
+		fullPath := filepath.Join(output, f.Path)
+		writer, err := os.Create(fullPath)
+		if err != nil {
+			return err
+		}
 
-	err = <-errc
-	if err != nil {
-		return fmt.Errorf("While reading recipe: %s", err.Error())
-	}
+		err = sctx.ApplyRecipe(writer, targetPool, ops)
+		if err != nil {
+			return err
+		}
 
-	var b bytes.Buffer
-	_, err = io.CopyN(&b, shakeHash, 32)
-	if err != nil {
-		return err
-	}
+		err = <-errc
+		if err != nil {
+			return fmt.Errorf("While reading recipe: %s", err.Error())
+		}
 
-	computedHash := b.Bytes()
-
-	tlcHash := &Hash{}
-	err = brc.ReadMessage(tlcHash)
-	if err != nil {
-		return err
-	}
-
-	if tlcHash.Type != header.FullHashType {
-		return ErrMalformedRecipe
-	}
-	expectedHash := tlcHash.Contents
-
-	if !bytes.Equal(computedHash, expectedHash) {
-		return fmt.Errorf("integrity checked failed: has %x, expected %x", computedHash, expectedHash)
+		writer.Close()
 	}
 
 	return nil
 }
 
-func readOps(rc *wire.ReadContext, ops chan rsync.Operation, errc chan error) {
+func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 	defer close(ops)
 	totalOps := 0
 	opsCount := []int{0, 0, 0}
 	opsBytes := []int64{0, 0, 0}
 
-	rop := &RsyncOp{}
-	op := rsync.Operation{}
+	rop := &SyncOp{}
+	op := sync.Operation{}
 
 	readingOps := true
 	for readingOps {
@@ -145,26 +127,26 @@ func readOps(rc *wire.ReadContext, ops chan rsync.Operation, errc chan error) {
 		hasOp := true
 
 		switch rop.Type {
-		case RsyncOp_BLOCK:
-			op.Type = rsync.OpBlock
+		case SyncOp_BLOCK:
+			op.Type = sync.OpBlock
 			op.BlockIndex = rop.BlockIndex
 			opsBytes[op.Type] += int64(BlockSize)
 
-		case RsyncOp_BLOCK_RANGE:
-			op.Type = rsync.OpBlockRange
+		case SyncOp_BLOCK_RANGE:
+			op.Type = sync.OpBlockRange
 			op.BlockIndex = rop.BlockIndex
-			op.BlockIndexEnd = rop.BlockIndexEnd
-			opsBytes[op.Type] += int64(BlockSize) * int64(op.BlockIndexEnd-op.BlockIndex)
+			op.BlockSpan = rop.BlockSpan
+			opsBytes[op.Type] += int64(BlockSize) * int64(op.BlockSpan)
 
-		case RsyncOp_DATA:
-			op.Type = rsync.OpData
+		case SyncOp_DATA:
+			op.Type = sync.OpData
 			op.Data = rop.Data
 			opsBytes[op.Type] += int64(len(op.Data))
 
 		default:
 			hasOp = false
 			switch rop.Type {
-			case RsyncOp_HEY_YOU_DID_IT:
+			case SyncOp_HEY_YOU_DID_IT:
 				readingOps = false
 			default:
 				errc <- ErrMalformedRecipe
@@ -182,45 +164,42 @@ func readOps(rc *wire.ReadContext, ops chan rsync.Operation, errc chan error) {
 	errc <- nil
 }
 
-func readRepoInfo(rc *wire.ReadContext) (*tlc.RepoInfo, error) {
-	pi := &RepoInfo{}
-	err := rc.ReadMessage(pi)
+func readContainer(rc *wire.ReadContext) (*tlc.Container, error) {
+	msg := &Container{}
+	err := rc.ReadMessage(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	ri := &tlc.RepoInfo{
-		BlockSize: BlockSize,
-		NumBlocks: pi.NumBlocks,
-		Dirs:      make([]tlc.Dir, 0, len(pi.GetDirs())),
-		Files:     make([]tlc.File, 0, len(pi.GetFiles())),
-		Symlinks:  make([]tlc.Symlink, 0, len(pi.GetSymlinks())),
+	container := &tlc.Container{
+		Size:     msg.Size,
+		Dirs:     make([]tlc.Dir, 0, len(msg.GetDirs())),
+		Files:    make([]tlc.File, 0, len(msg.GetFiles())),
+		Symlinks: make([]tlc.Symlink, 0, len(msg.GetSymlinks())),
 	}
 
-	for _, d := range pi.GetDirs() {
-		ri.Dirs = append(ri.Dirs, tlc.Dir{
+	for _, d := range msg.GetDirs() {
+		container.Dirs = append(container.Dirs, tlc.Dir{
 			Path: d.Path,
 			Mode: os.FileMode(d.Mode),
 		})
 	}
 
-	for _, f := range pi.GetFiles() {
-		ri.Files = append(ri.Files, tlc.File{
-			Path:          f.Path,
-			Mode:          os.FileMode(f.Mode),
-			Size:          f.Size,
-			BlockIndex:    f.BlockIndex,
-			BlockIndexEnd: f.BlockIndexEnd,
+	for _, f := range msg.GetFiles() {
+		container.Files = append(container.Files, tlc.File{
+			Path: f.Path,
+			Mode: os.FileMode(f.Mode),
+			Size: f.Size,
 		})
 	}
 
-	for _, l := range pi.GetSymlinks() {
-		ri.Symlinks = append(ri.Symlinks, tlc.Symlink{
+	for _, l := range msg.GetSymlinks() {
+		container.Symlinks = append(container.Symlinks, tlc.Symlink{
 			Path: l.Path,
 			Mode: os.FileMode(l.Mode),
 			Dest: l.Dest,
 		})
 	}
 
-	return ri, nil
+	return container, nil
 }

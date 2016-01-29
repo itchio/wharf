@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	ErrInvalid = errors.New("invalid arguments supplied")
+	ErrInvalid      = errors.New("invalid arguments supplied")
+	ErrFileBoundary = errors.New("reached file boundary")
 )
 
 var TLC_DEBUG = false
@@ -19,13 +20,13 @@ func tlcprint(format string, args ...interface{}) {
 	}
 }
 
-func (info *RepoInfo) blockIndexToFileIndex(blockIndex int64) int {
+func (c *Container) offsetToFileIndex(offset int64) int {
 	fileIndex := 0
-	file := info.Files[fileIndex]
+	file := c.Files[fileIndex]
 
 	// binary search to find the file that contains our block
 	lb := 0
-	rb := len(info.Files)
+	rb := len(c.Files)
 
 	// tlcprint("offsetToFileIndex() - lb = %d, rb = %d", lb, rb)
 
@@ -38,12 +39,12 @@ func (info *RepoInfo) blockIndexToFileIndex(blockIndex int64) int {
 			break
 		}
 
-		file = info.Files[mb]
-		if blockIndex < file.BlockIndex {
+		file = c.Files[mb]
+		if offset < file.Offset {
 			// tlcprint("offsetToFileIndex() - blockIndex %d < file.BlockIndex %d, picking left", blockIndex, file.BlockIndex)
 			// pick the left half of our search interval (move the right boundary)
 			rb = mb
-		} else if blockIndex >= file.BlockIndexEnd {
+		} else if offset >= file.OffsetEnd {
 			// pick the right half of our search interval (move the left boundary)
 			// tlcprint("offsetToFileIndex() - blockIndex %d > file.BlockIndexEnd %d, picking right", blockIndex, file.BlockIndexEnd)
 			lb = mb
@@ -56,7 +57,7 @@ func (info *RepoInfo) blockIndexToFileIndex(blockIndex int64) int {
 	}
 
 	// skip over empty files
-	for info.Files[fileIndex].BlockIndexEnd == info.Files[fileIndex].BlockIndex {
+	for c.Files[fileIndex].OffsetEnd == c.Files[fileIndex].Offset {
 		// tlcprint("offsetToFileIndex() - skipping over empty file at %d", fileIndex)
 		fileIndex++
 	}
@@ -78,7 +79,7 @@ func seekToNewOffset(oldOffset int64, totalSize int64, offset int64, whence int)
 		newOffset = totalSize - offset
 	}
 
-	if newOffset < 0 || newOffset >= totalSize {
+	if newOffset < 0 {
 		return 0, ErrInvalid
 	}
 

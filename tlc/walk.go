@@ -9,12 +9,12 @@ const (
 	MODE_MASK = 0644
 )
 
-func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
+func Walk(BasePath string, BlockSize int) (*Container, error) {
 	Dirs := make([]Dir, 0, 0)
 	Symlinks := make([]Symlink, 0, 0)
 	Files := make([]File, 0, 0)
 
-	BlockIndex := int64(0)
+	TotalOffset := int64(0)
 
 	onEntry := func(FullPath string, fi os.FileInfo, err error) error {
 		// we shouldn't encounter any error crawling the repo
@@ -45,16 +45,12 @@ func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
 			Dirs = append(Dirs, d)
 		} else if Mode.IsRegular() {
 			Size := fi.Size()
-			NumBlocks := Size / int64(BlockSize)
-			if Size%int64(BlockSize) != 0 {
-				NumBlocks++
-			}
-			BlockIndexEnd := BlockIndex + NumBlocks
+			Offset := TotalOffset
+			OffsetEnd := Offset + Size
 
-			f := File{Path, Mode, Size, BlockIndex, BlockIndexEnd}
+			f := File{Path, Mode, Size, Offset, OffsetEnd}
 			Files = append(Files, f)
-
-			BlockIndex += NumBlocks
+			TotalOffset = OffsetEnd
 		} else if Mode&os.ModeSymlink > 0 {
 			Target, err := os.Readlink(FullPath)
 			if err != nil {
@@ -72,7 +68,7 @@ func Walk(BasePath string, BlockSize int) (*RepoInfo, error) {
 		return nil, err
 	}
 
-	NumBlocks := BlockIndex
-	info := &RepoInfo{BlockSize, NumBlocks, Dirs, Symlinks, Files}
-	return info, nil
+	Size := TotalOffset
+	container := &Container{Size, Dirs, Symlinks, Files}
+	return container, nil
 }

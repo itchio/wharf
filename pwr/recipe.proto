@@ -16,34 +16,32 @@ message RecipeHeader {
   Compression compression = 2;
 
   int32 compressionLevel = 3;
-
-  HashType fullHashType = 4;
 }
 
-message RepoInfo {
-  int64 numBlocks = 16;
+message Container {
+  int64 size = 1;
 
   message Dir {
     string path = 1;
     uint32 mode = 2;
   }
-  repeated Dir dirs = 1;
+  repeated Dir dirs = 2;
 
   message File {
     string path = 1;
     uint32 mode = 2;
     int64 size = 3;
     int64 blockIndex = 4;
-    int64 blockIndexEnd = 5;
+    int64 blockSpan = 5;
   }
-  repeated File files = 2;
+  repeated File files = 3;
 
   message Symlink {
     string path = 1;
     uint32 mode = 2;
     string dest = 3;
   }
-  repeated Symlink symlinks = 3;
+  repeated Symlink symlinks = 4;
 }
 
 enum HashType {
@@ -53,18 +51,23 @@ enum HashType {
   SHAKESUM128 = 1;
 }
 
-message RsyncSignatureHeader {
-  uint64 blockCount = 1;
+message SignatureHeader {
+  int64 blockCount = 1;
   HashType hashType = 2;
 }
 
-message RsyncBlockHash {
-  uint64 index = 1;
-  bytes strongHash = 2;
-  uint32 weakHash = 3;
+message BlockHash {
+  int64 fileIndex = 1;
+  int64 blockIndex = 2;
+  int32 weakHash = 3;
+  bytes strongHash = 4;
 }
 
-message RsyncOp {
+message SyncHeader {
+  int64 fileIndex = 1;
+}
+
+message SyncOp {
   enum Type {
     BLOCK = 0;
     BLOCK_RANGE = 1;
@@ -73,9 +76,10 @@ message RsyncOp {
   }
   Type type = 1;
 
-  uint64 blockIndex = 2;
-  uint64 blockIndexEnd = 3;
-  bytes data = 4;
+  int64 fileIndex = 2;
+  int64 blockIndex = 3;
+  int64 blockSpan = 4;
+  bytes data = 5;
 }
 
 message Hash {

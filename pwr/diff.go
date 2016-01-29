@@ -1,16 +1,13 @@
 package pwr
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-
-	"golang.org/x/crypto/sha3"
 
 	"gopkg.in/kothar/brotli-go.v0/enc"
 
 	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/rsync"
+	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 )
@@ -18,43 +15,13 @@ import (
 // ProgressCallback is called periodically to announce the degree of completeness of an operation
 type ProgressCallback func(percent float64)
 
-// ComputeSignature returns the RSync signature of a tlc, given its path and repo info
-func ComputeSignature(path string, info *tlc.RepoInfo, onProgress ProgressCallback) (signature []rsync.BlockHash, err error) {
-	r := info.NewReader(path)
-	defer r.Close()
-
-	rs := mkrsync()
-	signature = make([]rsync.BlockHash, 0, info.NumBlocks)
-
-	paddedBytes := info.NumBlocks * int64(BlockSize)
-
-	onRead := func(count int64) {
-		onProgress(100.0 * float64(count) / float64(paddedBytes))
-	}
-	cr := counter.NewReaderCallback(onRead, r)
-
-	sigWriter := func(bl rsync.BlockHash) error {
-		signature = append(signature, bl)
-		return nil
-	}
-	err = rs.CreateSignature(cr, sigWriter)
-	if err != nil {
-		return nil, err
-	}
-
-	return signature, nil
-}
-
-// WriteRecipe outputs a pwr (PowerWitch Recipe) to recipeWriter
+// WriteRecipe outputs a pwr recipe to recipeWriter
 func WriteRecipe(
 	recipeWriter io.Writer,
-	sourceInfo *tlc.RepoInfo, sourceReader io.Reader,
-	targetInfo *tlc.RepoInfo, signature []rsync.BlockHash,
+	sourceContainer *tlc.Container,
+	targetContainer *tlc.Container, signature []sync.BlockHash,
 	onProgress ProgressCallback,
 	brotliParams *enc.BrotliParams) error {
-
-	shakeHash := sha3.NewShake128()
-	teeReader := io.TeeReader(sourceReader, shakeHash)
 
 	wc := wire.NewWriteContext(recipeWriter)
 
@@ -65,8 +32,6 @@ func WriteRecipe(
 	header.Compression = RecipeHeader_UNCOMPRESSED
 	header.CompressionLevel = 1
 
-	header.FullHashType = HashType_SHAKESUM128
-
 	err := wc.WriteMessage(header)
 	if err != nil {
 		return err
@@ -76,41 +41,48 @@ func WriteRecipe(
 	// bwc := wire.NewWriteContext(bw)
 	bwc := wc
 
-	writeRepoInfo(bwc, targetInfo)
-	writeRepoInfo(bwc, sourceInfo)
+	writeContainer(bwc, targetContainer)
+	writeContainer(bwc, sourceContainer)
 
-	sourcePaddedBytes := sourceInfo.NumBlocks * int64(BlockSize)
+	sourceBytes := sourceContainer.Size
+	fileOffset := int64(0)
+
 	onSourceRead := func(count int64) {
-		onProgress(100.0 * float64(count) / float64(sourcePaddedBytes))
+		onProgress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
 	}
-	sourceReaderCounter := counter.NewReaderCallback(onSourceRead, teeReader)
 
 	opsWriter := makeOpsWriter(bwc)
 
-	rs := mkrsync()
-	err = rs.InventRecipe(sourceReaderCounter, signature, opsWriter)
-	if err != nil {
-		return err
+	sctx := mksync()
+	blockLibrary := sync.NewBlockLibrary(signature)
+
+	sh := &SyncHeader{}
+	filePool := sourceContainer.NewFilePool()
+	defer filePool.Close()
+
+	for fileIndex, f := range sourceContainer.Files {
+		fileOffset = f.Offset
+
+		sh.Reset()
+		sh.FileIndex = int64(fileIndex)
+		bwc.WriteMessage(sh)
+
+		sourceReader, err := filePool.GetReader(int64(fileIndex))
+		if err != nil {
+			return err
+		}
+
+		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
+		err = sctx.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
+
+		if err != nil {
+			return err
+		}
 	}
 
-	eop := &RsyncOp{}
-	eop.Type = RsyncOp_HEY_YOU_DID_IT
+	eop := &SyncOp{}
+	eop.Type = SyncOp_HEY_YOU_DID_IT
 	err = bwc.WriteMessage(eop)
-	if err != nil {
-		return err
-	}
-
-	var b bytes.Buffer
-	_, err = io.CopyN(&b, shakeHash, 32)
-	if err != nil {
-		return err
-	}
-
-	tlcHash := &Hash{}
-	tlcHash.Type = HashType_SHAKESUM128
-	tlcHash.Contents = b.Bytes()
-
-	err = bwc.WriteMessage(tlcHash)
 	if err != nil {
 		return err
 	}
@@ -123,26 +95,26 @@ func WriteRecipe(
 	return nil
 }
 
-func makeOpsWriter(wc *wire.WriteContext) rsync.OperationWriter {
+func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {
 	numOps := 0
-	wop := &RsyncOp{}
+	wop := &SyncOp{}
 
-	return func(op rsync.Operation) error {
+	return func(op sync.Operation) error {
 		numOps++
 		wop.Reset()
 
 		switch op.Type {
-		case rsync.OpBlock:
-			wop.Type = RsyncOp_BLOCK
+		case sync.OpBlock:
+			wop.Type = SyncOp_BLOCK
 			wop.BlockIndex = op.BlockIndex
 
-		case rsync.OpBlockRange:
-			wop.Type = RsyncOp_BLOCK_RANGE
+		case sync.OpBlockRange:
+			wop.Type = SyncOp_BLOCK_RANGE
 			wop.BlockIndex = op.BlockIndex
-			wop.BlockIndexEnd = op.BlockIndexEnd
+			wop.BlockSpan = op.BlockIndex
 
-		case rsync.OpData:
-			wop.Type = RsyncOp_DATA
+		case sync.OpData:
+			wop.Type = SyncOp_DATA
 			wop.Data = op.Data
 
 		default:
@@ -158,41 +130,39 @@ func makeOpsWriter(wc *wire.WriteContext) rsync.OperationWriter {
 	}
 }
 
-func writeRepoInfo(bwc *wire.WriteContext, info *tlc.RepoInfo) error {
-	dirs := make([]*RepoInfo_Dir, 0, len(info.Dirs))
-	for _, d := range info.Dirs {
-		dirs = append(dirs, &RepoInfo_Dir{
+func writeContainer(bwc *wire.WriteContext, container *tlc.Container) error {
+	dirs := make([]*Container_Dir, 0, len(container.Dirs))
+	for _, d := range container.Dirs {
+		dirs = append(dirs, &Container_Dir{
 			Path: d.Path,
 			Mode: uint32(d.Mode),
 		})
 	}
 
-	files := make([]*RepoInfo_File, 0, len(info.Files))
-	for _, f := range info.Files {
-		files = append(files, &RepoInfo_File{
-			Path:          f.Path,
-			Mode:          uint32(f.Mode),
-			Size:          f.Size,
-			BlockIndex:    f.BlockIndex,
-			BlockIndexEnd: f.BlockIndexEnd,
+	files := make([]*Container_File, 0, len(container.Files))
+	for _, f := range container.Files {
+		files = append(files, &Container_File{
+			Path: f.Path,
+			Mode: uint32(f.Mode),
+			Size: f.Size,
 		})
 	}
 
-	symlinks := make([]*RepoInfo_Symlink, 0, len(info.Symlinks))
-	for _, s := range info.Symlinks {
-		symlinks = append(symlinks, &RepoInfo_Symlink{
+	symlinks := make([]*Container_Symlink, 0, len(container.Symlinks))
+	for _, s := range container.Symlinks {
+		symlinks = append(symlinks, &Container_Symlink{
 			Path: s.Path,
 			Mode: uint32(s.Mode),
 			Dest: s.Dest,
 		})
 	}
 
-	ri := &RepoInfo{
-		NumBlocks: info.NumBlocks,
-		Dirs:      dirs,
-		Files:     files,
-		Symlinks:  symlinks,
+	msg := &Container{
+		Size:     container.Size,
+		Dirs:     dirs,
+		Files:    files,
+		Symlinks: symlinks,
 	}
 
-	return bwc.WriteMessage(ri)
+	return bwc.WriteMessage(msg)
 }

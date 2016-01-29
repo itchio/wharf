@@ -14,24 +14,24 @@ func Test_Read(t *testing.T) {
 	defer os.RemoveAll(tmpPath)
 
 	t.Logf("walking sample dir")
-	info, err := tlc.Walk(tmpPath, 16)
+	container, err := tlc.Walk(tmpPath, 16)
 	must(t, err)
 
-	r := info.NewReader(tmpPath)
+	r := container.NewReader(tmpPath).Boundless()
 
 	t.Logf("reading whole tlc")
 	all, err := ioutil.ReadAll(r)
 	must(t, err)
 
 	t.Logf("testing tlc layout")
-	assert.Equal(t, len(all), info.BlockSize*int(info.NumBlocks), "has right length")
+	assert.Equal(t, int64(len(all)), container.Size, "has right length")
 
 	expected := make([]byte, 0, 0)
-	expected = paddedAppend(expected, 0xa, 10)
-	expected = paddedAppend(expected, 0xb, 20)
-	expected = paddedAppend(expected, 0xc, 30)
-	expected = paddedAppend(expected, 0xd, 50)
-	expected = paddedAppend(expected, 0xe, 40)
+	expected = appendFiller(expected, 0xa, 10)
+	expected = appendFiller(expected, 0xb, 20)
+	expected = appendFiller(expected, 0xc, 30)
+	expected = appendFiller(expected, 0xd, 50)
+	expected = appendFiller(expected, 0xe, 40)
 
 	assert.Equal(t, all, expected, "has padded file layout")
 
@@ -47,47 +47,31 @@ func Test_Read(t *testing.T) {
 	assert.Equal(t, read, 1, "read 1 byte")
 	assert.Equal(t, single[0], byte(0xa), "reads from first file")
 
-	offset, err = r.Seek(20, os.SEEK_SET)
+	offset, err = r.Seek(11, os.SEEK_SET)
 	must(t, err)
-	assert.Equal(t, offset, int64(20), "seeks inside second file")
+	assert.Equal(t, offset, int64(11), "seeks inside second file")
 
 	read, err = r.Read(single)
 	must(t, err)
 	assert.Equal(t, read, 1, "read 1 byte")
 	assert.Equal(t, single[0], byte(0xb), "reads from second file")
 
-	offset, err = r.Seek(11, os.SEEK_SET)
-	must(t, err)
-	assert.Equal(t, offset, int64(11), "seeks inside first file padding")
+	// reading from multiple files
 
-	multi := make([]byte, 512)
-	expectedMulti := appendFiller(make([]byte, 0), 0x0, 16-11)
+	multi := make([]byte, 30)
+	expectedMulti := make([]byte, 0)
+	expectedMulti = appendFiller(expectedMulti, 0xa, 5)
+	expectedMulti = appendFiller(expectedMulti, 0xb, 20)
+	expectedMulti = appendFiller(expectedMulti, 0xc, 5)
+
+	offset, err = r.Seek(5, os.SEEK_SET)
+	must(t, err)
+	assert.Equal(t, offset, int64(5), "seeks inside first file")
 
 	read, err = r.Read(multi)
 	must(t, err)
-	assert.Equal(t, read, 16-11, "read all available padding")
-	assert.Equal(t, multi[:read], expectedMulti, "reads from second file")
-
-	expectedMulti = appendFiller(make([]byte, 0), 0xb, 20)
-	read, err = r.Read(multi)
-	must(t, err)
-	assert.Equal(t, read, 20, "reads entire second file (across two blocks)")
-	assert.Equal(t, multi[:read], expectedMulti, "reads from second file")
-
-	expectedMulti = appendFiller(make([]byte, 0), 0x0, 12)
-	read, err = r.Read(multi)
-	must(t, err)
-	assert.Equal(t, read, 12, "reads entire second file padding")
-	assert.Equal(t, multi[:read], expectedMulti, "reads from second file padding")
-
-	t.Logf("closing tlc")
-	must(t, r.Close())
-}
-
-func paddedAppend(slice []byte, b byte, q int) []byte {
-	slice = appendFiller(slice, b, q)
-	slice = appendFiller(slice, 0, 16-q%16)
-	return slice
+	assert.Equal(t, read, 30, "read all bytes")
+	assert.Equal(t, multi[:read], expectedMulti, "reads across two files")
 }
 
 func appendFiller(slice []byte, b byte, q int) []byte {

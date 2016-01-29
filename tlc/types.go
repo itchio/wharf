@@ -15,9 +15,9 @@ type File struct {
 	Path string
 	Mode os.FileMode
 
-	Size          int64
-	BlockIndex    int64
-	BlockIndexEnd int64
+	Size      int64
+	Offset    int64
+	OffsetEnd int64
 }
 
 // Directories are empty directories we
@@ -34,12 +34,9 @@ type Symlink struct {
 	Dest string
 }
 
-type RepoInfo struct {
-	// Block size to align files
-	BlockSize int
-
-	// Total number of blocks
-	NumBlocks int64
+type Container struct {
+	// Total size
+	Size int64
 
 	// All directories, empty or not, in any order
 	Dirs []Dir
