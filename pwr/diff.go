@@ -18,7 +18,7 @@ type ProgressCallback func(percent float64)
 // WriteRecipe outputs a pwr recipe to recipeWriter
 func WriteRecipe(
 	recipeWriter io.Writer,
-	sourceContainer *tlc.Container,
+	sourceContainer *tlc.Container, sourcePath string,
 	targetContainer *tlc.Container, signature []sync.BlockHash,
 	onProgress ProgressCallback,
 	brotliParams *enc.BrotliParams) error {
@@ -57,7 +57,10 @@ func WriteRecipe(
 	blockLibrary := sync.NewBlockLibrary(signature)
 
 	sh := &SyncHeader{}
-	filePool := sourceContainer.NewFilePool()
+	delimiter := &SyncOp{}
+	delimiter.Type = SyncOp_HEY_YOU_DID_IT
+
+	filePool := sourceContainer.NewFilePool(sourcePath)
 	defer filePool.Close()
 
 	for fileIndex, f := range sourceContainer.Files {
@@ -65,7 +68,10 @@ func WriteRecipe(
 
 		sh.Reset()
 		sh.FileIndex = int64(fileIndex)
-		bwc.WriteMessage(sh)
+		err = bwc.WriteMessage(sh)
+		if err != nil {
+			return err
+		}
 
 		sourceReader, err := filePool.GetReader(int64(fileIndex))
 		if err != nil {
@@ -74,17 +80,14 @@ func WriteRecipe(
 
 		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
 		err = sctx.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
-
 		if err != nil {
 			return err
 		}
-	}
 
-	eop := &SyncOp{}
-	eop.Type = SyncOp_HEY_YOU_DID_IT
-	err = bwc.WriteMessage(eop)
-	if err != nil {
-		return err
+		err = bwc.WriteMessage(delimiter)
+		if err != nil {
+			return err
+		}
 	}
 
 	// err = bw.Close()
@@ -111,7 +114,7 @@ func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {
 		case sync.OpBlockRange:
 			wop.Type = SyncOp_BLOCK_RANGE
 			wop.BlockIndex = op.BlockIndex
-			wop.BlockSpan = op.BlockIndex
+			wop.BlockSpan = op.BlockSpan
 
 		case sync.OpData:
 			wop.Type = SyncOp_DATA

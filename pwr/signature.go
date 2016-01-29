@@ -7,8 +7,8 @@ import (
 )
 
 // ComputeDiffSignature returns a series of hash suitable to create a diff
-func ComputeDiffSignature(container *tlc.Container, onProgress ProgressCallback) (signature []sync.BlockHash, err error) {
-	pool := container.NewFilePool()
+func ComputeDiffSignature(container *tlc.Container, basePath string, onProgress ProgressCallback) (signature []sync.BlockHash, err error) {
+	pool := container.NewFilePool(basePath)
 	defer pool.Close()
 
 	rs := mksync()
@@ -26,12 +26,10 @@ func ComputeDiffSignature(container *tlc.Container, onProgress ProgressCallback)
 		return nil
 	}
 
-	filePool := container.NewFilePool()
-
 	for fileIndex, f := range container.Files {
 		fileOffset = f.Offset
 
-		reader, err := filePool.GetReader(int64(fileIndex))
+		reader, err := pool.GetReader(int64(fileIndex))
 		if err != nil {
 			return nil, err
 		}

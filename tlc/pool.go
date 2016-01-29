@@ -3,6 +3,7 @@ package tlc
 import (
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/itchio/wharf/sync"
 )
@@ -15,14 +16,16 @@ type ReadCloseSeeker interface {
 
 type ContainerFilePool struct {
 	container *Container
+	basePath  string
 
 	fileIndex int64
 	reader    ReadCloseSeeker
 }
 
-func (c *Container) NewFilePool() sync.FilePool {
+func (c *Container) NewFilePool(basePath string) sync.FilePool {
 	return &ContainerFilePool{
 		container: c,
+		basePath:  basePath,
 
 		fileIndex: int64(-1),
 		reader:    nil,
@@ -35,7 +38,8 @@ func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) 
 			cfp.reader.Close()
 		}
 
-		reader, err := os.Open(cfp.container.Files[fileIndex].Path)
+		fullPath := filepath.Join(cfp.basePath, cfp.container.Files[fileIndex].Path)
+		reader, err := os.Open(fullPath)
 		if err != nil {
 			return nil, err
 		}

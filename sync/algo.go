@@ -9,11 +9,12 @@ package sync
 
 import (
 	"crypto/md5"
+	"fmt"
 	"io"
 	"os"
 )
 
-const MaxDataOp = 10
+const MaxDataOp = 80
 
 func NewContext(BlockSize int) *SyncContext {
 	return &SyncContext{
@@ -63,6 +64,7 @@ func (ctx *SyncContext) ApplyRecipe(output io.Writer, pool FilePool, ops chan Op
 
 				err = writeBlock(Operation{
 					Type:       OpBlock,
+					FileIndex:  op.FileIndex,
 					BlockIndex: BlockIndex,
 				})
 				if err != nil {
@@ -109,8 +111,8 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 	var data, sum section
 	var n, validTo int
 	var αPop, αPush, β, β1, β2 uint32
-	var blockIndex int64
-	var rolling, lastRun, foundHash bool
+	var rolling, lastRun bool
+	var shortSize int32
 
 	// Store the previous non-data operation for combining.
 	var prevOp *Operation
@@ -120,6 +122,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		if prevOp == nil {
 			return
 		}
+
 		err = ops(*prevOp)
 		prevOp = nil
 	}()
@@ -130,20 +133,25 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		switch op.Type {
 		case OpBlock:
 			if prevOp != nil {
-				switch prevOp.Type {
-				case OpBlock:
-					if prevOp.BlockIndex+1 == op.BlockIndex {
-						prevOp = &Operation{
-							Type:       OpBlockRange,
-							BlockIndex: prevOp.BlockIndex,
-							BlockSpan:  2,
+				if prevOp.FileIndex == op.FileIndex {
+					switch prevOp.Type {
+					case OpBlock:
+						fmt.Printf("prev is block, %d vs %d\n", prevOp.BlockIndex, op.BlockIndex)
+						if prevOp.BlockIndex+1 == op.BlockIndex {
+							prevOp = &Operation{
+								Type:       OpBlockRange,
+								FileIndex:  prevOp.FileIndex,
+								BlockIndex: prevOp.BlockIndex,
+								BlockSpan:  2,
+							}
+							return
 						}
-						return
-					}
-				case OpBlockRange:
-					if prevOp.BlockIndex+prevOp.BlockSpan == op.BlockIndex {
-						prevOp.BlockSpan++
-						return
+					case OpBlockRange:
+						fmt.Printf("prev is range, %d+%d vs %d\n", prevOp.BlockIndex, prevOp.BlockSpan, op.BlockIndex)
+						if prevOp.BlockIndex+prevOp.BlockSpan == op.BlockIndex {
+							prevOp.BlockSpan++
+							return
+						}
 					}
 				}
 				err = ops(*prevOp)
@@ -200,6 +208,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 					return err
 				}
 				lastRun = true
+				shortSize = int32(data.head - data.tail)
 
 				data.head = validTo
 			}
@@ -223,14 +232,13 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		var blockHash *BlockHash
 
 		// Determine if there is a hash match.
-		foundHash = false
-		if hh, ok := library.hashLookup[β]; ok && !lastRun {
-			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]))
+		if hh, ok := library.hashLookup[β]; ok {
+			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize)
 		}
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer
 		// allocation purposes) or to flush the end of the data.
-		if data.tail < data.head && (blockHash != nil || data.head-data.tail >= MaxDataOp || lastRun) {
+		if data.tail < data.head && (blockHash != nil || data.head-data.tail >= MaxDataOp) {
 			err = enqueue(Operation{Type: OpData, Data: buffer[data.tail:data.head]})
 			if err != nil {
 				return err
@@ -238,8 +246,8 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 			data.tail = data.head
 		}
 
-		if foundHash {
-			err = enqueue(Operation{Type: OpBlock, BlockIndex: blockIndex})
+		if blockHash != nil {
+			err = enqueue(Operation{Type: OpBlock, FileIndex: blockHash.FileIndex, BlockIndex: blockHash.BlockIndex})
 			if err != nil {
 				return err
 			}

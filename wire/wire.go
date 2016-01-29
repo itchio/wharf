@@ -11,6 +11,7 @@ import (
 var ENDIANNESS = binary.LittleEndian
 
 const MSG_MAGIC = uint16(0xD3F1)
+const DEBUG_WIRE = true
 
 type WriteContext struct {
 	writer io.Writer
@@ -21,6 +22,10 @@ func NewWriteContext(writer io.Writer) *WriteContext {
 }
 
 func (w *WriteContext) WriteMessage(msg proto.Message) error {
+	if DEBUG_WIRE {
+		fmt.Printf("WriteMessage %+v\n", msg)
+	}
+
 	err := binary.Write(w.writer, ENDIANNESS, uint16(MSG_MAGIC))
 	if err != nil {
 		return err
@@ -79,6 +84,10 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
 		return fmt.Errorf("while decoding message: %s", err)
+	}
+
+	if DEBUG_WIRE {
+		fmt.Printf("ReadMessage %+v\n", msg)
 	}
 
 	return nil

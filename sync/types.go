@@ -34,6 +34,9 @@ type BlockHash struct {
 	BlockIndex int64
 	WeakHash   uint32
 	StrongHash []byte
+
+	// ShortSize specifies the block size when non-zero
+	ShortSize int32
 }
 
 type SignatureWriter func(hash BlockHash) error

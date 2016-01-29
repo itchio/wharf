@@ -57,8 +57,6 @@ message SignatureHeader {
 }
 
 message BlockHash {
-  int64 fileIndex = 1;
-  int64 blockIndex = 2;
   int32 weakHash = 3;
   bytes strongHash = 4;
 }

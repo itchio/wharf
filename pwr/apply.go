@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/kothar/brotli-go.v0/dec"
 
+	"github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -64,13 +65,15 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		return fmt.Errorf("while reading source container: %s", err)
 	}
 
-	targetPool := targetContainer.NewFilePool()
+	targetPool := targetContainer.NewFilePool(target)
 	sourceContainer.Prepare(output)
 
 	sctx := mksync()
 	sh := &SyncHeader{}
 
 	for fileIndex, f := range sourceContainer.Files {
+		fmt.Printf("Patching %s\n", f.Path)
+
 		sh.Reset()
 		err := brc.ReadMessage(sh)
 		if err != nil {
@@ -78,6 +81,7 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		}
 
 		if sh.FileIndex != int64(fileIndex) {
+			fmt.Printf("expected fileIndex = %d, got fileIndex %d\n", fileIndex, sh.FileIndex)
 			return ErrMalformedRecipe
 		}
 
@@ -98,7 +102,7 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 
 		err = <-errc
 		if err != nil {
-			return fmt.Errorf("While reading recipe: %s", err.Error())
+			return fmt.Errorf("while reading recipe: %s", err.Error())
 		}
 
 		writer.Close()
@@ -149,6 +153,7 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 			case SyncOp_HEY_YOU_DID_IT:
 				readingOps = false
 			default:
+				fmt.Printf("unrecognized rop type %d\n", rop.Type)
 				errc <- ErrMalformedRecipe
 				return
 			}
@@ -160,6 +165,12 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 			ops <- op
 		}
 	}
+
+	fmt.Printf("totalOps: %d\n", totalOps)
+	for i, label := range []string{"block", "block-range", "data"} {
+		fmt.Printf("%10s = %s in %d ops\n", label, humanize.Bytes(uint64(opsBytes[i])), opsCount[i])
+	}
+	fmt.Printf("-----------------------\n")
 
 	errc <- nil
 }
