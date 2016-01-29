@@ -70,7 +70,7 @@ func findUniqueHash(hh []BlockHash, hashValue []byte, shortSize int32) *BlockHas
 	}
 	for _, block := range hh {
 		// full block have 0 shortSize
-		if block.ShortSize == shortSize && bytes.Equal(block.StrongHash, hashValue) {
+		if /* block.ShortSize == shortSize && */ bytes.Equal(block.StrongHash, hashValue) {
 			return &block
 		}
 	}

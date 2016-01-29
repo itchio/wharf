@@ -14,7 +14,8 @@ import (
 	"os"
 )
 
-const MaxDataOp = 80
+const MaxDataOp = (16 * 1024) * 10
+const DEBUG_SYNC = false
 
 func NewContext(BlockSize int) *SyncContext {
 	return &SyncContext{
@@ -112,7 +113,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 	var n, validTo int
 	var αPop, αPush, β, β1, β2 uint32
 	var rolling, lastRun bool
-	var shortSize int32
+	var shortSize int32 = 0
 
 	// Store the previous non-data operation for combining.
 	var prevOp *Operation
@@ -136,7 +137,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 				if prevOp.FileIndex == op.FileIndex {
 					switch prevOp.Type {
 					case OpBlock:
-						fmt.Printf("prev is block, %d vs %d\n", prevOp.BlockIndex, op.BlockIndex)
 						if prevOp.BlockIndex+1 == op.BlockIndex {
 							prevOp = &Operation{
 								Type:       OpBlockRange,
@@ -147,7 +147,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 							return
 						}
 					case OpBlockRange:
-						fmt.Printf("prev is range, %d+%d vs %d\n", prevOp.BlockIndex, prevOp.BlockSpan, op.BlockIndex)
 						if prevOp.BlockIndex+prevOp.BlockSpan == op.BlockIndex {
 							prevOp.BlockSpan++
 							return
@@ -202,15 +201,23 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 			}
 
 			n, err = io.ReadAtLeast(source, buffer[validTo:validTo+ctx.blockSize], ctx.blockSize)
+			if DEBUG_SYNC {
+				fmt.Printf("read %d\n", n)
+			}
 			validTo += n
 			if err != nil {
 				if err != io.EOF && err != io.ErrUnexpectedEOF {
 					return err
 				}
 				lastRun = true
-				shortSize = int32(data.head - data.tail)
 
-				data.head = validTo
+				shortSize = int32(n)
+				if DEBUG_SYNC {
+					fmt.Printf("last block size = %d\n", shortSize)
+				}
+			}
+			if n == 0 {
+				break
 			}
 		}
 
@@ -234,6 +241,9 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		// Determine if there is a hash match.
 		if hh, ok := library.hashLookup[β]; ok {
 			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize)
+			if DEBUG_SYNC {
+				fmt.Printf("found unique hash? %+v\n", blockHash != nil)
+			}
 		}
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer
@@ -261,14 +271,21 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 			data.head = sum.tail
 			data.tail = sum.tail
 		} else {
-			// The following is for the next loop iteration, so don't try to calculate if last.
-			if !lastRun && rolling {
-				αPop = uint32(buffer[sum.tail])
-			}
-			sum.tail += 1
+			if lastRun {
+				err = enqueue(Operation{Type: OpData, Data: buffer[data.tail:validTo]})
+				if err != nil {
+					return err
+				}
+			} else {
+				// The following is for the next loop iteration, so don't try to calculate if last.
+				if rolling {
+					αPop = uint32(buffer[sum.tail])
+				}
+				sum.tail += 1
 
-			// May trigger "data wrap".
-			data.head = sum.tail
+				// May trigger "data wrap".
+				data.head = sum.tail
+			}
 		}
 	}
 	return nil

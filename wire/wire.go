@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"reflect"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -11,7 +12,7 @@ import (
 var ENDIANNESS = binary.LittleEndian
 
 const MSG_MAGIC = uint16(0xD3F1)
-const DEBUG_WIRE = true
+const DEBUG_WIRE = false
 
 type WriteContext struct {
 	writer io.Writer
@@ -23,7 +24,7 @@ func NewWriteContext(writer io.Writer) *WriteContext {
 
 func (w *WriteContext) WriteMessage(msg proto.Message) error {
 	if DEBUG_WIRE {
-		fmt.Printf("WriteMessage %+v\n", msg)
+		fmt.Printf("<< %s %+v\n", reflect.TypeOf(msg).Elem().Name(), msg)
 	}
 
 	err := binary.Write(w.writer, ENDIANNESS, uint16(MSG_MAGIC))
@@ -87,7 +88,7 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 	}
 
 	if DEBUG_WIRE {
-		fmt.Printf("ReadMessage %+v\n", msg)
+		fmt.Printf(">> %s %+v\n", reflect.TypeOf(msg).Elem().Name(), msg)
 	}
 
 	return nil
