@@ -14,7 +14,7 @@ const (
 
 // BlockSize is a compromise between wasted hashing work (because of padding)
 // and inefficient diffs
-var BlockSize = 4 * 1024 // 4k
+var BlockSize = 64 * 1024 // 64k
 
 func mksync() *sync.SyncContext {
 	return sync.NewContext(BlockSize)
