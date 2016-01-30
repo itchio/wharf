@@ -11,7 +11,7 @@ func ComputeDiffSignature(container *tlc.Container, basePath string, onProgress 
 	pool := container.NewFilePool(basePath)
 	defer pool.Close()
 
-	rs := mksync()
+	sctx := mksync()
 	signature = make([]sync.BlockHash, 0)
 
 	totalBytes := container.Size
@@ -35,7 +35,7 @@ func ComputeDiffSignature(container *tlc.Container, basePath string, onProgress 
 		}
 
 		cr := counter.NewReaderCallback(onRead, reader)
-		err = rs.CreateSignature(int64(fileIndex), cr, sigWriter)
+		err = sctx.CreateSignature(int64(fileIndex), cr, sigWriter)
 		if err != nil {
 			return nil, err
 		}

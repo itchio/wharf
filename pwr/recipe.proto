@@ -57,8 +57,8 @@ message SignatureHeader {
 }
 
 message BlockHash {
-  int32 weakHash = 3;
-  bytes strongHash = 4;
+  int32 weakHash = 1;
+  bytes strongHash = 2;
 }
 
 message SyncHeader {

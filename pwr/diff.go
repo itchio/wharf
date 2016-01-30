@@ -19,27 +19,29 @@ type ProgressCallback func(percent float64)
 func WriteRecipe(
 	recipeWriter io.Writer,
 	sourceContainer *tlc.Container, sourcePath string,
-	targetContainer *tlc.Container, signature []sync.BlockHash,
+	targetContainer *tlc.Container, targetSignature []sync.BlockHash,
 	onProgress ProgressCallback,
-	brotliParams *enc.BrotliParams) error {
+	brotliParams *enc.BrotliParams) ([]sync.BlockHash, error) {
+
+	sourceSignature := make([]sync.BlockHash, 0)
 
 	wc := wire.NewWriteContext(recipeWriter)
 
 	header := &RecipeHeader{}
 	header.Version = RecipeHeader_V1
 
-	// header.Compression = RecipeHeader_BROTLI
-	header.Compression = RecipeHeader_UNCOMPRESSED
+	header.Compression = RecipeHeader_BROTLI
+	// header.Compression = RecipeHeader_UNCOMPRESSED
 	header.CompressionLevel = 1
 
 	err := wc.WriteMessage(header)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// bw := enc.NewBrotliWriter(brotliParams, recipeWriter)
-	// bwc := wire.NewWriteContext(bw)
-	bwc := wc
+	bw := enc.NewBrotliWriter(brotliParams, recipeWriter)
+	bwc := wire.NewWriteContext(bw)
+	// bwc := wc
 
 	writeContainer(bwc, targetContainer)
 	writeContainer(bwc, sourceContainer)
@@ -54,7 +56,7 @@ func WriteRecipe(
 	opsWriter := makeOpsWriter(bwc)
 
 	sctx := mksync()
-	blockLibrary := sync.NewBlockLibrary(signature)
+	blockLibrary := sync.NewBlockLibrary(targetSignature)
 
 	sh := &SyncHeader{}
 	delimiter := &SyncOp{}
@@ -70,32 +72,32 @@ func WriteRecipe(
 		sh.FileIndex = int64(fileIndex)
 		err = bwc.WriteMessage(sh)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		sourceReader, err := filePool.GetReader(int64(fileIndex))
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
 		err = sctx.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		err = bwc.WriteMessage(delimiter)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	// err = bw.Close()
-	// if err != nil {
-	// 	return err
-	// }
+	err = bw.Close()
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	return sourceSignature, nil
 }
 
 func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {
