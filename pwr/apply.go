@@ -34,19 +34,12 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	switch header.Version {
-	case RecipeHeader_V1:
-		// muffin
-	default:
-		return ErrIncompatibleRecipe
-	}
-
 	var decompressReader io.Reader
-	switch header.Compression {
-	case RecipeHeader_UNCOMPRESSED:
+	switch header.Compression.Algorithm {
+	case CompressionAlgorithm_UNCOMPRESSED:
 		fmt.Printf("Uncompressed formula\n")
 		decompressReader = recipeReader
-	case RecipeHeader_BROTLI:
+	case CompressionAlgorithm_BROTLI:
 		fmt.Printf("Brotli-compressed formula\n")
 		decompressReader = dec.NewBrotliReader(recipeReader)
 	default:
@@ -55,14 +48,16 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 
 	brc := wire.NewReadContext(decompressReader)
 
-	targetContainer, err := readContainer(brc)
+	targetContainer := &tlc.Container{}
+	err = brc.ReadMessage(targetContainer)
 	if err != nil {
-		return fmt.Errorf("while reading target container: %s", err)
+		return err
 	}
 
-	sourceContainer, err := readContainer(brc)
+	sourceContainer := &tlc.Container{}
+	err = brc.ReadMessage(sourceContainer)
 	if err != nil {
-		return fmt.Errorf("while reading source container: %s", err)
+		return err
 	}
 
 	targetPool := targetContainer.NewFilePool(target)
@@ -173,44 +168,4 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 	fmt.Printf("-----------------------\n")
 
 	errc <- nil
-}
-
-func readContainer(rc *wire.ReadContext) (*tlc.Container, error) {
-	msg := &Container{}
-	err := rc.ReadMessage(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	container := &tlc.Container{
-		Size:     msg.Size,
-		Dirs:     make([]tlc.Dir, 0, len(msg.GetDirs())),
-		Files:    make([]tlc.File, 0, len(msg.GetFiles())),
-		Symlinks: make([]tlc.Symlink, 0, len(msg.GetSymlinks())),
-	}
-
-	for _, d := range msg.GetDirs() {
-		container.Dirs = append(container.Dirs, tlc.Dir{
-			Path: d.Path,
-			Mode: os.FileMode(d.Mode),
-		})
-	}
-
-	for _, f := range msg.GetFiles() {
-		container.Files = append(container.Files, tlc.File{
-			Path: f.Path,
-			Mode: os.FileMode(f.Mode),
-			Size: f.Size,
-		})
-	}
-
-	for _, l := range msg.GetSymlinks() {
-		container.Symlinks = append(container.Symlinks, tlc.Symlink{
-			Path: l.Path,
-			Mode: os.FileMode(l.Mode),
-			Dest: l.Dest,
-		})
-	}
-
-	return container, nil
 }

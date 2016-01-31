@@ -1,45 +1,40 @@
 package wharf
 
 import (
-	"bytes"
-	"encoding/gob"
+	"errors"
 	"fmt"
-	"log"
 
 	"github.com/golang/protobuf/proto"
 )
 
-func (c *Conn) SendRequest(name string, wantReply bool, msg proto.Message) (bool, interface{}, error) {
-	var payloadBytes []byte = nil
-	if payload != nil {
-		payloadBuf := new(bytes.Buffer)
-		err := gob.NewEncoder(payloadBuf).Encode(&payload)
-		if err != nil {
-			return false, nil, err
-		}
-		payloadBytes = payloadBuf.Bytes()
+var (
+	ErrRequestFailure = errors.New("ssh request failed")
+)
+
+func (c *Conn) SendRequest(name string, request proto.Message, reply proto.Message) error {
+	wantReply := reply != nil
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return err
 	}
 
-	status, replyBytes, err := c.Conn.SendRequest(name, wantReply, payloadBytes)
+	status, replyBytes, err := c.Conn.SendRequest(name, wantReply, requestBytes)
 	if err != nil {
 		err = fmt.Errorf("in sendrequest(%s): %s", name, err.Error())
-		return false, nil, err
+		return err
 	}
 
-	var reply interface{} = nil
-	if len(replyBytes) > 0 {
-		err := gob.NewDecoder(bytes.NewReader(replyBytes)).Decode(&reply)
+	if !status {
+		return ErrRequestFailure
+	}
+
+	if wantReply {
+		err = proto.Unmarshal(replyBytes, reply)
 		if err != nil {
-			log.Println("when parsing reply")
-			return false, nil, err
+			return err
 		}
 	}
 
-	return status, reply, nil
-}
-
-func (c *Conn) Blog(format string, args ...interface{}) error {
-	msg := fmt.Sprintf(format, args...)
-	_, _, err := c.SendRequest("wharf/log", false, LogEntry{Message: msg})
-	return err
+	return nil
 }

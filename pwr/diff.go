@@ -28,11 +28,11 @@ func WriteRecipe(
 	wc := wire.NewWriteContext(recipeWriter)
 
 	header := &RecipeHeader{}
-	header.Version = RecipeHeader_V1
 
-	header.Compression = RecipeHeader_BROTLI
-	// header.Compression = RecipeHeader_UNCOMPRESSED
-	header.CompressionLevel = 1
+	header.Compression = &CompressionSettings{
+		Algorithm: CompressionAlgorithm_BROTLI,
+		Quality:   1,
+	}
 
 	err := wc.WriteMessage(header)
 	if err != nil {
@@ -43,8 +43,15 @@ func WriteRecipe(
 	bwc := wire.NewWriteContext(bw)
 	// bwc := wc
 
-	writeContainer(bwc, targetContainer)
-	writeContainer(bwc, sourceContainer)
+	err = bwc.WriteMessage(targetContainer)
+	if err != nil {
+		return nil, err
+	}
+
+	err = bwc.WriteMessage(sourceContainer)
+	if err != nil {
+		return nil, err
+	}
 
 	sourceBytes := sourceContainer.Size
 	fileOffset := int64(0)
@@ -133,41 +140,4 @@ func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {
 
 		return nil
 	}
-}
-
-func writeContainer(bwc *wire.WriteContext, container *tlc.Container) error {
-	dirs := make([]*Container_Dir, 0, len(container.Dirs))
-	for _, d := range container.Dirs {
-		dirs = append(dirs, &Container_Dir{
-			Path: d.Path,
-			Mode: uint32(d.Mode),
-		})
-	}
-
-	files := make([]*Container_File, 0, len(container.Files))
-	for _, f := range container.Files {
-		files = append(files, &Container_File{
-			Path: f.Path,
-			Mode: uint32(f.Mode),
-			Size: f.Size,
-		})
-	}
-
-	symlinks := make([]*Container_Symlink, 0, len(container.Symlinks))
-	for _, s := range container.Symlinks {
-		symlinks = append(symlinks, &Container_Symlink{
-			Path: s.Path,
-			Mode: uint32(s.Mode),
-			Dest: s.Dest,
-		})
-	}
-
-	msg := &Container{
-		Size:     container.Size,
-		Dirs:     dirs,
-		Files:    files,
-		Symlinks: symlinks,
-	}
-
-	return bwc.WriteMessage(msg)
 }
