@@ -25,42 +25,6 @@ type Channel struct {
 	gdec *gob.Decoder
 }
 
-func (c *Conn) OpenChannel(chType string, payload interface{}) (*Channel, error) {
-	payloadBuf, err := Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	ch, reqs, err := c.Conn.OpenChannel(chType, payloadBuf)
-	if err != nil {
-		return nil, err
-	}
-
-	go ssh.DiscardRequests(reqs)
-
-	params := enc.NewBrotliParams()
-	params.SetQuality(brotliTransportQuality)
-
-	wc := counter.NewWriter(ch)
-	bw := enc.NewBrotliWriter(params, wc)
-
-	br := dec.NewBrotliReader(ch)
-
-	cch := &Channel{
-		closed: false,
-		ch:     ch,
-
-		wc:   wc,
-		bw:   bw,
-		genc: gob.NewEncoder(bw),
-
-		br:   br,
-		gdec: gob.NewDecoder(br),
-	}
-
-	return cch, nil
-}
-
 func (ch *Channel) CloseWrite() error {
 	// flush rest of brotli data
 	err := ch.bw.Close()

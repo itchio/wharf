@@ -2,9 +2,11 @@ package sync_test
 
 import (
 	"bytes"
-	"crypto/md5"
+	"io"
 	"math/rand"
 	"testing"
+
+	"github.com/itchio/wharf/sync"
 )
 
 type RandReader struct {
@@ -111,8 +113,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := &sync.SyncContext{UniqueHasher: md5.New()}
-	rsDelta := &sync.SyncContext{UniqueHasher: md5.New()}
+	rs := sync.NewContext(16 * 1024)
+	rsDelta := sync.NewContext(16 * 1024)
 	for _, p := range pairs {
 		(&p.Source).Fill()
 		(&p.Target).Fill()
@@ -120,25 +122,27 @@ func Test_GenData(t *testing.T) {
 		sourceBuffer := bytes.NewReader(p.Source.Data)
 		targetBuffer := bytes.NewReader(p.Target.Data)
 
-		sig := make([]rsync.BlockHash, 0, 10)
-		err := rs.CreateSignature(targetBuffer, func(bl rsync.BlockHash) error {
+		sig := make([]sync.BlockHash, 0, 10)
+		err := rs.CreateSignature(0, targetBuffer, func(bl sync.BlockHash) error {
 			sig = append(sig, bl)
 			return nil
 		})
 		if err != nil {
 			t.Errorf("Failed to create signature: %s", err)
 		}
-		opsOut := make(chan rsync.Operation)
+		lib := sync.NewBlockLibrary(sig)
+
+		opsOut := make(chan sync.Operation)
 		go func() {
 			var blockCt, blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
-			err := rsDelta.InventRecipe(sourceBuffer, sig, func(op rsync.Operation) error {
+			err := rsDelta.ComputeDiff(sourceBuffer, lib, func(op sync.Operation) error {
 				switch op.Type {
-				case rsync.OpBlockRange:
+				case sync.OpBlockRange:
 					blockRangeCt++
-				case rsync.OpBlock:
+				case sync.OpBlock:
 					blockCt++
-				case rsync.OpData:
+				case sync.OpData:
 					// Copy data buffer so it may be reused in internal buffer.
 					b := make([]byte, len(op.Data))
 					copy(b, op.Data)
@@ -156,9 +160,10 @@ func Test_GenData(t *testing.T) {
 		}()
 
 		result := new(bytes.Buffer)
+		filePool := &SinglePool{reader: targetBuffer}
 
 		targetBuffer.Seek(0, 0)
-		err = rs.ApplyRecipe(result, targetBuffer, opsOut)
+		err = rs.ApplyRecipe(result, filePool, opsOut)
 		if err != nil {
 			t.Errorf("Failed to apply delta: %s", err)
 		}
@@ -172,6 +177,18 @@ func Test_GenData(t *testing.T) {
 		p.Source.Data = nil
 		p.Target.Data = nil
 	}
+}
+
+type SinglePool struct {
+	reader io.ReadSeeker
+}
+
+func (sp *SinglePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
+	return sp.reader, nil
+}
+
+func (sp *SinglePool) Close() error {
+	return nil
 }
 
 func min(a, b int) int {

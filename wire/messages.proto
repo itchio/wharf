@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-package io.itch.wharf.pwr;
-option go_package = "pwr";
+package io.itch.wharf.wire;
+option go_package = "wire";
 
 message RecipeHeader {
   enum Version {

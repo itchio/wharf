@@ -45,6 +45,8 @@ func (ctx *SyncContext) ApplyRecipe(output io.Writer, pool FilePool, ops chan Op
 		target.Seek(int64(ctx.blockSize*int(op.BlockIndex)), os.SEEK_SET)
 		n, err = io.ReadAtLeast(target, buffer, ctx.blockSize)
 		if err != nil {
+			// UnexpectedEOF is actually expected, since we want to copy short
+			// blocks at the end of files. Other errors aren't expected.
 			if err != io.ErrUnexpectedEOF {
 				return err
 			}

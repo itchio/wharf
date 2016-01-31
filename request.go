@@ -5,9 +5,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
+
+	"github.com/golang/protobuf/proto"
 )
 
-func (c *Conn) SendRequest(name string, wantReply bool, payload interface{}) (bool, interface{}, error) {
+func (c *Conn) SendRequest(name string, wantReply bool, msg proto.Message) (bool, interface{}, error) {
 	var payloadBytes []byte = nil
 	if payload != nil {
 		payloadBuf := new(bytes.Buffer)
