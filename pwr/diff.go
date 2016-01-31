@@ -15,15 +15,20 @@ import (
 // ProgressCallback is called periodically to announce the degree of completeness of an operation
 type ProgressCallback func(percent float64)
 
-// WriteRecipe outputs a pwr recipe to recipeWriter
-func WriteRecipe(
-	recipeWriter io.Writer,
-	sourceContainer *tlc.Container, sourcePath string,
-	targetContainer *tlc.Container, targetSignature []sync.BlockHash,
-	onProgress ProgressCallback,
-	brotliParams *enc.BrotliParams) ([]sync.BlockHash, error) {
+type DiffContext struct {
+	SourceContainer *tlc.Container
+	SourcePath      string
 
-	sourceSignature := make([]sync.BlockHash, 0)
+	TargetContainer *tlc.Container
+	TargetSignature []sync.BlockHash
+}
+
+// WriteRecipe outputs a pwr recipe to recipeWriter
+func (dctx *DiffContext) WriteRecipe(
+	recipeWriter io.Writer,
+	onProgress ProgressCallback,
+	brotliParams *enc.BrotliParams,
+	sourceSignatureWriter sync.SignatureWriter) error {
 
 	wc := wire.NewWriteContext(recipeWriter)
 
@@ -36,24 +41,24 @@ func WriteRecipe(
 
 	err := wc.WriteMessage(header)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	bw := enc.NewBrotliWriter(brotliParams, recipeWriter)
 	bwc := wire.NewWriteContext(bw)
 	// bwc := wc
 
-	err = bwc.WriteMessage(targetContainer)
+	err = bwc.WriteMessage(dctx.TargetContainer)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	err = bwc.WriteMessage(sourceContainer)
+	err = bwc.WriteMessage(dctx.SourceContainer)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	sourceBytes := sourceContainer.Size
+	sourceBytes := dctx.SourceContainer.Size
 	fileOffset := int64(0)
 
 	onSourceRead := func(count int64) {
@@ -63,48 +68,64 @@ func WriteRecipe(
 	opsWriter := makeOpsWriter(bwc)
 
 	sctx := mksync()
-	blockLibrary := sync.NewBlockLibrary(targetSignature)
+	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
 
 	sh := &SyncHeader{}
 	delimiter := &SyncOp{}
 	delimiter.Type = SyncOp_HEY_YOU_DID_IT
 
-	filePool := sourceContainer.NewFilePool(sourcePath)
+	filePool := dctx.SourceContainer.NewFilePool(dctx.SourcePath)
 	defer filePool.Close()
 
-	for fileIndex, f := range sourceContainer.Files {
+	for fileIndex, f := range dctx.SourceContainer.Files {
 		fileOffset = f.Offset
 
 		sh.Reset()
 		sh.FileIndex = int64(fileIndex)
 		err = bwc.WriteMessage(sh)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		sourceReader, err := filePool.GetReader(int64(fileIndex))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
+		pipeReader, pipeWriter := io.Pipe()
+		tee := io.TeeReader(sourceReader, pipeWriter)
+
+		signErrors := make(chan error)
+		go signFile(sctx, fileIndex, pipeReader, sourceSignatureWriter, signErrors)
+
+		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, tee)
 		err = sctx.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
 		if err != nil {
-			return nil, err
+			return err
+		}
+
+		pipeWriter.Close()
+		err = <-signErrors
+		if err != nil {
+			return err
 		}
 
 		err = bwc.WriteMessage(delimiter)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	err = bw.Close()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return sourceSignature, nil
+	return nil
+}
+
+func signFile(sctx *sync.SyncContext, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errc chan error) {
+	errc <- sctx.CreateSignature(int64(fileIndex), reader, writeHash)
 }
 
 func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {

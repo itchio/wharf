@@ -35,7 +35,7 @@ message SignatureHeader {
 }
 
 message BlockHash {
-  int32 weakHash = 1;
+  uint32 weakHash = 1;
   bytes strongHash = 2;
 }
 
