@@ -9,18 +9,26 @@ const (
 	MODE_MASK = 0644
 )
 
-func Walk(BasePath string, BlockSize int) (*Container, error) {
-	Dirs := make([]Dir, 0, 0)
-	Symlinks := make([]Symlink, 0, 0)
-	Files := make([]File, 0, 0)
+type FilterFunc func(fileInfo os.FileInfo) bool
+
+func Walk(BasePath string, filter FilterFunc) (*Container, error) {
+	if filter == nil {
+		filter = func(fileInfo os.FileInfo) bool {
+			return true
+		}
+	}
+
+	Dirs := make([]*Dir, 0, 0)
+	Symlinks := make([]*Symlink, 0, 0)
+	Files := make([]*File, 0, 0)
 
 	TotalOffset := int64(0)
 
-	onEntry := func(FullPath string, fi os.FileInfo, err error) error {
+	onEntry := func(FullPath string, fileInfo os.FileInfo, err error) error {
 		// we shouldn't encounter any error crawling the repo
 		if err != nil {
 			if os.IsPermission(err) {
-				// ignore
+				// ...except permission errors, those are fine
 			} else {
 				return err
 			}
@@ -31,33 +39,28 @@ func Walk(BasePath string, BlockSize int) (*Container, error) {
 			return err
 		}
 
-		Mode := fi.Mode() | MODE_MASK
+		// don't end up with files we (the patcher) can't modify
+		Mode := fileInfo.Mode() | MODE_MASK
 
 		if Mode.IsDir() {
-			Name := fi.Name()
-			for _, prefix := range IgnoredDirs {
-				if Name == prefix {
-					return filepath.SkipDir
-				}
+			if !filter(fileInfo) {
+				return filepath.SkipDir
 			}
 
-			d := Dir{Path, Mode}
-			Dirs = append(Dirs, d)
+			Dirs = append(Dirs, &Dir{Path: Path, Mode: uint32(Mode)})
 		} else if Mode.IsRegular() {
-			Size := fi.Size()
+			Size := fileInfo.Size()
 			Offset := TotalOffset
 			OffsetEnd := Offset + Size
 
-			f := File{Path, Mode, Size, Offset, OffsetEnd}
-			Files = append(Files, f)
+			Files = append(Files, &File{Path: Path, Mode: uint32(Mode), Size: Size, Offset: Offset})
 			TotalOffset = OffsetEnd
 		} else if Mode&os.ModeSymlink > 0 {
-			Target, err := os.Readlink(FullPath)
+			Dest, err := os.Readlink(FullPath)
 			if err != nil {
 				return err
 			}
-			s := Symlink{Path, Mode, Target}
-			Symlinks = append(Symlinks, s)
+			Symlinks = append(Symlinks, &Symlink{Path: Path, Mode: uint32(Mode), Dest: Dest})
 		}
 
 		return nil
@@ -68,7 +71,6 @@ func Walk(BasePath string, BlockSize int) (*Container, error) {
 		return nil, err
 	}
 
-	Size := TotalOffset
-	container := &Container{Size, Dirs, Symlinks, Files}
+	container := &Container{Size: TotalOffset, Dirs: Dirs, Symlinks: Symlinks, Files: Files}
 	return container, nil
 }

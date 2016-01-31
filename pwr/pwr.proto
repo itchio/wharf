@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package io.itch.wharf.pwr;
+option go_package = "pwr";
+
+// Recipes
+
+message RecipeHeader {
+  CompressionSettings compression = 16;
+}
+
+message SyncHeader {
+  int64 fileIndex = 16;
+}
+
+message SyncOp {
+  enum Type {
+    BLOCK = 0;
+    BLOCK_RANGE = 1;
+    DATA = 2;
+    HEY_YOU_DID_IT = 2049; // <3 @GranPC
+  }
+  Type type = 1;
+
+  int64 fileIndex = 2;
+  int64 blockIndex = 3;
+  int64 blockSpan = 4;
+  bytes data = 5;
+}
+
+// Signatures
+
+message SignatureHeader {
+  CompressionSettings compression = 16;
+}
+
+message BlockHash {
+  int32 weakHash = 1;
+  bytes strongHash = 2;
+}
+
+// Compression
+
+enum CompressionAlgorithm {
+  UNCOMPRESSED = 0;
+  BROTLI = 1;
+}
+
+message CompressionSettings {
+  CompressionAlgorithm algorithm = 16;
+  int32 quality = 17;
+}
