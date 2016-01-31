@@ -12,7 +12,7 @@ const (
 	pwrMagic = int32(iota + 0xFEF5F00)
 )
 
-var BlockSize = 4 * 1024 // 64k
+var BlockSize = 64 * 1024 // 64k
 
 func mksync() *sync.SyncContext {
 	return sync.NewContext(BlockSize)
