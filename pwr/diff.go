@@ -38,16 +38,12 @@ func (dctx *DiffContext) WriteRecipe(
 		return err
 	}
 
-	// bw :=
-	// bwc := wire.NewWriteContext(bw)
-	bwc := wc
-
-	err = bwc.WriteMessage(dctx.TargetContainer)
+	err = wc.WriteMessage(dctx.TargetContainer)
 	if err != nil {
 		return err
 	}
 
-	err = bwc.WriteMessage(dctx.SourceContainer)
+	err = wc.WriteMessage(dctx.SourceContainer)
 	if err != nil {
 		return err
 	}
@@ -59,7 +55,7 @@ func (dctx *DiffContext) WriteRecipe(
 		onProgress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
 	}
 
-	opsWriter := makeOpsWriter(bwc)
+	opsWriter := makeOpsWriter(wc)
 
 	sctx := mksync()
 	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
@@ -72,11 +68,12 @@ func (dctx *DiffContext) WriteRecipe(
 	defer filePool.Close()
 
 	for fileIndex, f := range dctx.SourceContainer.Files {
+		fmt.Printf("%s\n", f.Path)
 		fileOffset = f.Offset
 
 		sh.Reset()
 		sh.FileIndex = int64(fileIndex)
-		err = bwc.WriteMessage(sh)
+		err = wc.WriteMessage(sh)
 		if err != nil {
 			return err
 		}
@@ -104,16 +101,11 @@ func (dctx *DiffContext) WriteRecipe(
 			return err
 		}
 
-		err = bwc.WriteMessage(delimiter)
+		err = wc.WriteMessage(delimiter)
 		if err != nil {
 			return err
 		}
 	}
-
-	// err = bw.Close()
-	// if err != nil {
-	// 	return err
-	// }
 
 	return nil
 }

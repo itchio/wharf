@@ -11,7 +11,6 @@ import (
 
 var ENDIANNESS = binary.LittleEndian
 
-const MSG_MAGIC = uint16(0xD3F1)
 const DEBUG_WIRE = false
 
 type WriteContext struct {
@@ -27,11 +26,6 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 		fmt.Printf("<< %s %+v\n", reflect.TypeOf(msg).Elem().Name(), msg)
 	}
 
-	err := binary.Write(w.writer, ENDIANNESS, uint16(MSG_MAGIC))
-	if err != nil {
-		return err
-	}
-
 	buf, err := proto.Marshal(msg)
 	if err != nil {
 		return err
@@ -41,6 +35,8 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("%s %d\n", reflect.TypeOf(msg), len(buf))
 
 	_, err = w.writer.Write(buf)
 	if err != nil {
@@ -59,28 +55,20 @@ func NewReadContext(reader io.Reader) *ReadContext {
 }
 
 func (r *ReadContext) ReadMessage(msg proto.Message) error {
-	var magic uint16
-	err := binary.Read(r.reader, ENDIANNESS, &magic)
-	if err != nil {
-		return fmt.Errorf("while reading magic: %s", err)
-	}
-
-	if magic != MSG_MAGIC {
-		return fmt.Errorf("invalid magic number: %x", magic)
-	}
-
 	var length uint32
-	err = binary.Read(r.reader, ENDIANNESS, &length)
+	err := binary.Read(r.reader, ENDIANNESS, &length)
 	if err != nil {
 		return fmt.Errorf("while reading length: %s", err)
 	}
 
 	buf := make([]byte, length)
 
-	_, err = io.ReadFull(r.reader, buf)
+	readBytes, err := io.ReadFull(r.reader, buf)
 	if err != nil {
 		return fmt.Errorf("while readfull: %s", err)
 	}
+
+	fmt.Printf("%s %d\n", reflect.TypeOf(msg), readBytes)
 
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {

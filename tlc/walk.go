@@ -13,8 +13,6 @@ const (
 type FilterFunc func(fileInfo os.FileInfo) bool
 
 func Walk(BasePath string, filter FilterFunc) (*Container, error) {
-	fmt.Printf("Walking %s\n", BasePath)
-
 	if filter == nil {
 		filter = func(fileInfo os.FileInfo) bool {
 			return true

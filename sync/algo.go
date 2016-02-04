@@ -14,7 +14,7 @@ import (
 	"os"
 )
 
-const MaxDataOp = (16 * 1024) * 10
+const MaxDataOp = (4 * 1024 * 1024)
 const DEBUG_SYNC = false
 
 func NewContext(BlockSize int) *SyncContext {
