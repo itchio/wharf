@@ -34,11 +34,6 @@ func (dctx *DiffContext) WriteRecipe(
 
 	header := &RecipeHeader{}
 
-	header.Compression = &CompressionSettings{
-		Algorithm: CompressionAlgorithm_BROTLI,
-		Quality:   1,
-	}
-
 	err := wc.WriteMessage(header)
 	if err != nil {
 		return err
