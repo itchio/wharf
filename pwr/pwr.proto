@@ -5,9 +5,7 @@ option go_package = "pwr";
 
 // Recipes
 
-message RecipeHeader {
-  Timestamp createdAt = 1;
-}
+message RecipeHeader {}
 
 message SyncHeader {
   int64 fileIndex = 16;
@@ -30,36 +28,9 @@ message SyncOp {
 
 // Signatures
 
-message SignatureHeader {
-  CompressionSettings compression = 16;
-}
+message SignatureHeader {}
 
 message BlockHash {
   uint32 weakHash = 1;
   bytes strongHash = 2;
-}
-
-// Compression
-
-enum CompressionAlgorithm {
-  UNCOMPRESSED = 0;
-  BROTLI = 1;
-}
-
-message CompressionSettings {
-  CompressionAlgorithm algorithm = 16;
-  int32 quality = 17;
-}
-
-message Timestamp {
-  // Represents seconds of UTC time since Unix epoch
-  // 1970-01-01T00:00:00Z. Must be from from 0001-01-01T00:00:00Z to
-  // 9999-12-31T23:59:59Z inclusive.
-  int64 seconds = 1;
-
-  // Non-negative fractions of a second at nanosecond resolution. Negative
-  // second values with fractions must still have non-negative nanos values
-  // that count forward in time. Must be from 0 to 999,999,999
-  // inclusive.
-  int32 nanos = 2;
 }

@@ -33,15 +33,14 @@ func (dctx *DiffContext) WriteRecipe(
 	wc := wire.NewWriteContext(recipeWriter)
 
 	header := &RecipeHeader{}
-
 	err := wc.WriteMessage(header)
 	if err != nil {
 		return err
 	}
 
-	bw := enc.NewBrotliWriter(brotliParams, recipeWriter)
-	bwc := wire.NewWriteContext(bw)
-	// bwc := wc
+	// bw :=
+	// bwc := wire.NewWriteContext(bw)
+	bwc := wc
 
 	err = bwc.WriteMessage(dctx.TargetContainer)
 	if err != nil {
@@ -111,10 +110,10 @@ func (dctx *DiffContext) WriteRecipe(
 		}
 	}
 
-	err = bw.Close()
-	if err != nil {
-		return err
-	}
+	// err = bw.Close()
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

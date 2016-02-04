@@ -19,7 +19,7 @@ type Conn struct {
 }
 
 // Connect tries to connect to a wharf server
-func Connect(address string, identityPath string, version string) (*Conn, error) {
+func Connect(address string, identityPath string, client string, version string) (*Conn, error) {
 	tcpConn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
@@ -31,9 +31,9 @@ func Connect(address string, identityPath string, version string) (*Conn, error)
 	}
 
 	sshConfig := &ssh.ClientConfig{
-		User:          "butler",
+		User:          "wharf",
 		Auth:          []ssh.AuthMethod{identity},
-		ClientVersion: fmt.Sprintf("SSH-2.0-butler_%s", version),
+		ClientVersion: fmt.Sprintf("SSH-2.0-%s_%s", client, version),
 	}
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(tcpConn, "", sshConfig)

@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-
-	"gopkg.in/kothar/brotli-go.v0/dec"
 
 	"github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/sync"
@@ -34,34 +31,22 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	var decompressReader io.Reader
-	switch header.Compression.Algorithm {
-	case CompressionAlgorithm_UNCOMPRESSED:
-		fmt.Printf("Uncompressed formula\n")
-		decompressReader = recipeReader
-	case CompressionAlgorithm_BROTLI:
-		fmt.Printf("Brotli-compressed formula\n")
-		decompressReader = dec.NewBrotliReader(recipeReader)
-	default:
-		return ErrIncompatibleRecipe
-	}
-
-	brc := wire.NewReadContext(decompressReader)
-
 	targetContainer := &tlc.Container{}
-	err = brc.ReadMessage(targetContainer)
+	err = rc.ReadMessage(targetContainer)
 	if err != nil {
 		return err
 	}
 
 	sourceContainer := &tlc.Container{}
-	err = brc.ReadMessage(sourceContainer)
+	err = rc.ReadMessage(sourceContainer)
 	if err != nil {
 		return err
 	}
 
 	targetPool := targetContainer.NewFilePool(target)
+
 	sourceContainer.Prepare(output)
+	outputPool := sourceContainer.NewFilePool(output)
 
 	sctx := mksync()
 	sh := &SyncHeader{}
@@ -70,7 +55,7 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		fmt.Printf("Patching %s\n", f.Path)
 
 		sh.Reset()
-		err := brc.ReadMessage(sh)
+		err := rc.ReadMessage(sh)
 		if err != nil {
 			return err
 		}
@@ -82,9 +67,9 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 
 		ops := make(chan sync.Operation)
 		errc := make(chan error, 1)
-		go readOps(brc, ops, errc)
+		go readOps(rc, ops, errc)
 
-		fullPath := filepath.Join(output, f.Path)
+		fullPath := outputPool.GetPath(sh.FileIndex)
 		writer, err := os.Create(fullPath)
 		if err != nil {
 			return err

@@ -42,6 +42,8 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 			return err
 		}
 
+		Path = filepath.ToSlash(Path)
+
 		// don't end up with files we (the patcher) can't modify
 		Mode := fileInfo.Mode() | MODE_MASK
 

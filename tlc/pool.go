@@ -22,7 +22,9 @@ type ContainerFilePool struct {
 	reader    ReadCloseSeeker
 }
 
-func (c *Container) NewFilePool(basePath string) sync.FilePool {
+var _ sync.FilePool = (*ContainerFilePool)(nil)
+
+func (c *Container) NewFilePool(basePath string) *ContainerFilePool {
 	return &ContainerFilePool{
 		container: c,
 		basePath:  basePath,
@@ -32,14 +34,19 @@ func (c *Container) NewFilePool(basePath string) sync.FilePool {
 	}
 }
 
+func (cfp *ContainerFilePool) GetPath(fileIndex int64) string {
+	path := filepath.FromSlash(cfp.container.Files[fileIndex].Path)
+	fullPath := filepath.Join(cfp.basePath, path)
+	return fullPath
+}
+
 func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
 			cfp.reader.Close()
 		}
 
-		fullPath := filepath.Join(cfp.basePath, cfp.container.Files[fileIndex].Path)
-		reader, err := os.Open(fullPath)
+		reader, err := os.Open(cfp.GetPath(fileIndex))
 		if err != nil {
 			return nil, err
 		}
