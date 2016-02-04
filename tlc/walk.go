@@ -1,6 +1,7 @@
 package tlc
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -12,6 +13,8 @@ const (
 type FilterFunc func(fileInfo os.FileInfo) bool
 
 func Walk(BasePath string, filter FilterFunc) (*Container, error) {
+	fmt.Printf("Walking %s\n", BasePath)
+
 	if filter == nil {
 		filter = func(fileInfo os.FileInfo) bool {
 			return true
@@ -66,9 +69,22 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		return nil
 	}
 
-	err := filepath.Walk(BasePath, onEntry)
-	if err != nil {
-		return nil, err
+	if BasePath == "/dev/null" {
+		// empty container is fine - /dev/null is legal even on Win32 where it doesn't exist
+	} else {
+		fi, err := os.Lstat(BasePath)
+		if err != nil {
+			return nil, err
+		}
+
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("tlc: can't walk non-directory %s", BasePath)
+		}
+
+		err = filepath.Walk(BasePath, onEntry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	container := &Container{Size: TotalOffset, Dirs: Dirs, Symlinks: Symlinks, Files: Files}
