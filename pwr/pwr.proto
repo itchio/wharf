@@ -5,7 +5,9 @@ option go_package = "pwr";
 
 // Recipes
 
-message RecipeHeader {}
+message RecipeHeader {
+  CompressionSettings compression = 1;
+}
 
 message SyncHeader {
   int64 fileIndex = 16;
@@ -16,7 +18,7 @@ message SyncOp {
     BLOCK = 0;
     BLOCK_RANGE = 1;
     DATA = 2;
-    HEY_YOU_DID_IT = 2049; // <3 @GranPC
+    HEY_YOU_DID_IT = 2049; // <3 @GranPC & @tomasduda
   }
   Type type = 1;
 
@@ -28,9 +30,23 @@ message SyncOp {
 
 // Signatures
 
-message SignatureHeader {}
+message SignatureHeader {
+  CompressionSettings compression = 1;
+}
 
 message BlockHash {
   uint32 weakHash = 1;
   bytes strongHash = 2;
+}
+
+// Compression
+
+enum CompressionAlgorithm {
+  UNCOMPRESSED = 0;
+  BROTLI = 1;
+}
+
+message CompressionSettings {
+  CompressionAlgorithm algorithm = 1;
+  int32 quality = 2;
 }

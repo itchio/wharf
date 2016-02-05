@@ -72,7 +72,8 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		return fmt.Errorf("while decoding message: %s", err)
+		panic(err)
+		// return fmt.Errorf("while decoding message: %s", err)
 	}
 
 	if DEBUG_WIRE {

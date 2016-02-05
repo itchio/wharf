@@ -27,16 +27,26 @@ type DiffContext struct {
 func (dctx *DiffContext) WriteRecipe(
 	recipeWriter io.Writer,
 	onProgress ProgressCallback,
-	brotliParams *enc.BrotliParams,
 	sourceSignatureWriter sync.SignatureWriter) error {
 
-	wc := wire.NewWriteContext(recipeWriter)
+	hwc := wire.NewWriteContext(recipeWriter)
 
-	header := &RecipeHeader{}
-	err := wc.WriteMessage(header)
+	header := &RecipeHeader{
+		Compression: &CompressionSettings{
+			Algorithm: CompressionAlgorithm_BROTLI,
+			Quality:   1,
+		},
+	}
+	err := hwc.WriteMessage(header)
 	if err != nil {
 		return err
 	}
+
+	brotliParams := enc.NewBrotliParams()
+	brotliParams.SetQuality(1)
+	compressedWriter := enc.NewBrotliWriter(brotliParams, recipeWriter)
+
+	wc := wire.NewWriteContext(compressedWriter)
 
 	err = wc.WriteMessage(dctx.TargetContainer)
 	if err != nil {

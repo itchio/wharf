@@ -6,7 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/dustin/go-humanize"
+	"gopkg.in/kothar/brotli-go.v0/dec"
+
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -23,12 +24,22 @@ var (
 
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
 func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
-	rc := wire.NewReadContext(recipeReader)
+	hrc := wire.NewReadContext(recipeReader)
 
 	header := &RecipeHeader{}
-	err := rc.ReadMessage(header)
+	err := hrc.ReadMessage(header)
 	if err != nil {
 		return fmt.Errorf("while reading message: %s", err)
+	}
+
+	var rc *wire.ReadContext
+
+	switch header.Compression.Algorithm {
+	case CompressionAlgorithm_BROTLI:
+		compressedReader := dec.NewBrotliReader(recipeReader)
+		rc = wire.NewReadContext(compressedReader)
+	case CompressionAlgorithm_UNCOMPRESSED:
+		rc = hrc
 	}
 
 	targetContainer := &tlc.Container{}
@@ -52,7 +63,7 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 	sh := &SyncHeader{}
 
 	for fileIndex, f := range sourceContainer.Files {
-		fmt.Printf("Patching %s\n", f.Path)
+		fmt.Printf("%s\n", f.Path)
 
 		sh.Reset()
 		err := rc.ReadMessage(sh)
@@ -146,11 +157,11 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 		}
 	}
 
-	fmt.Printf("totalOps: %d\n", totalOps)
-	for i, label := range []string{"block", "block-range", "data"} {
-		fmt.Printf("%10s = %s in %d ops\n", label, humanize.Bytes(uint64(opsBytes[i])), opsCount[i])
-	}
-	fmt.Printf("-----------------------\n")
+	// fmt.Printf("totalOps: %d\n", totalOps)
+	// for i, label := range []string{"block", "block-range", "data"} {
+	// 	fmt.Printf("%10s = %s in %d ops\n", label, humanize.Bytes(uint64(opsBytes[i])), opsCount[i])
+	// }
+	// fmt.Printf("-----------------------\n")
 
 	errc <- nil
 }
