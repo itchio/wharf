@@ -117,6 +117,11 @@ func (dctx *DiffContext) WriteRecipe(
 		}
 	}
 
+	err = compressedWriter.Close()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
