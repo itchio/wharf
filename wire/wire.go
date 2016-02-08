@@ -55,6 +55,8 @@ func NewReadContext(reader io.Reader) *ReadContext {
 }
 
 func (r *ReadContext) ReadMessage(msg proto.Message) error {
+	fmt.Printf("%s\n", reflect.TypeOf(msg))
+
 	var length uint32
 	err := binary.Read(r.reader, ENDIANNESS, &length)
 	if err != nil {
