@@ -9,7 +9,8 @@ import (
 var endianness = binary.LittleEndian
 
 const (
-	pwrMagic = int32(iota + 0xFEF5F00)
+	recipeMagic = int32(iota + 0xFEF5F00)
+	signatureMagic
 )
 
 var BlockSize = 64 * 1024 // 64k

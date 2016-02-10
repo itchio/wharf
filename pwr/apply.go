@@ -32,6 +32,7 @@ type ApplyContext struct {
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	hrc := wire.NewReadContext(recipeReader)
+	hrc.ExpectMagic(recipeMagic)
 
 	header := &RecipeHeader{}
 	err := hrc.ReadMessage(header)

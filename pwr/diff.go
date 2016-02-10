@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"gopkg.in/kothar/brotli-go.v0/enc"
-
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
@@ -13,7 +11,8 @@ import (
 )
 
 type DiffContext struct {
-	Consumer *StateConsumer
+	Compression *CompressionSettings
+	Consumer    *StateConsumer
 
 	SourceContainer *tlc.Container
 	SourcePath      string
@@ -23,11 +22,39 @@ type DiffContext struct {
 }
 
 // WriteRecipe outputs a pwr recipe to recipeWriter
-func (dctx *DiffContext) WriteRecipe(
-	recipeWriter io.Writer,
-	sourceSignatureWriter sync.SignatureWriter) error {
+func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.Writer) error {
+	if dctx.Compression == nil {
+		dctx.Compression = defaultCompressionSettings()
+	}
 
-	hwc := wire.NewWriteContext(recipeWriter)
+	// signature header
+	rawSigWire := wire.NewWriteContext(signatureWriter)
+	err := rawSigWire.WriteMagic(signatureMagic)
+	if err != nil {
+		return err
+	}
+
+	err = rawSigWire.WriteMessage(&SignatureHeader{})
+	if err != nil {
+		return err
+	}
+
+	sigWire, err := compressWire(rawSigWire, dctx.Compression)
+	if err != nil {
+		return err
+	}
+
+	err = sigWire.WriteMessage(dctx.SourceContainer)
+	if err != nil {
+		return err
+	}
+
+	// recipe header
+	rawRecipeWire := wire.NewWriteContext(recipeWriter)
+	err = rawRecipeWire.WriteMagic(recipeMagic)
+	if err != nil {
+		return err
+	}
 
 	header := &RecipeHeader{
 		Compression: &CompressionSettings{
@@ -35,23 +62,23 @@ func (dctx *DiffContext) WriteRecipe(
 			Quality:   1,
 		},
 	}
-	err := hwc.WriteMessage(header)
+
+	err = rawRecipeWire.WriteMessage(header)
 	if err != nil {
 		return err
 	}
 
-	brotliParams := enc.NewBrotliParams()
-	brotliParams.SetQuality(1)
-	compressedWriter := enc.NewBrotliWriter(brotliParams, recipeWriter)
-
-	wc := wire.NewWriteContext(compressedWriter)
-
-	err = wc.WriteMessage(dctx.TargetContainer)
+	recipeWire, err := compressWire(rawRecipeWire, dctx.Compression)
 	if err != nil {
 		return err
 	}
 
-	err = wc.WriteMessage(dctx.SourceContainer)
+	err = recipeWire.WriteMessage(dctx.TargetContainer)
+	if err != nil {
+		return err
+	}
+
+	err = recipeWire.WriteMessage(dctx.SourceContainer)
 	if err != nil {
 		return err
 	}
@@ -63,14 +90,17 @@ func (dctx *DiffContext) WriteRecipe(
 		dctx.Consumer.Progress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
 	}
 
-	opsWriter := makeOpsWriter(wc)
+	sigWriter := makeSigWriter(sigWire)
+	opsWriter := makeOpsWriter(recipeWire)
 
-	sctx := mksync()
+	syncContext := mksync()
 	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
 
-	sh := &SyncHeader{}
-	delimiter := &SyncOp{}
-	delimiter.Type = SyncOp_HEY_YOU_DID_IT
+	// re-used messages
+	syncHeader := &SyncHeader{}
+	syncDelimiter := &SyncOp{
+		Type: SyncOp_HEY_YOU_DID_IT,
+	}
 
 	filePool := dctx.SourceContainer.NewFilePool(dctx.SourcePath)
 	defer filePool.Close()
@@ -79,9 +109,9 @@ func (dctx *DiffContext) WriteRecipe(
 		dctx.Consumer.Debug(f.Path)
 		fileOffset = f.Offset
 
-		sh.Reset()
-		sh.FileIndex = int64(fileIndex)
-		err = wc.WriteMessage(sh)
+		syncHeader.Reset()
+		syncHeader.FileIndex = int64(fileIndex)
+		err = recipeWire.WriteMessage(syncHeader)
 		if err != nil {
 			return err
 		}
@@ -91,14 +121,17 @@ func (dctx *DiffContext) WriteRecipe(
 			return err
 		}
 
+		//             / differ
+		// source file +
+		//             \ signer
 		pipeReader, pipeWriter := io.Pipe()
 		tee := io.TeeReader(sourceReader, pipeWriter)
 
 		signErrors := make(chan error)
-		go signFile(sctx, fileIndex, pipeReader, sourceSignatureWriter, signErrors)
+		go signFile(syncContext, fileIndex, pipeReader, sigWriter, signErrors)
 
 		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, tee)
-		err = sctx.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
+		err = syncContext.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
 		if err != nil {
 			return err
 		}
@@ -109,15 +142,10 @@ func (dctx *DiffContext) WriteRecipe(
 			return err
 		}
 
-		err = wc.WriteMessage(delimiter)
+		err = recipeWire.WriteMessage(syncDelimiter)
 		if err != nil {
 			return err
 		}
-	}
-
-	err = compressedWriter.Close()
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -125,6 +153,16 @@ func (dctx *DiffContext) WriteRecipe(
 
 func signFile(sctx *sync.SyncContext, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errc chan error) {
 	errc <- sctx.CreateSignature(int64(fileIndex), reader, writeHash)
+}
+
+func makeSigWriter(wc *wire.WriteContext) sync.SignatureWriter {
+	return func(bl sync.BlockHash) error {
+		wc.WriteMessage(&BlockHash{
+			WeakHash:   bl.WeakHash,
+			StrongHash: bl.StrongHash,
+		})
+		return nil
+	}
 }
 
 func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {

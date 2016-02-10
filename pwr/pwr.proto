@@ -3,7 +3,7 @@ syntax = "proto3";
 package io.itch.wharf.pwr;
 option go_package = "pwr";
 
-// Recipes
+// Recipe file format
 
 message RecipeHeader {
   CompressionSettings compression = 1;
@@ -28,7 +28,7 @@ message SyncOp {
   bytes data = 5;
 }
 
-// Signatures
+// Signature file format
 
 message SignatureHeader {
   CompressionSettings compression = 1;
