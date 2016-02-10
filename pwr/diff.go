@@ -12,10 +12,9 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
-// ProgressCallback is called periodically to announce the degree of completeness of an operation
-type ProgressCallback func(percent float64)
-
 type DiffContext struct {
+	Consumer *StateConsumer
+
 	SourceContainer *tlc.Container
 	SourcePath      string
 
@@ -26,7 +25,6 @@ type DiffContext struct {
 // WriteRecipe outputs a pwr recipe to recipeWriter
 func (dctx *DiffContext) WriteRecipe(
 	recipeWriter io.Writer,
-	onProgress ProgressCallback,
 	sourceSignatureWriter sync.SignatureWriter) error {
 
 	hwc := wire.NewWriteContext(recipeWriter)
@@ -62,7 +60,7 @@ func (dctx *DiffContext) WriteRecipe(
 	fileOffset := int64(0)
 
 	onSourceRead := func(count int64) {
-		onProgress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
+		dctx.Consumer.Progress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
 	}
 
 	opsWriter := makeOpsWriter(wc)
@@ -78,7 +76,7 @@ func (dctx *DiffContext) WriteRecipe(
 	defer filePool.Close()
 
 	for fileIndex, f := range dctx.SourceContainer.Files {
-		fmt.Printf("%s\n", f.Path)
+		dctx.Consumer.Debug(f.Path)
 		fileOffset = f.Offset
 
 		sh.Reset()

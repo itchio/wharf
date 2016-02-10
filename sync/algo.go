@@ -9,13 +9,11 @@ package sync
 
 import (
 	"crypto/md5"
-	"fmt"
 	"io"
 	"os"
 )
 
 const MaxDataOp = (4 * 1024 * 1024)
-const DEBUG_SYNC = false
 
 func NewContext(BlockSize int) *SyncContext {
 	return &SyncContext{
@@ -203,9 +201,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 			}
 
 			n, err = io.ReadAtLeast(source, buffer[validTo:validTo+ctx.blockSize], ctx.blockSize)
-			if DEBUG_SYNC {
-				fmt.Printf("read %d\n", n)
-			}
 			validTo += n
 			if err != nil {
 				if err != io.EOF && err != io.ErrUnexpectedEOF {
@@ -214,9 +209,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 				lastRun = true
 
 				shortSize = int32(n)
-				if DEBUG_SYNC {
-					fmt.Printf("last block size = %d\n", shortSize)
-				}
 			}
 			if n == 0 {
 				break
@@ -243,9 +235,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		// Determine if there is a hash match.
 		if hh, ok := library.hashLookup[β]; ok {
 			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize)
-			if DEBUG_SYNC {
-				fmt.Printf("found unique hash? %+v\n", blockHash != nil)
-			}
 		}
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer

@@ -22,8 +22,15 @@ var (
 	ErrIncompatibleRecipe = errors.New("unsupported recipe")
 )
 
+type ApplyContext struct {
+	Consumer *StateConsumer
+
+	TargetPath string
+	OutputPath string
+}
+
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
-func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgress ProgressCallback) error {
+func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	hrc := wire.NewReadContext(recipeReader)
 
 	header := &RecipeHeader{}
@@ -54,16 +61,16 @@ func ApplyRecipe(recipeReader io.Reader, target string, output string, onProgres
 		return err
 	}
 
-	targetPool := targetContainer.NewFilePool(target)
+	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
-	sourceContainer.Prepare(output)
-	outputPool := sourceContainer.NewFilePool(output)
+	sourceContainer.Prepare(actx.OutputPath)
+	outputPool := sourceContainer.NewFilePool(actx.OutputPath)
 
 	sctx := mksync()
 	sh := &SyncHeader{}
 
 	for fileIndex, f := range sourceContainer.Files {
-		fmt.Printf("%s\n", f.Path)
+		actx.Consumer.Debug(f.Path)
 
 		sh.Reset()
 		err := rc.ReadMessage(sh)

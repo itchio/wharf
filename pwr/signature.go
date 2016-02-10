@@ -7,7 +7,7 @@ import (
 )
 
 // ComputeDiffSignature returns a series of hash suitable to create a diff
-func ComputeDiffSignature(container *tlc.Container, basePath string, onProgress ProgressCallback) (signature []sync.BlockHash, err error) {
+func ComputeDiffSignature(container *tlc.Container, basePath string, consumer *StateConsumer) (signature []sync.BlockHash, err error) {
 	pool := container.NewFilePool(basePath)
 	defer pool.Close()
 
@@ -18,7 +18,7 @@ func ComputeDiffSignature(container *tlc.Container, basePath string, onProgress 
 	fileOffset := int64(0)
 
 	onRead := func(count int64) {
-		onProgress(100.0 * float64(fileOffset+count) / float64(totalBytes))
+		consumer.Progress(100.0 * float64(fileOffset+count) / float64(totalBytes))
 	}
 
 	sigWriter := func(bl sync.BlockHash) error {

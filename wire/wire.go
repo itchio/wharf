@@ -36,8 +36,6 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 		return err
 	}
 
-	fmt.Printf("%s %d\n", reflect.TypeOf(msg), len(buf))
-
 	_, err = w.writer.Write(buf)
 	if err != nil {
 		return err
@@ -63,17 +61,14 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 
 	buf := make([]byte, length)
 
-	readBytes, err := io.ReadFull(r.reader, buf)
+	_, err = io.ReadFull(r.reader, buf)
 	if err != nil {
 		return fmt.Errorf("while readfull: %s", err)
 	}
 
-	fmt.Printf("%s %d\n", reflect.TypeOf(msg), readBytes)
-
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		panic(err)
-		// return fmt.Errorf("while decoding message: %s", err)
+		return fmt.Errorf("while decoding message: %s", err)
 	}
 
 	if DEBUG_WIRE {
