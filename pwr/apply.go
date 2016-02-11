@@ -113,7 +113,11 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 	opsBytes := []int64{0, 0, 0}
 
 	rop := &SyncOp{}
-	op := sync.Operation{}
+	sendOp := func(op sync.Operation) {
+		totalOps++
+		opsCount[op.Type]++
+		ops <- op
+	}
 
 	readingOps := true
 	for readingOps {
@@ -123,27 +127,35 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 			errc <- fmt.Errorf("while reading op message: %s", err)
 			return
 		}
-		hasOp := true
+
+		var op = sync.Operation{}
 
 		switch rop.Type {
 		case SyncOp_BLOCK:
-			op.Type = sync.OpBlock
-			op.BlockIndex = rop.BlockIndex
+			sendOp(sync.Operation{
+				Type:       sync.OpBlock,
+				FileIndex:  rop.FileIndex,
+				BlockIndex: rop.BlockIndex,
+			})
 			opsBytes[op.Type] += int64(BlockSize)
 
 		case SyncOp_BLOCK_RANGE:
-			op.Type = sync.OpBlockRange
-			op.BlockIndex = rop.BlockIndex
-			op.BlockSpan = rop.BlockSpan
+			sendOp(sync.Operation{
+				Type:       sync.OpBlockRange,
+				FileIndex:  rop.FileIndex,
+				BlockIndex: rop.BlockIndex,
+				BlockSpan:  rop.BlockSpan,
+			})
 			opsBytes[op.Type] += int64(BlockSize) * int64(op.BlockSpan)
 
 		case SyncOp_DATA:
-			op.Type = sync.OpData
-			op.Data = rop.Data
-			opsBytes[op.Type] += int64(len(op.Data))
+			sendOp(sync.Operation{
+				Type: sync.OpData,
+				Data: rop.Data,
+			})
+			opsBytes[op.Type] += int64(len(rop.Data))
 
 		default:
-			hasOp = false
 			switch rop.Type {
 			case SyncOp_HEY_YOU_DID_IT:
 				readingOps = false
@@ -152,12 +164,6 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 				errc <- ErrMalformedRecipe
 				return
 			}
-		}
-
-		if hasOp {
-			totalOps++
-			opsCount[op.Type]++
-			ops <- op
 		}
 	}
 

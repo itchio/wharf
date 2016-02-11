@@ -185,10 +185,12 @@ func makeOpsWriter(wc *wire.WriteContext) sync.OperationWriter {
 		switch op.Type {
 		case sync.OpBlock:
 			wop.Type = SyncOp_BLOCK
+			wop.FileIndex = op.FileIndex
 			wop.BlockIndex = op.BlockIndex
 
 		case sync.OpBlockRange:
 			wop.Type = SyncOp_BLOCK_RANGE
+			wop.FileIndex = op.FileIndex
 			wop.BlockIndex = op.BlockIndex
 			wop.BlockSpan = op.BlockSpan
 
