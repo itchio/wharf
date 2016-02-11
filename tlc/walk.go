@@ -63,6 +63,8 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 			if err != nil {
 				return err
 			}
+
+			Dest = filepath.ToSlash(Dest)
 			Symlinks = append(Symlinks, &Symlink{Path: Path, Mode: uint32(Mode), Dest: Dest})
 		}
 
