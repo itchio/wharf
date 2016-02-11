@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 
-	"gopkg.in/kothar/brotli-go.v0/dec"
-
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -31,33 +29,31 @@ type ApplyContext struct {
 
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
-	hrc := wire.NewReadContext(recipeReader)
-	hrc.ExpectMagic(recipeMagic)
+	rawRecipeWire := wire.NewReadContext(recipeReader)
+	err := rawRecipeWire.ExpectMagic(recipeMagic)
+	if err != nil {
+		return err
+	}
 
 	header := &RecipeHeader{}
-	err := hrc.ReadMessage(header)
+	err = rawRecipeWire.ReadMessage(header)
 	if err != nil {
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	var rc *wire.ReadContext
-
-	switch header.Compression.Algorithm {
-	case CompressionAlgorithm_BROTLI:
-		compressedReader := dec.NewBrotliReader(recipeReader)
-		rc = wire.NewReadContext(compressedReader)
-	case CompressionAlgorithm_UNCOMPRESSED:
-		rc = hrc
+	recipeWire, err := uncompressWire(rawRecipeWire, header.Compression)
+	if err != nil {
+		return err
 	}
 
 	targetContainer := &tlc.Container{}
-	err = rc.ReadMessage(targetContainer)
+	err = recipeWire.ReadMessage(targetContainer)
 	if err != nil {
 		return err
 	}
 
 	sourceContainer := &tlc.Container{}
-	err = rc.ReadMessage(sourceContainer)
+	err = recipeWire.ReadMessage(sourceContainer)
 	if err != nil {
 		return err
 	}
@@ -74,7 +70,7 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 		actx.Consumer.Debug(f.Path)
 
 		sh.Reset()
-		err := rc.ReadMessage(sh)
+		err := recipeWire.ReadMessage(sh)
 		if err != nil {
 			return err
 		}
@@ -86,7 +82,7 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 
 		ops := make(chan sync.Operation)
 		errc := make(chan error, 1)
-		go readOps(rc, ops, errc)
+		go readOps(recipeWire, ops, errc)
 
 		fullPath := outputPool.GetPath(sh.FileIndex)
 		writer, err := os.Create(fullPath)
