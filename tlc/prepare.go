@@ -29,6 +29,11 @@ func (c *Container) Prepare(basePath string) error {
 			return err
 		}
 
+		err = os.Truncate(fullPath, fileEntry.Size)
+		if err != nil {
+			return err
+		}
+
 		// if file already exists, opening with O_TRUNC doesn't change its permissions
 		err = os.Chmod(fullPath, os.FileMode(fileEntry.Mode))
 		if err != nil {
