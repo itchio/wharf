@@ -148,6 +148,15 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 		}
 	}
 
+	if dctx.Compression.Algorithm != CompressionAlgorithm_UNCOMPRESSED {
+		if c, ok := recipeWire.Writer().(io.Closer); ok {
+			c.Close()
+		}
+		if c, ok := sigWire.Writer().(io.Closer); ok {
+			c.Close()
+		}
+	}
+
 	return nil
 }
 
