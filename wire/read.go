@@ -25,7 +25,7 @@ func (r *ReadContext) ExpectMagic(magic int32) error {
 	var readMagic int32
 	err := binary.Read(r.reader, ENDIANNESS, &readMagic)
 	if err != nil {
-		return fmt.Errorf("while reading magic: %s", err.Error())
+		return err
 	}
 
 	if magic != readMagic {
@@ -39,19 +39,19 @@ func (r *ReadContext) ReadMessage(msg proto.Message) error {
 	var length uint32
 	err := binary.Read(r.reader, ENDIANNESS, &length)
 	if err != nil {
-		return fmt.Errorf("while reading length: %s", err.Error())
+		return err
 	}
 
 	buf := make([]byte, length)
 
 	_, err = io.ReadFull(r.reader, buf)
 	if err != nil {
-		return fmt.Errorf("while readfull: %s", err.Error())
+		return err
 	}
 
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		return fmt.Errorf("while decoding message: %s", err.Error())
+		return err
 	}
 
 	if DEBUG_WIRE {

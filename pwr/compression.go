@@ -8,7 +8,7 @@ import (
 	"gopkg.in/kothar/brotli-go.v0/enc"
 )
 
-func defaultCompressionSettings() *CompressionSettings {
+func CompressionDefault() *CompressionSettings {
 	// brotli Q1 is, overall, slightly slower than gzip, a lot faster than lzma,
 	// and compresses somewhere between the two. it's ideal for transferring.
 	return &CompressionSettings{
@@ -17,7 +17,11 @@ func defaultCompressionSettings() *CompressionSettings {
 	}
 }
 
-func compressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
+func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
+	if compression == nil {
+		compression = CompressionDefault()
+	}
+
 	switch compression.Algorithm {
 	case CompressionAlgorithm_UNCOMPRESSED:
 		return ctx, nil
@@ -31,7 +35,7 @@ func compressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 	}
 }
 
-func uncompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*wire.ReadContext, error) {
+func UncompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*wire.ReadContext, error) {
 	switch compression.Algorithm {
 	case CompressionAlgorithm_UNCOMPRESSED:
 		return ctx, nil

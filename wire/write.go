@@ -21,6 +21,14 @@ func (w *WriteContext) Writer() io.Writer {
 	return w.writer
 }
 
+func (w *WriteContext) Close() error {
+	if c, ok := w.writer.(io.Closer); ok {
+		return c.Close()
+	}
+
+	return nil
+}
+
 func (w *WriteContext) WriteMagic(magic int32) error {
 	return binary.Write(w.writer, ENDIANNESS, magic)
 }

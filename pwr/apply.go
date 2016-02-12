@@ -30,7 +30,7 @@ type ApplyContext struct {
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	rawRecipeWire := wire.NewReadContext(recipeReader)
-	err := rawRecipeWire.ExpectMagic(recipeMagic)
+	err := rawRecipeWire.ExpectMagic(RecipeMagic)
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	recipeWire, err := uncompressWire(rawRecipeWire, header.Compression)
+	recipeWire, err := UncompressWire(rawRecipeWire, header.Compression)
 	if err != nil {
 		return err
 	}

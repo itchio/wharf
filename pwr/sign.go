@@ -9,13 +9,26 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
+func ComputeSignature(container *tlc.Container, basePath string, consumer *StateConsumer) ([]sync.BlockHash, error) {
+	signature := make([]sync.BlockHash, 0)
+
+	err := ComputeSignatureToWriter(container, basePath, consumer, func(bl sync.BlockHash) error {
+		signature = append(signature, bl)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
+}
+
 // ComputeSignature returns a series of hash suitable to create a diff or to verify the integrity of a file
-func ComputeSignature(container *tlc.Container, basePath string, consumer *StateConsumer) (signature []sync.BlockHash, err error) {
+func ComputeSignatureToWriter(container *tlc.Container, basePath string, consumer *StateConsumer, sigWriter sync.SignatureWriter) error {
 	pool := container.NewFilePool(basePath)
 	defer pool.Close()
 
 	sctx := mksync()
-	signature = make([]sync.BlockHash, 0)
 
 	totalBytes := container.Size
 	fileOffset := int64(0)
@@ -24,32 +37,27 @@ func ComputeSignature(container *tlc.Container, basePath string, consumer *State
 		consumer.Progress(100.0 * float64(fileOffset+count) / float64(totalBytes))
 	}
 
-	sigWriter := func(bl sync.BlockHash) error {
-		signature = append(signature, bl)
-		return nil
-	}
-
 	for fileIndex, f := range container.Files {
 		fileOffset = f.Offset
 
 		reader, err := pool.GetReader(int64(fileIndex))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		cr := counter.NewReaderCallback(onRead, reader)
 		err = sctx.CreateSignature(int64(fileIndex), cr, sigWriter)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return signature, nil
+	return nil
 }
 
 func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash, error) {
 	rawSigWire := wire.NewReadContext(signatureReader)
-	err := rawSigWire.ExpectMagic(signatureMagic)
+	err := rawSigWire.ExpectMagic(SignatureMagic)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,7 +68,7 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 		return nil, nil, err
 	}
 
-	sigWire, err := uncompressWire(rawSigWire, header.Compression)
+	sigWire, err := UncompressWire(rawSigWire, header.Compression)
 	if err != nil {
 		return nil, nil, err
 	}
