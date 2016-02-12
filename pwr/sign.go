@@ -38,6 +38,7 @@ func ComputeSignatureToWriter(container *tlc.Container, basePath string, consume
 	}
 
 	for fileIndex, f := range container.Files {
+		consumer.ProgressLabel(f.Path)
 		fileOffset = f.Offset
 
 		reader, err := pool.GetReader(int64(fileIndex))

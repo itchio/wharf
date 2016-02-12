@@ -108,6 +108,7 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 	defer filePool.Close()
 
 	for fileIndex, f := range dctx.SourceContainer.Files {
+		dctx.Consumer.ProgressLabel(f.Path)
 		dctx.Consumer.Debug(f.Path)
 		fileOffset = f.Offset
 

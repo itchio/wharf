@@ -79,6 +79,7 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	}
 
 	for fileIndex, f := range sourceContainer.Files {
+		actx.Consumer.ProgressLabel(f.Path)
 		actx.Consumer.Debug(f.Path)
 		fileOffset = f.Offset
 
@@ -118,6 +119,10 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 		err = writer.Close()
 		if err != nil {
 			return err
+		}
+
+		if writeCounter.Count() != f.Size {
+			return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, writeCounter.Count())
 		}
 	}
 

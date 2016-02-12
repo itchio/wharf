@@ -5,16 +5,25 @@ import "fmt"
 // ProgressCallback is called periodically to announce the degree of completeness of an operation
 type ProgressCallback func(percent float64)
 
+type ProgressLabelCallback func(label string)
+
 type MessageCallback func(level, msg string)
 
 type StateConsumer struct {
-	OnProgress ProgressCallback
-	OnMessage  MessageCallback
+	OnProgress      ProgressCallback
+	OnProgressLabel ProgressLabelCallback
+	OnMessage       MessageCallback
 }
 
 func (sc *StateConsumer) Progress(percent float64) {
 	if sc.OnProgress != nil {
 		sc.OnProgress(percent)
+	}
+}
+
+func (sc *StateConsumer) ProgressLabel(label string) {
+	if sc.OnProgressLabel != nil {
+		sc.OnProgressLabel(label)
 	}
 }
 
