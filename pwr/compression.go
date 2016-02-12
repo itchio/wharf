@@ -17,6 +17,17 @@ func CompressionDefault() *CompressionSettings {
 	}
 }
 
+func (cs *CompressionSettings) ToString() string {
+	switch cs.Algorithm {
+	case CompressionAlgorithm_UNCOMPRESSED:
+		return "none"
+	case CompressionAlgorithm_BROTLI:
+		return fmt.Sprintf("brotli-q%d", cs.Quality)
+	default:
+		return "unknown"
+	}
+}
+
 func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
 	if compression == nil {
 		compression = CompressionDefault()

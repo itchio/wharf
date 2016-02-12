@@ -183,16 +183,34 @@ func makeOpsWriter(wc *wire.WriteContext, dctx *DiffContext) sync.OperationWrite
 			wop.Type = SyncOp_BLOCK
 			wop.FileIndex = op.FileIndex
 			wop.BlockIndex = op.BlockIndex
-			// FIXME: inaccurate because last blocks are shorter
-			dctx.ReusedBytes += int64(BlockSize)
+
+			opSize := int64(BlockSize)
+			fileSize := dctx.TargetContainer.Files[op.FileIndex].Size
+
+			offset := op.BlockIndex * int64(BlockSize)
+			if offset >= fileSize/int64(BlockSize) {
+				opSize = fileSize % int64(BlockSize)
+			}
+			dctx.ReusedBytes += opSize
 
 		case sync.OpBlockRange:
 			wop.Type = SyncOp_BLOCK_RANGE
 			wop.FileIndex = op.FileIndex
 			wop.BlockIndex = op.BlockIndex
 			wop.BlockSpan = op.BlockSpan
-			// FIXME: inaccurate because last blocks are shorter
-			dctx.ReusedBytes += int64(BlockSize) * op.BlockSpan
+
+			fileSize := dctx.TargetContainer.Files[op.FileIndex].Size
+
+			lastBlockSize := int64(BlockSize)
+			offset := (op.BlockIndex + op.BlockSpan) * int64(BlockSize)
+			if offset >= fileSize/int64(BlockSize) {
+				lastBlockSize = fileSize % int64(BlockSize)
+				if lastBlockSize == 0 {
+					lastBlockSize = int64(BlockSize)
+				}
+			}
+
+			dctx.ReusedBytes += int64(BlockSize)*(op.BlockSpan-1) + lastBlockSize
 
 		case sync.OpData:
 			wop.Type = SyncOp_DATA

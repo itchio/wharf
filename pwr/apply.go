@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -25,6 +26,9 @@ type ApplyContext struct {
 
 	TargetPath string
 	OutputPath string
+
+	TargetContainer *tlc.Container
+	SourceContainer *tlc.Container
 }
 
 // ApplyRecipe reads a recipe, parses it, and generates the new file tree
@@ -51,12 +55,14 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	if err != nil {
 		return err
 	}
+	actx.TargetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = recipeWire.ReadMessage(sourceContainer)
 	if err != nil {
 		return err
 	}
+	actx.SourceContainer = sourceContainer
 
 	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
@@ -66,8 +72,15 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 	sctx := mksync()
 	sh := &SyncHeader{}
 
+	fileOffset := int64(0)
+	sourceBytes := sourceContainer.Size
+	onSourceWrite := func(count int64) {
+		actx.Consumer.Progress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
+	}
+
 	for fileIndex, f := range sourceContainer.Files {
 		actx.Consumer.Debug(f.Path)
+		fileOffset = f.Offset
 
 		sh.Reset()
 		err := recipeWire.ReadMessage(sh)
@@ -90,7 +103,9 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 			return err
 		}
 
-		err = sctx.ApplyRecipe(writer, targetPool, ops)
+		writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
+
+		err = sctx.ApplyRecipe(writeCounter, targetPool, ops)
 		if err != nil {
 			return err
 		}
@@ -100,7 +115,10 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 			return fmt.Errorf("while reading recipe: %s", err.Error())
 		}
 
-		writer.Close()
+		err = writer.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
