@@ -95,7 +95,8 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 	sigWriter := makeSigWriter(sigWire)
 	opsWriter := makeOpsWriter(recipeWire, dctx)
 
-	syncContext := mksync()
+	diffSyncContext := mksync()
+	signSyncContext := mksync()
 	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
 
 	// re-used messages
@@ -127,22 +128,36 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 		//             / differ
 		// source file +
 		//             \ signer
-		pipeReader, pipeWriter := io.Pipe()
-		tee := io.TeeReader(sourceReader, pipeWriter)
+		diffReader, diffWriter := io.Pipe()
+		signReader, signWriter := io.Pipe()
 
-		signErrors := make(chan error)
-		go signFile(syncContext, fileIndex, pipeReader, sigWriter, signErrors)
+		done := make(chan bool)
+		errs := make(chan error)
 
-		sourceReaderCounter := counter.NewReaderCallback(onSourceRead, tee)
-		err = syncContext.ComputeDiff(sourceReaderCounter, blockLibrary, opsWriter)
-		if err != nil {
-			return err
-		}
+		go diffFile(diffSyncContext, blockLibrary, diffReader, opsWriter, errs, done)
+		go signFile(signSyncContext, fileIndex, signReader, sigWriter, errs, done)
 
-		pipeWriter.Close()
-		err = <-signErrors
-		if err != nil {
-			return err
+		go func() {
+			defer diffWriter.Close()
+			defer signWriter.Close()
+
+			mw := io.MultiWriter(diffWriter, signWriter)
+
+			sourceReadCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
+			_, err := io.Copy(mw, sourceReadCounter)
+			if err != nil {
+				errs <- err
+			}
+		}()
+
+		// wait until all are done
+		// or an error occurs
+		for c := 0; c < 2; c++ {
+			select {
+			case err := <-errs:
+				return err
+			case <-done:
+			}
 		}
 
 		err = recipeWire.WriteMessage(syncDelimiter)
@@ -157,8 +172,22 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 	return nil
 }
 
-func signFile(sctx *sync.SyncContext, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errc chan error) {
-	errc <- sctx.CreateSignature(int64(fileIndex), reader, writeHash)
+func diffFile(sctx *sync.SyncContext, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, errs chan error, done chan bool) {
+	err := sctx.ComputeDiff(reader, blockLibrary, opsWriter)
+	if err != nil {
+		errs <- err
+	}
+
+	done <- true
+}
+
+func signFile(sctx *sync.SyncContext, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errs chan error, done chan bool) {
+	err := sctx.CreateSignature(int64(fileIndex), reader, writeHash)
+	if err != nil {
+		errs <- err
+	}
+
+	done <- true
 }
 
 func makeSigWriter(wc *wire.WriteContext) sync.SignatureWriter {

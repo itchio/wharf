@@ -32,6 +32,7 @@ func (ctx *SyncContext) CreateSignature(fileIndex int64, fileReader io.Reader, w
 
 	for s.Scan() {
 		block := s.Bytes()
+
 		weakHash, _, _ := βhash(block)
 		strongHash := ctx.uniqueHash(block)
 
