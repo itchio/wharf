@@ -3,6 +3,6 @@ package pwr
 import "errors"
 
 var (
-	ErrUnknownRecipeVersion = errors.New("Unknown recipe version")
+	ErrUnknownPatchVersion = errors.New("Unknown patch version")
 	ErrUnknownCompression   = errors.New("Unknown compression scheme")
 )

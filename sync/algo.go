@@ -23,7 +23,7 @@ func NewContext(BlockSize int) *SyncContext {
 }
 
 // Apply the difference to the target.
-func (ctx *SyncContext) ApplyRecipe(output io.Writer, pool FilePool, ops chan Operation) error {
+func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Operation) error {
 	var err error
 	var n int
 	var block []byte

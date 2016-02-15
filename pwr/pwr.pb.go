@@ -9,7 +9,7 @@ It is generated from these files:
 	pwr/pwr.proto
 
 It has these top-level messages:
-	RecipeHeader
+	PatchHeader
 	SyncHeader
 	SyncOp
 	SignatureHeader
@@ -79,16 +79,16 @@ func (x SyncOp_Type) String() string {
 }
 func (SyncOp_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{2, 0} }
 
-type RecipeHeader struct {
+type PatchHeader struct {
 	Compression *CompressionSettings `protobuf:"bytes,1,opt,name=compression" json:"compression,omitempty"`
 }
 
-func (m *RecipeHeader) Reset()                    { *m = RecipeHeader{} }
-func (m *RecipeHeader) String() string            { return proto.CompactTextString(m) }
-func (*RecipeHeader) ProtoMessage()               {}
-func (*RecipeHeader) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *PatchHeader) Reset()                    { *m = PatchHeader{} }
+func (m *PatchHeader) String() string            { return proto.CompactTextString(m) }
+func (*PatchHeader) ProtoMessage()               {}
+func (*PatchHeader) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
-func (m *RecipeHeader) GetCompression() *CompressionSettings {
+func (m *PatchHeader) GetCompression() *CompressionSettings {
 	if m != nil {
 		return m.Compression
 	}
@@ -154,7 +154,7 @@ func (*CompressionSettings) ProtoMessage()               {}
 func (*CompressionSettings) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
 
 func init() {
-	proto.RegisterType((*RecipeHeader)(nil), "io.itch.wharf.pwr.RecipeHeader")
+	proto.RegisterType((*PatchHeader)(nil), "io.itch.wharf.pwr.PatchHeader")
 	proto.RegisterType((*SyncHeader)(nil), "io.itch.wharf.pwr.SyncHeader")
 	proto.RegisterType((*SyncOp)(nil), "io.itch.wharf.pwr.SyncOp")
 	proto.RegisterType((*SignatureHeader)(nil), "io.itch.wharf.pwr.SignatureHeader")

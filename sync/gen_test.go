@@ -163,7 +163,7 @@ func Test_GenData(t *testing.T) {
 		filePool := &SinglePool{reader: targetBuffer}
 
 		targetBuffer.Seek(0, 0)
-		err = rs.ApplyRecipe(result, filePool, opsOut)
+		err = rs.ApplyPatch(result, filePool, opsOut)
 		if err != nil {
 			t.Errorf("Failed to apply delta: %s", err)
 		}

@@ -3,9 +3,9 @@ syntax = "proto3";
 package io.itch.wharf.pwr;
 option go_package = "pwr";
 
-// Recipe file format
+// Patch file format
 
-message RecipeHeader {
+message PatchHeader {
   CompressionSettings compression = 1;
 }
 

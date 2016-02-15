@@ -13,12 +13,12 @@ import (
 )
 
 var (
-	// ErrMalformedRecipe is returned when a recipe could not be parsed
-	ErrMalformedRecipe = errors.New("malformed recipe")
+	// ErrMalformedPatch is returned when a patch could not be parsed
+	ErrMalformedPatch = errors.New("malformed patch")
 
-	// ErrIncompatibleRecipe is returned when a recipe but parsing
+	// ErrIncompatiblePatch is returned when a patch but parsing
 	// and applying it is unsupported (e.g. it's a newer version of the format)
-	ErrIncompatibleRecipe = errors.New("unsupported recipe")
+	ErrIncompatiblePatch = errors.New("unsupported patch")
 )
 
 type ApplyContext struct {
@@ -31,34 +31,34 @@ type ApplyContext struct {
 	SourceContainer *tlc.Container
 }
 
-// ApplyRecipe reads a recipe, parses it, and generates the new file tree
-func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
-	rawRecipeWire := wire.NewReadContext(recipeReader)
-	err := rawRecipeWire.ExpectMagic(RecipeMagic)
+// ApplyPatch reads a patch, parses it, and generates the new file tree
+func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
+	rawPatchWire := wire.NewReadContext(patchReader)
+	err := rawPatchWire.ExpectMagic(PatchMagic)
 	if err != nil {
 		return err
 	}
 
-	header := &RecipeHeader{}
-	err = rawRecipeWire.ReadMessage(header)
+	header := &PatchHeader{}
+	err = rawPatchWire.ReadMessage(header)
 	if err != nil {
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	recipeWire, err := UncompressWire(rawRecipeWire, header.Compression)
+	patchWire, err := UncompressWire(rawPatchWire, header.Compression)
 	if err != nil {
 		return err
 	}
 
 	targetContainer := &tlc.Container{}
-	err = recipeWire.ReadMessage(targetContainer)
+	err = patchWire.ReadMessage(targetContainer)
 	if err != nil {
 		return err
 	}
 	actx.TargetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
-	err = recipeWire.ReadMessage(sourceContainer)
+	err = patchWire.ReadMessage(sourceContainer)
 	if err != nil {
 		return err
 	}
@@ -84,19 +84,19 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 		fileOffset = f.Offset
 
 		sh.Reset()
-		err := recipeWire.ReadMessage(sh)
+		err := patchWire.ReadMessage(sh)
 		if err != nil {
 			return err
 		}
 
 		if sh.FileIndex != int64(fileIndex) {
 			fmt.Printf("expected fileIndex = %d, got fileIndex %d\n", fileIndex, sh.FileIndex)
-			return ErrMalformedRecipe
+			return ErrMalformedPatch
 		}
 
 		ops := make(chan sync.Operation)
 		errc := make(chan error, 1)
-		go readOps(recipeWire, ops, errc)
+		go readOps(patchWire, ops, errc)
 
 		fullPath := outputPool.GetPath(sh.FileIndex)
 		writer, err := os.Create(fullPath)
@@ -106,14 +106,14 @@ func (actx *ApplyContext) ApplyRecipe(recipeReader io.Reader) error {
 
 		writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
 
-		err = sctx.ApplyRecipe(writeCounter, targetPool, ops)
+		err = sctx.ApplyPatch(writeCounter, targetPool, ops)
 		if err != nil {
 			return err
 		}
 
 		err = <-errc
 		if err != nil {
-			return fmt.Errorf("while reading recipe: %s", err.Error())
+			return fmt.Errorf("while reading patch: %s", err.Error())
 		}
 
 		err = writer.Close()
@@ -184,7 +184,7 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 				readingOps = false
 			default:
 				fmt.Printf("unrecognized rop type %d\n", rop.Type)
-				errc <- ErrMalformedRecipe
+				errc <- ErrMalformedPatch
 				return
 			}
 		}

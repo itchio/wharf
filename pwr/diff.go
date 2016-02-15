@@ -24,8 +24,8 @@ type DiffContext struct {
 	FreshBytes  int64
 }
 
-// WriteRecipe outputs a pwr recipe to recipeWriter
-func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.Writer) error {
+// WritePatch outputs a pwr patch to patchWriter
+func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Writer) error {
 	if dctx.Compression == nil {
 		dctx.Compression = CompressionDefault()
 	}
@@ -54,33 +54,33 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 		return err
 	}
 
-	// recipe header
-	rawRecipeWire := wire.NewWriteContext(recipeWriter)
-	err = rawRecipeWire.WriteMagic(RecipeMagic)
+	// patch header
+	rawPatchWire := wire.NewWriteContext(patchWriter)
+	err = rawPatchWire.WriteMagic(PatchMagic)
 	if err != nil {
 		return err
 	}
 
-	header := &RecipeHeader{
+	header := &PatchHeader{
 		Compression: dctx.Compression,
 	}
 
-	err = rawRecipeWire.WriteMessage(header)
+	err = rawPatchWire.WriteMessage(header)
 	if err != nil {
 		return err
 	}
 
-	recipeWire, err := CompressWire(rawRecipeWire, dctx.Compression)
+	patchWire, err := CompressWire(rawPatchWire, dctx.Compression)
 	if err != nil {
 		return err
 	}
 
-	err = recipeWire.WriteMessage(dctx.TargetContainer)
+	err = patchWire.WriteMessage(dctx.TargetContainer)
 	if err != nil {
 		return err
 	}
 
-	err = recipeWire.WriteMessage(dctx.SourceContainer)
+	err = patchWire.WriteMessage(dctx.SourceContainer)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 	}
 
 	sigWriter := makeSigWriter(sigWire)
-	opsWriter := makeOpsWriter(recipeWire, dctx)
+	opsWriter := makeOpsWriter(patchWire, dctx)
 
 	diffSyncContext := mksync()
 	signSyncContext := mksync()
@@ -115,7 +115,7 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 
 		syncHeader.Reset()
 		syncHeader.FileIndex = int64(fileIndex)
-		err = recipeWire.WriteMessage(syncHeader)
+		err = patchWire.WriteMessage(syncHeader)
 		if err != nil {
 			return err
 		}
@@ -160,13 +160,13 @@ func (dctx *DiffContext) WriteRecipe(recipeWriter io.Writer, signatureWriter io.
 			}
 		}
 
-		err = recipeWire.WriteMessage(syncDelimiter)
+		err = patchWire.WriteMessage(syncDelimiter)
 		if err != nil {
 			return err
 		}
 	}
 
-	recipeWire.Close()
+	patchWire.Close()
 	sigWire.Close()
 
 	return nil

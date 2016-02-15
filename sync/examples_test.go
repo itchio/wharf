@@ -26,11 +26,11 @@ package sync_test
 //
 // 	go func() {
 // 		defer close(opsOut)
-// 		rs.InventRecipe(targetReader, sig, writeOperation)
+// 		rs.InventPatch(targetReader, sig, writeOperation)
 // 	}()
 //
 // 	srcWriter, _ := os.Open("content-v2-reconstructed.bin")
 // 	srcReader.Seek(0, os.SEEK_SET)
 //
-// 	rs.ApplyRecipe(srcWriter, srcReader, opsOut)
+// 	rs.ApplyPatch(srcWriter, srcReader, opsOut)
 // }

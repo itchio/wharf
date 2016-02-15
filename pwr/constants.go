@@ -9,7 +9,7 @@ import (
 var endianness = binary.LittleEndian
 
 const (
-	RecipeMagic = int32(iota + 0xFEF5F00)
+	PatchMagic = int32(iota + 0xFEF5F00)
 	SignatureMagic
 )
 
