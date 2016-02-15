@@ -21,7 +21,7 @@ func (c *Conn) SendRequest(name string, request proto.Message, reply proto.Messa
 
 	status, replyBytes, err := c.Conn.SendRequest(name, wantReply, requestBytes)
 	if err != nil {
-		err = fmt.Errorf("in sendrequest(%s): %s", name, err.Error())
+		err = fmt.Errorf("in SendRequest(%s): %s", name, err.Error())
 		return err
 	}
 

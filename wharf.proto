@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package io.itch.wharf;
+option go_package = "wharf";
+
+// wharf protocol over SSH
+
+message AuthenticationRequest {
+  // muffin
+}
+
+message AuthenticationResponse {
+  string key = 1;
+  int64 expires_at = 2;
+}
