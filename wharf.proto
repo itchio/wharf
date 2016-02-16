@@ -12,4 +12,5 @@ message AuthenticationRequest {
 message AuthenticationResponse {
   string key = 1;
   int64 expires_at = 2;
+  string itchio_base_url = 3;
 }
