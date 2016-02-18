@@ -28,25 +28,37 @@ func (sc *StateConsumer) ProgressLabel(label string) {
 }
 
 func (sc *StateConsumer) Debug(msg string) {
-	sc.OnMessage("debug", msg)
+	if sc.OnMessage != nil {
+		sc.OnMessage("debug", msg)
+	}
 }
 
 func (sc *StateConsumer) Debugf(msg string, args ...interface{}) {
-	sc.OnMessage("debug", fmt.Sprintf(msg, args...))
+	if sc.OnMessage != nil {
+		sc.OnMessage("debug", fmt.Sprintf(msg, args...))
+	}
 }
 
 func (sc *StateConsumer) Info(msg string) {
-	sc.OnMessage("info", msg)
+	if sc.OnMessage != nil {
+		sc.OnMessage("info", msg)
+	}
 }
 
 func (sc *StateConsumer) Infof(msg string, args ...interface{}) {
-	sc.OnMessage("info", fmt.Sprintf(msg, args...))
+	if sc.OnMessage != nil {
+		sc.OnMessage("info", fmt.Sprintf(msg, args...))
+	}
 }
 
 func (sc *StateConsumer) Warn(msg string) {
-	sc.OnMessage("warning", msg)
+	if sc.OnMessage != nil {
+		sc.OnMessage("warning", msg)
+	}
 }
 
 func (sc *StateConsumer) Warnf(msg string, args ...interface{}) {
-	sc.OnMessage("warning", fmt.Sprintf(msg, args...))
+	if sc.OnMessage != nil {
+		sc.OnMessage("warning", fmt.Sprintf(msg, args...))
+	}
 }
