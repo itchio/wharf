@@ -210,9 +210,6 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 
 				shortSize = int32(n)
 			}
-			if n == 0 {
-				break
-			}
 		}
 
 		// Set the hash sum window head. Must either be a block size
