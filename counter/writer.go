@@ -25,16 +25,20 @@ func (w *CounterWriter) Count() int64 {
 }
 
 func (w *CounterWriter) Write(buffer []byte) (n int, err error) {
-	if w.writer == nil {
-		n = len(buffer)
-	} else {
-		n, err = w.writer.Write(buffer)
-	}
+	oldCount := w.count
 
+	n = len(buffer)
 	w.count += int64(n)
+
 	if w.onWrite != nil {
 		w.onWrite(w.count)
 	}
+
+	if w.writer != nil {
+		n, err = w.writer.Write(buffer)
+		w.count = oldCount + int64(n)
+	}
+
 	return
 }
 
