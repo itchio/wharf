@@ -89,7 +89,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	fileOffset := int64(0)
 
 	onSourceRead := func(count int64) {
-		dctx.Consumer.Progress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
+		dctx.Consumer.Progress(float64(fileOffset+count) / float64(sourceBytes))
 	}
 
 	sigWriter := makeSigWriter(sigWire)

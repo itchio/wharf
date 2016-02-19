@@ -34,7 +34,7 @@ func ComputeSignatureToWriter(container *tlc.Container, basePath string, consume
 	fileOffset := int64(0)
 
 	onRead := func(count int64) {
-		consumer.Progress(100.0 * float64(fileOffset+count) / float64(totalBytes))
+		consumer.Progress(float64(fileOffset+count) / float64(totalBytes))
 	}
 
 	for fileIndex, f := range container.Files {

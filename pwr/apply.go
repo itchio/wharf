@@ -75,7 +75,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	fileOffset := int64(0)
 	sourceBytes := sourceContainer.Size
 	onSourceWrite := func(count int64) {
-		actx.Consumer.Progress(100.0 * float64(fileOffset+count) / float64(sourceBytes))
+		actx.Consumer.Progress(float64(fileOffset+count) / float64(sourceBytes))
 	}
 
 	for fileIndex, f := range sourceContainer.Files {
