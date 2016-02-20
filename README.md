@@ -116,3 +116,8 @@ protobuf v3 is required, as we use the 'proto3' syntax.
 ## License
 
 Licensed under MIT License, see `LICENSE` for details.
+
+Contains modified code from the following projects:
+
+  * [kardianos/rsync](https://bitbucket.org/kardianos/rsync/) (BSD) - golang implementation of the rsync algorithm
+  * [rapidloop/rtop](https://github.com/rapidloop/rtop) (MIT) - SSH helpers for encrypted private keys
