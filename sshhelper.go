@@ -49,10 +49,12 @@ var (
 	ErrPasswordInputAborted error = errors.New("Password input aborted")
 )
 
-func getpass(prompt string) (pass string, err error) {
-	tstate, err := terminal.GetState(0)
+func getpass(prompt string) (string, error) {
+	var err error
+
+	tstate, err := terminal.GetState(int(syscall.Stdin))
 	if err != nil {
-		return
+		return "", fmt.Errorf("in terminal.GetState(): %s", err.Error())
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -63,11 +65,14 @@ func getpass(prompt string) (pass string, err error) {
 			quit = true
 			break
 		}
-		terminal.Restore(0, tstate)
+		err := terminal.Restore(int(syscall.Stdin), tstate)
+		if err != nil {
+			err = fmt.Errorf("in terminal.Restore(): %s", err.Error())
+		}
+
 		if quit {
 			fmt.Println()
 			err = ErrPasswordInputAborted
-			return
 		}
 	}()
 	defer func() {
@@ -79,13 +84,17 @@ func getpass(prompt string) (pass string, err error) {
 	f.Write([]byte(prompt))
 	f.Flush()
 
-	passbytes, err := terminal.ReadPassword(0)
-	pass = string(passbytes)
+	passbytes, err := terminal.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		err = fmt.Errorf("in terminal.ReadPassword(): %s", err.Error())
+	}
+
+	pass := string(passbytes)
 
 	f.Write([]byte("\n"))
 	f.Flush()
 
-	return
+	return pass, err
 }
 
 // ref golang.org/x/crypto/ssh/keys.go#ParseRawPrivateKey.
