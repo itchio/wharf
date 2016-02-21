@@ -134,14 +134,12 @@ func Test_GenData(t *testing.T) {
 
 		opsOut := make(chan sync.Operation)
 		go func() {
-			var blockCt, blockRangeCt, dataCt, bytes int
+			var blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
 			err := rsDelta.ComputeDiff(sourceBuffer, lib, func(op sync.Operation) error {
 				switch op.Type {
 				case sync.OpBlockRange:
 					blockRangeCt++
-				case sync.OpBlock:
-					blockCt++
 				case sync.OpData:
 					// Copy data buffer so it may be reused in internal buffer.
 					b := make([]byte, len(op.Data))
@@ -152,8 +150,8 @@ func Test_GenData(t *testing.T) {
 				}
 				opsOut <- op
 				return nil
-			})
-			t.Logf("Range Ops:%5d, Block Ops:%5d, Data Ops: %5d, Data Len: %5dKiB, For %s.", blockRangeCt, blockCt, dataCt, bytes/1024, p.Description)
+			}, -1)
+			t.Logf("Range Ops:%5d, Data Ops: %5d, Data Len: %5dKiB, For %s.", blockRangeCt, dataCt, bytes/1024, p.Description)
 			if err != nil {
 				t.Errorf("Failed to create delta: %s", err)
 			}
