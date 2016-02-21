@@ -9,6 +9,7 @@ package sync
 
 import (
 	"crypto/md5"
+	"fmt"
 	"io"
 	"os"
 )
@@ -24,72 +25,33 @@ func NewContext(BlockSize int) *SyncContext {
 
 // Apply the difference to the target.
 func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Operation) error {
-	var err error
-	var n int
-	var block []byte
-
-	minBufferSize := ctx.blockSize
-	if len(ctx.buffer) < minBufferSize {
-		ctx.buffer = make([]byte, minBufferSize)
-	}
-	buffer := ctx.buffer
-
-	writeBlock := func(op Operation) error {
-		target, err := pool.GetReader(op.FileIndex)
-		if err != nil {
-			return err
-		}
-
-		target.Seek(int64(ctx.blockSize*int(op.BlockIndex)), os.SEEK_SET)
-		n, err = io.ReadAtLeast(target, buffer, ctx.blockSize)
-		if err != nil {
-			// UnexpectedEOF is actually expected, since we want to copy short
-			// blocks at the end of files. Other errors aren't expected.
-			if err != io.ErrUnexpectedEOF {
-				return err
-			}
-		}
-		block = buffer[:n]
-		_, err = output.Write(block)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+	blockSize := int64(ctx.blockSize)
 
 	for op := range ops {
 		switch op.Type {
 		case OpBlockRange:
-			for i := int64(0); i < op.BlockSpan; i++ {
-				BlockIndex := op.BlockIndex + i
-
-				err = writeBlock(Operation{
-					Type:       OpBlock,
-					FileIndex:  op.FileIndex,
-					BlockIndex: BlockIndex,
-				})
-				if err != nil {
-					if err == io.EOF {
-						break
-					}
-					return err
-				}
-			}
-		case OpBlock:
-			err = writeBlock(op)
+			target, err := pool.GetReader(op.FileIndex)
 			if err != nil {
-				if err == io.EOF {
-					break
-				}
 				return err
 			}
+
+			target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
+			_, err = io.CopyN(output, target, blockSize*op.BlockSpan)
+			if err != nil {
+				// EOF is actually expected, since we want to copy short
+				// blocks at the end of files. Other errors aren't expected.
+				if err != io.EOF {
+					return fmt.Errorf("While copying %d bytes: %s", blockSize*op.BlockSpan, err.Error())
+				}
+			}
 		case OpData:
-			_, err = output.Write(op.Data)
+			_, err := output.Write(op.Data)
 			if err != nil {
 				return err
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -97,7 +59,7 @@ func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Ope
 // Any data operation from the OperationWriter must have the data copied out
 // within the span of the function; the data buffer underlying the operation
 // data is reused.
-func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops OperationWriter) (err error) {
+func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops OperationWriter, preferredFileIndex int64) (err error) {
 	minBufferSize := (ctx.blockSize * 2) + MaxDataOp
 	if len(ctx.buffer) < minBufferSize {
 		ctx.buffer = make([]byte, minBufferSize)
@@ -128,35 +90,23 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		prevOp = nil
 	}()
 
-	// Combine OpBlock into OpBlockRange. To achieve this, we store the previous
+	// Combine OpBlockRanges together. To achieve this, we store the previous
 	// non-data operation and determine if it can be extended.
 	enqueue := func(op Operation) (err error) {
 		switch op.Type {
-		case OpBlock:
+		case OpBlockRange:
 			if prevOp != nil {
-				if prevOp.FileIndex == op.FileIndex {
-					switch prevOp.Type {
-					case OpBlock:
-						if prevOp.BlockIndex+1 == op.BlockIndex {
-							prevOp = &Operation{
-								Type:       OpBlockRange,
-								FileIndex:  prevOp.FileIndex,
-								BlockIndex: prevOp.BlockIndex,
-								BlockSpan:  2,
-							}
-							return
-						}
-					case OpBlockRange:
-						if prevOp.BlockIndex+prevOp.BlockSpan == op.BlockIndex {
-							prevOp.BlockSpan++
-							return
-						}
-					}
+				if prevOp.Type == OpBlockRange && prevOp.FileIndex == op.FileIndex && prevOp.BlockIndex+prevOp.BlockSpan == op.BlockIndex {
+					// combine [prevOp][op] into [ prevOp ]
+					prevOp.BlockSpan += op.BlockSpan
+					return
 				}
+
 				err = ops(*prevOp)
 				if err != nil {
 					return
 				}
+				// prevOp has been completely sent off, can no longer be combined with anything
 				prevOp = nil
 			}
 			prevOp = &op
@@ -231,7 +181,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 
 		// Determine if there is a hash match.
 		if hh, ok := library.hashLookup[β]; ok {
-			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize)
+			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize, preferredFileIndex)
 		}
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer
@@ -245,7 +195,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 		}
 
 		if blockHash != nil {
-			err = enqueue(Operation{Type: OpBlock, FileIndex: blockHash.FileIndex, BlockIndex: blockHash.BlockIndex})
+			err = enqueue(Operation{Type: OpBlockRange, FileIndex: blockHash.FileIndex, BlockIndex: blockHash.BlockIndex, BlockSpan: 1})
 			if err != nil {
 				return err
 			}

@@ -26,9 +26,12 @@ type ApplyContext struct {
 
 	TargetPath string
 	OutputPath string
+	InPlace    bool
 
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
+
+	TouchedFiles int
 }
 
 // ApplyPatch reads a patch, parses it, and generates the new file tree
@@ -96,17 +99,10 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 		ops := make(chan sync.Operation)
 		errc := make(chan error, 1)
+
 		go readOps(patchWire, ops, errc)
 
-		fullPath := outputPool.GetPath(sh.FileIndex)
-		writer, err := os.Create(fullPath)
-		if err != nil {
-			return err
-		}
-
-		writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
-
-		err = sctx.ApplyPatch(writeCounter, targetPool, ops)
+		bytesWritten, err := lazilyPatchFile(sctx, targetPool, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
 		if err != nil {
 			return err
 		}
@@ -116,17 +112,100 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 			return fmt.Errorf("while reading patch: %s", err.Error())
 		}
 
-		err = writer.Close()
-		if err != nil {
-			return err
-		}
-
-		if writeCounter.Count() != f.Size {
-			return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, writeCounter.Count())
+		if bytesWritten >= 0 {
+			actx.TouchedFiles++
+			if bytesWritten != f.Size {
+				return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
+			}
 		}
 	}
 
 	return nil
+}
+
+func lazilyPatchFile(sctx *sync.SyncContext, targetPool *tlc.ContainerFilePool, outputPool *tlc.ContainerFilePool,
+	fileIndex int64, onSourceWrite counter.CountCallback, ops chan sync.Operation, inplace bool) (written int64, err error) {
+
+	var realops chan sync.Operation
+
+	errs := make(chan error)
+	first := true
+	noop := false
+
+	for op := range ops {
+		if first {
+			first = false
+
+			if op.Type == sync.OpBlockRange && op.BlockIndex == 0 {
+				// fmt.Printf("blockspan %d\n", op.BlockSpan)
+				outputSize := outputPool.GetSize(fileIndex)
+				numOutputBlocks := numBlocks(outputSize)
+
+				if inplace &&
+					op.BlockSpan == numOutputBlocks &&
+					outputSize == targetPool.GetSize(op.FileIndex) &&
+					outputPool.GetRelativePath(fileIndex) == targetPool.GetRelativePath(op.FileIndex) {
+					// fmt.Printf("no-op!\n")
+					noop = true
+				} else {
+					// fmt.Printf("%d vs %d, %d vs %d, %s vs %s (outputsize = %d)\n",
+					// 	op.BlockSpan, numOutputBlocks,
+					// 	outputSize, targetPool.GetSize(op.FileIndex),
+					// 	outputPool.GetRelativePath(fileIndex), targetPool.GetRelativePath(op.FileIndex),
+					// 	outputSize)
+				}
+			}
+
+			if noop {
+				go func() {
+					written = -1
+					errs <- nil
+				}()
+			} else {
+				realops = make(chan sync.Operation)
+
+				outputPath := outputPool.GetPath(fileIndex)
+				writer, err := os.Create(outputPath)
+				if err != nil {
+					return 0, err
+				}
+
+				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
+
+				go func() {
+					err := sctx.ApplyPatch(writeCounter, targetPool, realops)
+					if err != nil {
+						errs <- err
+						return
+					}
+
+					err = writer.Close()
+					if err != nil {
+						errs <- err
+						return
+					}
+
+					written = writeCounter.Count()
+					errs <- nil
+				}()
+			}
+		}
+
+		if !noop {
+			realops <- op
+		}
+	}
+
+	if !noop {
+		close(realops)
+	}
+
+	err = <-errs
+	if err != nil {
+		return 0, err
+	}
+
+	return
 }
 
 func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
@@ -154,14 +233,6 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 		var op = sync.Operation{}
 
 		switch rop.Type {
-		case SyncOp_BLOCK:
-			sendOp(sync.Operation{
-				Type:       sync.OpBlock,
-				FileIndex:  rop.FileIndex,
-				BlockIndex: rop.BlockIndex,
-			})
-			opsBytes[op.Type] += int64(BlockSize)
-
 		case SyncOp_BLOCK_RANGE:
 			sendOp(sync.Operation{
 				Type:       sync.OpBlockRange,
@@ -189,12 +260,6 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 			}
 		}
 	}
-
-	// fmt.Printf("totalOps: %d\n", totalOps)
-	// for i, label := range []string{"block", "block-range", "data"} {
-	// 	fmt.Printf("%10s = %s in %d ops\n", label, humanize.Bytes(uint64(opsBytes[i])), opsCount[i])
-	// }
-	// fmt.Printf("-----------------------\n")
 
 	errc <- nil
 }

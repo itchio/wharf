@@ -34,6 +34,14 @@ func (c *Container) NewFilePool(basePath string) *ContainerFilePool {
 	}
 }
 
+func (cfp *ContainerFilePool) GetSize(fileIndex int64) int64 {
+	return cfp.container.Files[fileIndex].Size
+}
+
+func (cfp *ContainerFilePool) GetRelativePath(fileIndex int64) string {
+	return cfp.container.Files[fileIndex].Path
+}
+
 func (cfp *ContainerFilePool) GetPath(fileIndex int64) string {
 	path := filepath.FromSlash(cfp.container.Files[fileIndex].Path)
 	fullPath := filepath.Join(cfp.basePath, path)
@@ -44,6 +52,7 @@ func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) 
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
 			cfp.reader.Close()
+			cfp.reader = nil
 		}
 
 		reader, err := os.Open(cfp.GetPath(fileIndex))

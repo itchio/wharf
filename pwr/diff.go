@@ -99,6 +99,11 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	signSyncContext := mksync()
 	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
 
+	targetContainerPathToIndex := make(map[string]int64)
+	for index, f := range dctx.TargetContainer.Files {
+		targetContainerPathToIndex[f.Path] = int64(index)
+	}
+
 	// re-used messages
 	syncHeader := &SyncHeader{}
 	syncDelimiter := &SyncOp{
@@ -134,7 +139,12 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 		done := make(chan bool)
 		errs := make(chan error)
 
-		go diffFile(diffSyncContext, blockLibrary, diffReader, opsWriter, errs, done)
+		var preferredFileIndex int64 = -1
+		if oldIndex, ok := targetContainerPathToIndex[f.Path]; ok {
+			preferredFileIndex = oldIndex
+		}
+
+		go diffFile(diffSyncContext, blockLibrary, diffReader, opsWriter, preferredFileIndex, errs, done)
 		go signFile(signSyncContext, fileIndex, signReader, sigWriter, errs, done)
 
 		go func() {
@@ -172,8 +182,8 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	return nil
 }
 
-func diffFile(sctx *sync.SyncContext, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, errs chan error, done chan bool) {
-	err := sctx.ComputeDiff(reader, blockLibrary, opsWriter)
+func diffFile(sctx *sync.SyncContext, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, preferredFileIndex int64, errs chan error, done chan bool) {
+	err := sctx.ComputeDiff(reader, blockLibrary, opsWriter, preferredFileIndex)
 	if err != nil {
 		errs <- err
 	}
@@ -200,51 +210,44 @@ func makeSigWriter(wc *wire.WriteContext) sync.SignatureWriter {
 	}
 }
 
+func numBlocks(fileSize int64) int64 {
+	return 1 + (fileSize-1)/int64(BlockSize)
+}
+
+func lastBlockSize(fileSize int64) int64 {
+	return 1 + (fileSize-1)%int64(BlockSize)
+}
+
 func makeOpsWriter(wc *wire.WriteContext, dctx *DiffContext) sync.OperationWriter {
 	numOps := 0
 	wop := &SyncOp{}
+
+	blockSize64 := int64(BlockSize)
+	files := dctx.TargetContainer.Files
 
 	return func(op sync.Operation) error {
 		numOps++
 		wop.Reset()
 
 		switch op.Type {
-		case sync.OpBlock:
-			wop.Type = SyncOp_BLOCK
-			wop.FileIndex = op.FileIndex
-			wop.BlockIndex = op.BlockIndex
-
-			opSize := int64(BlockSize)
-			fileSize := dctx.TargetContainer.Files[op.FileIndex].Size
-
-			offset := op.BlockIndex * int64(BlockSize)
-			if offset >= fileSize/int64(BlockSize) {
-				opSize = fileSize % int64(BlockSize)
-			}
-			dctx.ReusedBytes += opSize
-
 		case sync.OpBlockRange:
 			wop.Type = SyncOp_BLOCK_RANGE
 			wop.FileIndex = op.FileIndex
 			wop.BlockIndex = op.BlockIndex
 			wop.BlockSpan = op.BlockSpan
 
-			fileSize := dctx.TargetContainer.Files[op.FileIndex].Size
+			tailSize := blockSize64
+			fileSize := files[op.FileIndex].Size
 
-			lastBlockSize := int64(BlockSize)
-			offset := (op.BlockIndex + op.BlockSpan) * int64(BlockSize)
-			if offset >= fileSize/int64(BlockSize) {
-				lastBlockSize = fileSize % int64(BlockSize)
-				if lastBlockSize == 0 {
-					lastBlockSize = int64(BlockSize)
-				}
+			if (op.BlockIndex + op.BlockSpan) >= numBlocks(fileSize) {
+				tailSize = lastBlockSize(fileSize)
 			}
-
-			dctx.ReusedBytes += int64(BlockSize)*(op.BlockSpan-1) + lastBlockSize
+			dctx.ReusedBytes += blockSize64*(op.BlockSpan-1) + tailSize
 
 		case sync.OpData:
 			wop.Type = SyncOp_DATA
 			wop.Data = op.Data
+
 			dctx.FreshBytes += int64(len(op.Data))
 
 		default:

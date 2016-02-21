@@ -12,8 +12,7 @@ const _M = 1 << 16
 type OpType byte
 
 const (
-	OpBlock OpType = iota
-	OpBlockRange
+	OpBlockRange OpType = iota
 	OpData
 )
 

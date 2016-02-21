@@ -65,12 +65,25 @@ func (ctx *SyncContext) uniqueHash(v []byte) []byte {
 }
 
 // Searches for a given strong hash among all strong hashes in this bucket.
-func findUniqueHash(hh []BlockHash, hashValue []byte, shortSize int32) *BlockHash {
+func findUniqueHash(hh []BlockHash, hashValue []byte, shortSize int32, preferredFileIndex int64) *BlockHash {
 	if len(hashValue) == 0 {
 		return nil
 	}
+
+	// try to find block in preferred file first
+	// this helps detect files that aren't touched by patches
+	if preferredFileIndex != -1 {
+		for _, block := range hh {
+			if block.FileIndex == preferredFileIndex {
+				if block.ShortSize == shortSize && bytes.Equal(block.StrongHash, hashValue) {
+					return &block
+				}
+			}
+		}
+	}
+
 	for _, block := range hh {
-		// full block have 0 shortSize
+		// full blocks have 0 shortSize
 		if block.ShortSize == shortSize && bytes.Equal(block.StrongHash, hashValue) {
 			return &block
 		}

@@ -15,9 +15,8 @@ message SyncHeader {
 
 message SyncOp {
   enum Type {
-    BLOCK = 0;
-    BLOCK_RANGE = 1;
-    DATA = 2;
+    BLOCK_RANGE = 0;
+    DATA = 1;
     HEY_YOU_DID_IT = 2049; // <3 @GranPC & @tomasduda
   }
   Type type = 1;
