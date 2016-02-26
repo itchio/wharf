@@ -11,8 +11,8 @@ test:linux:
     - export GOPATH=$CURRENT_BUILD_PATH
     - mkdir -p github.com/itchio/wharf
     - rsync -az . github.com/itchio/wharf
-    - go get -v -x -d -t github.com/itchio/wharf
-    - go test -v -x github.com/itchio/wharf
+    - go get -v -x -d -t github.com/itchio/wharf/...
+    - go test -v -x github.com/itchio/wharf/...
 
 test:win32:
   stage: test
@@ -23,5 +23,5 @@ test:win32:
     - export GOPATH=$CURRENT_BUILD_PATH
     - mkdir -p github.com/itchio/wharf
     - rsync -az . github.com/itchio/wharf
-    - go get -v -x -d -t github.com/itchio/wharf
-    - go test -v -x github.com/itchio/wharf
+    - go get -v -x -d -t github.com/itchio/wharf/...
+    - go test -v -x github.com/itchio/wharf/...
