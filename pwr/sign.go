@@ -83,6 +83,11 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 	signature := make([]sync.BlockHash, 0)
 	hash := &BlockHash{}
 
+	blockIndex := int64(0)
+	fileIndex := int64(0)
+	byteOffset := int64(0)
+	blockSize64 := int64(BlockSize)
+
 	for {
 		hash.Reset()
 		err = sigWire.ReadMessage(hash)
@@ -94,10 +99,36 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 			return nil, nil, err
 		}
 
+		sizeDiff := container.Files[fileIndex].Size - byteOffset
+		shortSize := int32(0)
+
+		if sizeDiff < 0 {
+			byteOffset = 0
+			blockIndex = 0
+			fileIndex++
+			sizeDiff = container.Files[fileIndex].Size - byteOffset
+		}
+
+		// last block
+		if sizeDiff < blockSize64 {
+			shortSize = int32(sizeDiff)
+		} else {
+			shortSize = 0
+		}
+
 		signature = append(signature, sync.BlockHash{
+			FileIndex:  fileIndex,
+			BlockIndex: blockIndex,
+
 			WeakHash:   hash.WeakHash,
 			StrongHash: hash.StrongHash,
+
+			ShortSize: shortSize,
 		})
+
+		// still in same file
+		byteOffset += blockSize64
+		blockIndex++
 	}
 
 	return container, signature, nil
