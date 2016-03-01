@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/itchio/wharf/tlc"
@@ -38,9 +39,11 @@ func Test_Walk(t *testing.T) {
 		assert.Equal(t, file, info.Files[i].Path, "files should be all listed")
 	}
 
-	for i, symlink := range symlinks {
-		assert.Equal(t, symlink.Newname, info.Symlinks[i].Path, "symlink should be at correct path")
-		assert.Equal(t, symlink.Oldname, info.Symlinks[i].Dest, "symlink should point to correct path")
+	if testSymlinks {
+		for i, symlink := range symlinks {
+			assert.Equal(t, symlink.Newname, info.Symlinks[i].Path, "symlink should be at correct path")
+			assert.Equal(t, symlink.Oldname, info.Symlinks[i].Dest, "symlink should point to correct path")
+		}
 	}
 }
 
@@ -94,6 +97,8 @@ var symlinks = []symlinkEntry{
 	{"dir_a/baz", "foo/file_o"},
 }
 
+var testSymlinks = runtime.GOOS != "windows" 
+
 func mktestdir(t *testing.T, name string) string {
 	tmpPath, err := ioutil.TempDir(".", "tmp_"+name)
 	must(t, err)
@@ -114,9 +119,11 @@ func mktestdir(t *testing.T, name string) string {
 		must(t, file.Close())
 	}
 
-	for _, entry := range symlinks {
-		new := filepath.Join(tmpPath, entry.Newname)
-		must(t, os.Symlink(entry.Oldname, new))
+	if testSymlinks {
+		for _, entry := range symlinks {
+			new := filepath.Join(tmpPath, entry.Newname)
+			must(t, os.Symlink(entry.Oldname, new))
+		}
 	}
 
 	return tmpPath
