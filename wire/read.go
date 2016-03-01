@@ -11,10 +11,22 @@ import (
 
 type ReadContext struct {
 	reader io.Reader
+
+	byteBuffer []byte
+	msgBuf     []byte
 }
 
 func NewReadContext(reader io.Reader) *ReadContext {
-	return &ReadContext{reader}
+	return &ReadContext{reader, make([]byte, 1), make([]byte, 32)}
+}
+
+func (r *ReadContext) ReadByte() (byte, error) {
+	_, err := r.reader.Read(r.byteBuffer)
+	if err != nil {
+		return 0, err
+	}
+
+	return r.byteBuffer[0], nil
 }
 
 func (r *ReadContext) Reader() io.Reader {
@@ -36,20 +48,21 @@ func (r *ReadContext) ExpectMagic(magic int32) error {
 }
 
 func (r *ReadContext) ReadMessage(msg proto.Message) error {
-	var length uint32
-	err := binary.Read(r.reader, ENDIANNESS, &length)
+	length, err := binary.ReadUvarint(r)
 	if err != nil {
 		return err
 	}
 
-	buf := make([]byte, length)
+	if cap(r.msgBuf) < int(length) {
+		r.msgBuf = make([]byte, length)
+	}
 
-	_, err = io.ReadFull(r.reader, buf)
+	_, err = io.ReadFull(r.reader, r.msgBuf[:length])
 	if err != nil {
 		return err
 	}
 
-	err = proto.Unmarshal(buf, msg)
+	err = proto.Unmarshal(r.msgBuf[:length], msg)
 	if err != nil {
 		return err
 	}

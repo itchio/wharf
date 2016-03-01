@@ -11,10 +11,12 @@ import (
 
 type WriteContext struct {
 	writer io.Writer
+
+	varintBuffer []byte
 }
 
 func NewWriteContext(writer io.Writer) *WriteContext {
-	return &WriteContext{writer}
+	return &WriteContext{writer, make([]byte, 4)}
 }
 
 func (w *WriteContext) Writer() io.Writer {
@@ -43,7 +45,11 @@ func (w *WriteContext) WriteMessage(msg proto.Message) error {
 		return err
 	}
 
-	err = binary.Write(w.writer, ENDIANNESS, uint32(len(buf)))
+	vibuflen := binary.PutUvarint(w.varintBuffer, uint64(len(buf)))
+	if err != nil {
+		return err
+	}
+	_, err = w.writer.Write(w.varintBuffer[:vibuflen])
 	if err != nil {
 		return err
 	}
