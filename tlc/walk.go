@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	MODE_MASK = 0644
+	ModeMask = 0644
 )
 
 type FilterFunc func(fileInfo os.FileInfo) bool
@@ -44,7 +44,7 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		Path = filepath.ToSlash(Path)
 
 		// don't end up with files we (the patcher) can't modify
-		Mode := fileInfo.Mode() | MODE_MASK
+		Mode := fileInfo.Mode() | ModeMask
 
 		if !filter(fileInfo) {
 			if Mode.IsDir() {
