@@ -70,7 +70,10 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
-	sourceContainer.Prepare(actx.OutputPath)
+	err = sourceContainer.Prepare(actx.OutputPath)
+	if err != nil {
+		return err
+	}
 	outputPool := sourceContainer.NewFilePool(actx.OutputPath)
 
 	sctx := mksync()
@@ -124,7 +127,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	return nil
 }
 
-func lazilyPatchFile(sctx *sync.SyncContext, targetPool *tlc.ContainerFilePool, outputPool *tlc.ContainerFilePool,
+func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outputPool *tlc.ContainerFilePool,
 	fileIndex int64, onSourceWrite counter.CountCallback, ops chan sync.Operation, inplace bool) (written int64, err error) {
 
 	var realops chan sync.Operation

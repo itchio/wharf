@@ -27,18 +27,18 @@ import (
 // in a single Data operation
 const MaxDataOp = (4 * 1024 * 1024)
 
-// NewContext creates a new SyncContext, given a blocksize.
+// NewContext creates a new Context, given a blocksize.
 // It uses MD5 as a 'strong hash' (in the sense of an RSync paper,
 // and compared to the very weak rolling hash)
-func NewContext(BlockSize int) *SyncContext {
-	return &SyncContext{
+func NewContext(BlockSize int) *Context {
+	return &Context{
 		blockSize:    BlockSize,
 		uniqueHasher: md5.New(),
 	}
 }
 
 // ApplyPatch applies the difference to the target.
-func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Operation) error {
+func (ctx *Context) ApplyPatch(output io.Writer, pool FilePool, ops chan Operation) error {
 	blockSize := int64(ctx.blockSize)
 
 	for op := range ops {
@@ -73,7 +73,7 @@ func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Ope
 // Any data operation from the OperationWriter must have the data copied out
 // within the span of the function; the data buffer underlying the operation
 // data is reused.
-func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops OperationWriter, preferredFileIndex int64) (err error) {
+func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops OperationWriter, preferredFileIndex int64) (err error) {
 	minBufferSize := (ctx.blockSize * 2) + MaxDataOp
 	if len(ctx.buffer) < minBufferSize {
 		ctx.buffer = make([]byte, minBufferSize)

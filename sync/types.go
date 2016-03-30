@@ -8,15 +8,21 @@ import (
 // Internal constant used in rolling checksum.
 const _M = 1 << 16
 
-// Operation Types.
+// An OpType describes the type of a sync operation
 type OpType byte
 
 const (
+	// OpBlockRange is a type of operation where a block of bytes is copied
+	// from an old file into the file we're reconstructing
 	OpBlockRange OpType = iota
+
+	// OpData is a type of operation where fresh bytes are pasted into
+	// the file we're reconstructing, because we weren't able to re-use
+	// data from the old files set
 	OpData
 )
 
-// Instruction to mutate target to align to source.
+// Operation describes a step required to mutate target to align to source.
 type Operation struct {
 	Type       OpType
 	FileIndex  int64
@@ -25,9 +31,10 @@ type Operation struct {
 	Data       []byte
 }
 
+// An OperationWriter consumes sync operations and does whatever it wants with them
 type OperationWriter func(op Operation) error
 
-// Signature hash item generated from target.
+// BlockHash is a signature hash item generated from target.
 type BlockHash struct {
 	FileIndex  int64
 	BlockIndex int64
@@ -38,19 +45,24 @@ type BlockHash struct {
 	ShortSize int32
 }
 
+// A SignatureWriter consumes block hashes and does whatever it wants with them
 type SignatureWriter func(hash BlockHash) error
 
-type SyncContext struct {
+// Context holds the state during a sync operation
+type Context struct {
 	blockSize    int
 	buffer       []byte
 	uniqueHasher hash.Hash
 }
 
+// A FilePool gives read+seek access to an ordered list of files, by index
 type FilePool interface {
 	GetReader(fileIndex int64) (io.ReadSeeker, error)
 	Close() error
 }
 
+// A BlockLibrary contains a collection of weak+strong block hashes, indexed
+// by their weak-hashes for fast lookup.
 type BlockLibrary struct {
 	hashLookup map[uint32][]BlockHash
 }

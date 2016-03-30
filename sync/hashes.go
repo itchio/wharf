@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-func (ctx *SyncContext) splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
+func (ctx *Context) splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	// still have more data than blockSize ? return a block-full
 	if len(data) >= ctx.blockSize {
 		return ctx.blockSize, data[:ctx.blockSize], nil
@@ -27,7 +27,7 @@ func (ctx *SyncContext) splitFunc(data []byte, atEOF bool) (advance int, token [
 }
 
 // CreateSignature calculate the signature of target.
-func (ctx *SyncContext) CreateSignature(fileIndex int64, fileReader io.Reader, writeHash SignatureWriter) error {
+func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, writeHash SignatureWriter) error {
 	s := bufio.NewScanner(fileReader)
 	s.Split(ctx.splitFunc)
 
@@ -61,7 +61,7 @@ func (ctx *SyncContext) CreateSignature(fileIndex int64, fileReader io.Reader, w
 }
 
 // Use a more unique way to identify a set of bytes.
-func (ctx *SyncContext) uniqueHash(v []byte) []byte {
+func (ctx *Context) uniqueHash(v []byte) []byte {
 	ctx.uniqueHasher.Reset()
 	ctx.uniqueHasher.Write(v)
 	return ctx.uniqueHasher.Sum(nil)

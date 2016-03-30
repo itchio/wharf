@@ -4,7 +4,7 @@ package sync_test
 // 	srcReader, _ := os.Open("content-v2.bin")
 // 	defer srcReader.Close()
 //
-// 	rs := &sync.SyncContext{}
+// 	rs := &sync.Context{}
 //
 // 	// here we store the whole signature in a byte slice,
 // 	// but it could just as well be sent over a network connection for example

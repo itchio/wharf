@@ -2,29 +2,36 @@ package counter
 
 import "io"
 
-type CounterWriter struct {
+// A Writer keeps track of how many bytes have been written to a writer
+type Writer struct {
 	count  int64
 	writer io.Writer
 
 	onWrite CountCallback
 }
 
-func NewWriter(writer io.Writer) *CounterWriter {
-	return &CounterWriter{writer: writer}
+// NewWriter returns a new counting writer. If the specified writer is
+// nil, it will still count all bytes written, then discard them
+func NewWriter(writer io.Writer) *Writer {
+	return &Writer{writer: writer}
 }
 
-func NewWriterCallback(onWrite CountCallback, writer io.Writer) *CounterWriter {
-	return &CounterWriter{
+// NewWriterCallback returns a new counting writer with a callback
+// to be called on every write.
+func NewWriterCallback(onWrite CountCallback, writer io.Writer) *Writer {
+	return &Writer{
 		writer:  writer,
 		onWrite: onWrite,
 	}
 }
 
-func (w *CounterWriter) Count() int64 {
+// Count returns the number of bytes written through this counting writer
+func (w *Writer) Count() int64 {
 	return w.count
 }
 
-func (w *CounterWriter) Write(buffer []byte) (n int, err error) {
+// Write is our io.Writer implementation
+func (w *Writer) Write(buffer []byte) (n int, err error) {
 	oldCount := w.count
 
 	n = len(buffer)
@@ -42,6 +49,7 @@ func (w *CounterWriter) Write(buffer []byte) (n int, err error) {
 	return
 }
 
-func (w *CounterWriter) Close() error {
+// Close closes the counting writer, but DOES NOT close the underlying writer
+func (w *Writer) Close() error {
 	return nil
 }

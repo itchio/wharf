@@ -10,6 +10,7 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
+// DiffContext holds the state during a diff operation
 type DiffContext struct {
 	Compression *CompressionSettings
 	Consumer    *StateConsumer
@@ -95,8 +96,8 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	sigWriter := makeSigWriter(sigWire)
 	opsWriter := makeOpsWriter(patchWire, dctx)
 
-	diffSyncContext := mksync()
-	signSyncContext := mksync()
+	diffContext := mksync()
+	signContext := mksync()
 	blockLibrary := sync.NewBlockLibrary(dctx.TargetSignature)
 
 	targetContainerPathToIndex := make(map[string]int64)
@@ -144,8 +145,8 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 			preferredFileIndex = oldIndex
 		}
 
-		go diffFile(diffSyncContext, blockLibrary, diffReader, opsWriter, preferredFileIndex, errs, done)
-		go signFile(signSyncContext, fileIndex, signReader, sigWriter, errs, done)
+		go diffFile(diffContext, blockLibrary, diffReader, opsWriter, preferredFileIndex, errs, done)
+		go signFile(signContext, fileIndex, signReader, sigWriter, errs, done)
 
 		go func() {
 			defer diffWriter.Close()
@@ -154,7 +155,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 			mw := io.MultiWriter(diffWriter, signWriter)
 
 			sourceReadCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
-			_, err := io.Copy(mw, sourceReadCounter)
+			_, err = io.Copy(mw, sourceReadCounter)
 			if err != nil {
 				errs <- err
 			}
@@ -182,7 +183,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	return nil
 }
 
-func diffFile(sctx *sync.SyncContext, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, preferredFileIndex int64, errs chan error, done chan bool) {
+func diffFile(sctx *sync.Context, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, preferredFileIndex int64, errs chan error, done chan bool) {
 	err := sctx.ComputeDiff(reader, blockLibrary, opsWriter, preferredFileIndex)
 	if err != nil {
 		errs <- err
@@ -191,7 +192,7 @@ func diffFile(sctx *sync.SyncContext, blockLibrary *sync.BlockLibrary, reader io
 	done <- true
 }
 
-func signFile(sctx *sync.SyncContext, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errs chan error, done chan bool) {
+func signFile(sctx *sync.Context, fileIndex int, reader io.Reader, writeHash sync.SignatureWriter, errs chan error, done chan bool) {
 	err := sctx.CreateSignature(int64(fileIndex), reader, writeHash)
 	if err != nil {
 		errs <- err

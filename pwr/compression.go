@@ -8,15 +8,17 @@ import (
 	"gopkg.in/kothar/brotli-go.v0/enc"
 )
 
+// CompressionDefault returns default compression settings for wharf-based software
+// Brotli Q1 is, overall, slightly slower than gzip, a lot faster than lzma,
+// and compresses somewhere between the two. it's ideal for transferring.
 func CompressionDefault() *CompressionSettings {
-	// brotli Q1 is, overall, slightly slower than gzip, a lot faster than lzma,
-	// and compresses somewhere between the two. it's ideal for transferring.
 	return &CompressionSettings{
 		Algorithm: CompressionAlgorithm_BROTLI,
 		Quality:   1,
 	}
 }
 
+// ToString returns a human-readable description of given compression settings
 func (cs *CompressionSettings) ToString() string {
 	switch cs.Algorithm {
 	case CompressionAlgorithm_UNCOMPRESSED:
@@ -28,6 +30,8 @@ func (cs *CompressionSettings) ToString() string {
 	}
 }
 
+// CompressWire wraps a wire.WriteContext into a compressor, according to given settings,
+// so that any messages written through the returned WriteContext will first be compressed.
 func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
 	if compression == nil {
 		compression = CompressionDefault()
@@ -46,6 +50,8 @@ func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 	}
 }
 
+// UncompressWire wraps a wire.ReadContext into a decompressor, according to the given settings,
+// so that any messages read through the returned ReadContext will first be decompressed.
 func UncompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*wire.ReadContext, error) {
 	switch compression.Algorithm {
 	case CompressionAlgorithm_UNCOMPRESSED:
