@@ -9,8 +9,11 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
+// ComputeSignature compute the signature of all blocks of all files in a given container,
+// by reading them from disk, relative to `basePath`, and notifying `consumer` of its
+// progress
 func ComputeSignature(container *tlc.Container, basePath string, consumer *StateConsumer) ([]sync.BlockHash, error) {
-	signature := make([]sync.BlockHash, 0)
+	var signature []sync.BlockHash
 
 	err := ComputeSignatureToWriter(container, basePath, consumer, func(bl sync.BlockHash) error {
 		signature = append(signature, bl)
@@ -23,10 +26,17 @@ func ComputeSignature(container *tlc.Container, basePath string, consumer *State
 	return signature, nil
 }
 
-// ComputeSignature returns a series of hash suitable to create a diff or to verify the integrity of a file
+// ComputeSignatureToWriter is a variant of ComputeSignature that writes hashes
+// to a callback
 func ComputeSignatureToWriter(container *tlc.Container, basePath string, consumer *StateConsumer, sigWriter sync.SignatureWriter) error {
+	var err error
+
 	pool := container.NewFilePool(basePath)
-	defer pool.Close()
+	defer func() {
+		if pErr := pool.Close(); pErr != nil && err == nil {
+			err = pErr
+		}
+	}()
 
 	sctx := mksync()
 
@@ -41,7 +51,8 @@ func ComputeSignatureToWriter(container *tlc.Container, basePath string, consume
 		consumer.ProgressLabel(f.Path)
 		fileOffset = f.Offset
 
-		reader, err := pool.GetReader(int64(fileIndex))
+		var reader io.ReadSeeker
+		reader, err = pool.GetReader(int64(fileIndex))
 		if err != nil {
 			return err
 		}
@@ -53,9 +64,11 @@ func ComputeSignatureToWriter(container *tlc.Container, basePath string, consume
 		}
 	}
 
-	return nil
+	return err
 }
 
+// ReadSignature reads the hashes from all files of a given container, from a
+// wharf signature file.
 func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash, error) {
 	rawSigWire := wire.NewReadContext(signatureReader)
 	err := rawSigWire.ExpectMagic(SignatureMagic)
@@ -80,7 +93,7 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 		return nil, nil, err
 	}
 
-	signature := make([]sync.BlockHash, 0)
+	var signature []sync.BlockHash
 	hash := &BlockHash{}
 
 	blockIndex := int64(0)

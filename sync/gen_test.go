@@ -48,10 +48,18 @@ type content struct {
 	Data  []byte
 }
 
-func (c *content) Fill() {
+func must(t *testing.T, err error) {
+	if err != nil {
+		t.Error(err.Error())
+		t.FailNow()
+	}
+}
+
+func (c *content) Fill(t *testing.T) {
 	c.Data = make([]byte, c.Len)
 	src := rand.NewSource(c.Seed)
-	RandReader{src}.Read(c.Data)
+	_, err := RandReader{src}.Read(c.Data)
+	must(t, err)
 
 	if c.Alter > 0 {
 		r := rand.New(src)
@@ -116,8 +124,8 @@ func Test_GenData(t *testing.T) {
 	rs := sync.NewContext(16 * 1024)
 	rsDelta := sync.NewContext(16 * 1024)
 	for _, p := range pairs {
-		(&p.Source).Fill()
-		(&p.Target).Fill()
+		(&p.Source).Fill(t)
+		(&p.Target).Fill(t)
 
 		sourceBuffer := bytes.NewReader(p.Source.Data)
 		targetBuffer := bytes.NewReader(p.Target.Data)
@@ -160,7 +168,8 @@ func Test_GenData(t *testing.T) {
 		result := new(bytes.Buffer)
 		filePool := &SinglePool{reader: targetBuffer}
 
-		targetBuffer.Seek(0, 0)
+		_, err = targetBuffer.Seek(0, 0)
+		must(t, err)
 		err = rs.ApplyPatch(result, filePool, opsOut)
 		if err != nil {
 			t.Errorf("Failed to apply delta: %s", err)

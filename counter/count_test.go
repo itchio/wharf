@@ -9,10 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func must(t *testing.T, err error) {
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func Test_Reader_Count(t *testing.T) {
 	buf := bytes.NewReader([]byte{1, 2, 3, 4, 5, 6})
 	cr := counter.NewReader(buf)
-	ioutil.ReadAll(cr)
+	_, err := ioutil.ReadAll(cr)
+	must(t, err)
 
 	assert.Equal(t, cr.Count(), int64(6))
 }
@@ -35,21 +42,26 @@ func Test_Reader_Callback(t *testing.T) {
 
 	buf := make([]byte, 6)
 
-	cr.Read(buf)
+	_, err := cr.Read(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(6))
 
-	cr.Read(buf)
+	_, err = cr.Read(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(12))
 
-	cr.Read(buf)
+	_, err = cr.Read(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(18))
 }
 
 func Test_Writer_Count(t *testing.T) {
 	cw := counter.NewWriter(ioutil.Discard)
 	buf := []byte{1, 2, 3, 4, 5, 6}
+
 	for i := 0; i < 6; i++ {
-		cw.Write(buf)
+		_, err := cw.Write(buf)
+		must(t, err)
 	}
 
 	assert.Equal(t, cw.Count(), int64(36))
@@ -58,8 +70,10 @@ func Test_Writer_Count(t *testing.T) {
 func Test_Writer_Nil(t *testing.T) {
 	cw := counter.NewWriter(nil)
 	buf := []byte{1, 2, 3, 4, 5, 6}
+
 	for i := 0; i < 6; i++ {
-		cw.Write(buf)
+		_, err := cw.Write(buf)
+		must(t, err)
 	}
 
 	assert.Equal(t, cw.Count(), int64(36))
@@ -72,15 +86,19 @@ func Test_Writer_Callback(t *testing.T) {
 	cw := counter.NewWriterCallback(onWrite, nil)
 	buf := []byte{1, 2, 3, 4, 5, 6}
 
-	cw.Write(buf)
+	_, err := cw.Write(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(6))
 
-	cw.Write(buf)
+	_, err = cw.Write(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(12))
 
-	cw.Write(buf)
+	_, err = cw.Write(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(18))
 
-	cw.Write(buf)
+	_, err = cw.Write(buf)
+	must(t, err)
 	assert.Equal(t, count, int64(24))
 }

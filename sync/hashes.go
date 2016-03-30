@@ -63,7 +63,10 @@ func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, write
 // Use a more unique way to identify a set of bytes.
 func (ctx *Context) uniqueHash(v []byte) []byte {
 	ctx.uniqueHasher.Reset()
-	ctx.uniqueHasher.Write(v)
+	_, err := ctx.uniqueHasher.Write(v)
+	if err != nil {
+		panic(err)
+	}
 	return ctx.uniqueHasher.Sum(nil)
 }
 

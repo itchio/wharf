@@ -245,7 +245,7 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 				BlockIndex: rop.BlockIndex,
 				BlockSpan:  rop.BlockSpan,
 			})
-			opsBytes[op.Type] += int64(BlockSize) * int64(op.BlockSpan)
+			opsBytes[op.Type] += int64(BlockSize) * op.BlockSpan
 
 		case SyncOp_DATA:
 			sendOp(sync.Operation{

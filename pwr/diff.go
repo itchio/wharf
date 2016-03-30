@@ -112,7 +112,11 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 	}
 
 	filePool := dctx.SourceContainer.NewFilePool(dctx.SourcePath)
-	defer filePool.Close()
+	defer func() {
+		if fErr := filePool.Close(); fErr != nil && err == nil {
+			err = fErr
+		}
+	}()
 
 	for fileIndex, f := range dctx.SourceContainer.Files {
 		dctx.Consumer.ProgressLabel(f.Path)
@@ -126,7 +130,8 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 			return err
 		}
 
-		sourceReader, err := filePool.GetReader(int64(fileIndex))
+		var sourceReader io.ReadSeeker
+		sourceReader, err = filePool.GetReader(int64(fileIndex))
 		if err != nil {
 			return err
 		}
@@ -149,15 +154,23 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 		go signFile(signContext, fileIndex, signReader, sigWriter, errs, done)
 
 		go func() {
-			defer diffWriter.Close()
-			defer signWriter.Close()
+			defer func() {
+				if dErr := diffWriter.Close(); dErr != nil {
+					errs <- dErr
+				}
+			}()
+			defer func() {
+				if sErr := signWriter.Close(); sErr != nil {
+					errs <- sErr
+				}
+			}()
 
 			mw := io.MultiWriter(diffWriter, signWriter)
 
 			sourceReadCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
-			_, err = io.Copy(mw, sourceReadCounter)
-			if err != nil {
-				errs <- err
+			_, cErr := io.Copy(mw, sourceReadCounter)
+			if cErr != nil {
+				errs <- cErr
 			}
 		}()
 
@@ -177,10 +190,13 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 		}
 	}
 
-	patchWire.Close()
-	sigWire.Close()
+	err = patchWire.Close()
+	if err != nil {
+		return err
+	}
+	err = sigWire.Close()
 
-	return nil
+	return err
 }
 
 func diffFile(sctx *sync.Context, blockLibrary *sync.BlockLibrary, reader io.Reader, opsWriter sync.OperationWriter, preferredFileIndex int64, errs chan error, done chan bool) {
@@ -203,11 +219,10 @@ func signFile(sctx *sync.Context, fileIndex int, reader io.Reader, writeHash syn
 
 func makeSigWriter(wc *wire.WriteContext) sync.SignatureWriter {
 	return func(bl sync.BlockHash) error {
-		wc.WriteMessage(&BlockHash{
+		return wc.WriteMessage(&BlockHash{
 			WeakHash:   bl.WeakHash,
 			StrongHash: bl.StrongHash,
 		})
-		return nil
 	}
 }
 

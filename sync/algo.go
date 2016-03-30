@@ -49,7 +49,11 @@ func (ctx *Context) ApplyPatch(output io.Writer, pool FilePool, ops chan Operati
 				return err
 			}
 
-			target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
+			_, err = target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
+			if err != nil {
+				return err
+			}
+
 			_, err = io.CopyN(output, target, blockSize*op.BlockSpan)
 			if err != nil {
 				// EOF is actually expected, since we want to copy short

@@ -37,7 +37,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"golang.org/x/crypto/ssh"
@@ -46,13 +45,20 @@ import (
 )
 
 var (
-	ErrPasswordInputAborted error = errors.New("Password input aborted")
+	// ErrPasswordInputAborted is thrown when the user cancels (Ctrl+C) during password input
+	ErrPasswordInputAborted = errors.New("Password input aborted")
 )
+
+// unconvert will complain about this because syscall.Stdin actually is an int
+// on unixy platforms, but not on Win32 (where it's a HANDLE). That API is
+// just badly designed, we could work around it with build constraints but
+// for now let's let the linter have its whinery.
+var stdin = int(syscall.Stdin)
 
 func getpass(prompt string) (string, error) {
 	var err error
 
-	tstate, err := terminal.GetState(int(syscall.Stdin))
+	tstate, err := terminal.GetState(stdin)
 	if err != nil {
 		return "", fmt.Errorf("in terminal.GetState(): %s", err.Error())
 	}
@@ -65,7 +71,7 @@ func getpass(prompt string) (string, error) {
 			quit = true
 			break
 		}
-		err := terminal.Restore(int(syscall.Stdin), tstate)
+		err := terminal.Restore(stdin, tstate)
 		if err != nil {
 			err = fmt.Errorf("in terminal.Restore(): %s", err.Error())
 		}
@@ -81,23 +87,35 @@ func getpass(prompt string) (string, error) {
 	}()
 
 	f := bufio.NewWriter(os.Stdout)
-	f.Write([]byte(prompt))
-	f.Flush()
+	_, wErr := f.Write([]byte(prompt))
+	if wErr != nil {
+		return "", wErr
+	}
+	wErr = f.Flush()
+	if wErr != nil {
+		return "", wErr
+	}
 
-	passbytes, err := terminal.ReadPassword(int(syscall.Stdin))
+	passbytes, err := terminal.ReadPassword(stdin)
 	if err != nil {
 		err = fmt.Errorf("in terminal.ReadPassword(): %s", err.Error())
 	}
-
 	pass := string(passbytes)
 
-	f.Write([]byte("\n"))
-	f.Flush()
+	_, wErr = f.Write([]byte("\n"))
+	if wErr != nil {
+		return "", wErr
+	}
+	wErr = f.Flush()
+	if wErr != nil {
+		return "", wErr
+	}
 
 	return pass, err
 }
 
-// ref golang.org/x/crypto/ssh/keys.go#ParseRawPrivateKey.
+// ParsePemBlock parses a private key block in RSA, EC, or DSA format
+// ref golang.org/x/crypto/ssh/keys.go#ParseRawPrivateKey
 func ParsePemBlock(block *pem.Block) (interface{}, error) {
 	switch block.Type {
 	case "RSA PRIVATE KEY":
@@ -129,10 +147,11 @@ func addKeyAuth(auths []ssh.AuthMethod, keypath string) ([]ssh.AuthMethod, error
 		return auths, nil
 	}
 
-	// handle plain and encrypted keyfiles
+	// handle encrypted keyfiles
 	if x509.IsEncryptedPEMBlock(block) {
 		prompt := fmt.Sprintf("Enter passphrase for key '%s': ", keypath)
-		pass, err := getpass(prompt)
+		var pass string
+		pass, err = getpass(prompt)
 		if err != nil {
 			return auths, err
 		}
@@ -140,22 +159,25 @@ func addKeyAuth(auths []ssh.AuthMethod, keypath string) ([]ssh.AuthMethod, error
 		if err != nil {
 			return auths, err
 		}
-		key, err := ParsePemBlock(block)
+		var key interface{}
+		key, err = ParsePemBlock(block)
 		if err != nil {
 			return auths, err
 		}
-		signer, err := ssh.NewSignerFromKey(key)
-		if err != nil {
-			return auths, err
-		}
-		return append(auths, ssh.PublicKeys(signer)), nil
-	} else {
-		signer, err := ssh.ParsePrivateKey(pemBytes)
+		var signer ssh.Signer
+		signer, err = ssh.NewSignerFromKey(key)
 		if err != nil {
 			return auths, err
 		}
 		return append(auths, ssh.PublicKeys(signer)), nil
 	}
+
+	// handle plain keyfiles
+	signer, err := ssh.ParsePrivateKey(pemBytes)
+	if err != nil {
+		return auths, err
+	}
+	return append(auths, ssh.PublicKeys(signer)), nil
 }
 
 func getAgentAuth() (auth ssh.AuthMethod, ok bool) {
@@ -166,32 +188,5 @@ func getAgentAuth() (auth ssh.AuthMethod, ok bool) {
 			ok = true
 		}
 	}
-	return
-}
-
-func addPasswordAuth(user, addr string, auths []ssh.AuthMethod) []ssh.AuthMethod {
-	if terminal.IsTerminal(0) == false {
-		return auths
-	}
-	host := addr
-	if i := strings.LastIndex(host, ":"); i != -1 {
-		host = host[:i]
-	}
-	prompt := fmt.Sprintf("%s@%s's password: ", user, host)
-	passwordCallback := func() (string, error) {
-		return getpass(prompt)
-	}
-	return append(auths, ssh.PasswordCallback(passwordCallback))
-}
-
-func tryAgentConnect(user, addr string) (client *ssh.Client) {
-	if auth, ok := getAgentAuth(); ok {
-		config := &ssh.ClientConfig{
-			User: user,
-			Auth: []ssh.AuthMethod{auth},
-		}
-		client, _ = ssh.Dial("tcp", addr, config)
-	}
-
 	return
 }

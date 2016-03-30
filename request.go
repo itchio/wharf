@@ -8,9 +8,12 @@ import (
 )
 
 var (
+	// ErrRequestFailure is thrown when there is an SSH-level problem with sending a request
 	ErrRequestFailure = errors.New("ssh request failed")
 )
 
+// SendRequest sends a protobuf message over a wharf connection, and reads a reply
+// if a non-nil reply is supplied
 func (c *Conn) SendRequest(name string, request proto.Message, reply proto.Message) error {
 	wantReply := reply != nil
 

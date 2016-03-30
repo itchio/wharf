@@ -39,10 +39,11 @@ type BlockHash struct {
 	FileIndex  int64
 	BlockIndex int64
 	WeakHash   uint32
-	StrongHash []byte
 
 	// ShortSize specifies the block size when non-zero
 	ShortSize int32
+
+	StrongHash []byte
 }
 
 // A SignatureWriter consumes block hashes and does whatever it wants with them

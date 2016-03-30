@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Conn holds the state for a connection between a wharf server and a wharf client
 type Conn struct {
 	Conn ssh.Conn
 
@@ -18,10 +19,13 @@ type Conn struct {
 	sessionID string
 }
 
+// ErrConnectionRefused is thrown when the server won't accept our connection attempt
 type ErrConnectionRefused struct {
 	message string
 }
 
+// ErrAuthenticationFailed is thrown when the server accepted our connection, but
+// refused our credentials.
 type ErrAuthenticationFailed struct {
 	message string
 }
@@ -47,14 +51,14 @@ func Connect(address string, privateKeyPath string, client string, version strin
 		conn, err := tryConnect([]ssh.AuthMethod{agentAuth}, address, client, version)
 		if err == nil {
 			return conn, nil
+		}
+
+		if _, ok := err.(*ErrAuthenticationFailed); ok {
+			agentMessage = "no usable key in ssh agent"
+		} else if _, ok := err.(*ErrConnectionRefused); ok {
+			return nil, err
 		} else {
-			if _, ok := err.(*ErrAuthenticationFailed); ok {
-				agentMessage = "no usable key in ssh agent"
-			} else if _, ok := err.(*ErrConnectionRefused); ok {
-				return nil, err
-			} else {
-				agentMessage = err.Error()
-			}
+			agentMessage = err.Error()
 		}
 	}
 
@@ -62,15 +66,16 @@ func Connect(address string, privateKeyPath string, client string, version strin
 		authMethods := make([]ssh.AuthMethod, 0, 1)
 		authMethods, err := addKeyAuth(authMethods, privateKeyPath)
 		if err == nil {
-			conn, err := tryConnect(authMethods, address, client, version)
+			var conn *Conn
+			conn, err = tryConnect(authMethods, address, client, version)
 			if err == nil {
 				return conn, nil
+			}
+
+			if _, ok := err.(*ErrAuthenticationFailed); ok {
+				keyMessage = "unknown private key"
 			} else {
-				if _, ok := err.(*ErrAuthenticationFailed); ok {
-					keyMessage = "unknown private key"
-				} else {
-					keyMessage = err.Error()
-				}
+				keyMessage = err.Error()
 			}
 		} else {
 			keyMessage = err.Error()
@@ -104,6 +109,8 @@ func tryConnect(authMethods []ssh.AuthMethod, address string, client string, ver
 	}, nil
 }
 
+// Accept sleeps until a client attempts a connection, then accepts it and
+// returns a new Conn to it.
 func Accept(listener net.Listener, config *ssh.ServerConfig) (*Conn, error) {
 	tcpConn, err := listener.Accept()
 	if err != nil {

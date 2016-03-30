@@ -64,7 +64,10 @@ func (cfp *ContainerFilePool) GetPath(fileIndex int64) string {
 func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
-			cfp.reader.Close()
+			err := cfp.reader.Close()
+			if err != nil {
+				return nil, err
+			}
 			cfp.reader = nil
 		}
 

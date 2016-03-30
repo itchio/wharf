@@ -13,7 +13,10 @@ import (
 
 func Test_Walk(t *testing.T) {
 	tmpPath := mktestdir(t, "walk")
-	defer os.RemoveAll(tmpPath)
+	defer func() {
+		err := os.RemoveAll(tmpPath)
+		must(t, err)
+	}()
 
 	info, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
@@ -49,7 +52,10 @@ func Test_Walk(t *testing.T) {
 
 func Test_Prepare(t *testing.T) {
 	tmpPath := mktestdir(t, "prepare")
-	defer os.RemoveAll(tmpPath)
+	defer func() {
+		err := os.RemoveAll(tmpPath)
+		must(t, err)
+	}()
 
 	info, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
