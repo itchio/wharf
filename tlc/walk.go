@@ -14,6 +14,7 @@ type FilterFunc func(fileInfo os.FileInfo) bool
 
 func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 	if filter == nil {
+		// default filter is a passthrough
 		filter = func(fileInfo os.FileInfo) bool {
 			return true
 		}
@@ -45,11 +46,15 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		// don't end up with files we (the patcher) can't modify
 		Mode := fileInfo.Mode() | MODE_MASK
 
-		if Mode.IsDir() {
-			if !filter(fileInfo) {
+		if !filter(fileInfo) {
+			if Mode.IsDir() {
 				return filepath.SkipDir
+			} else {
+				return nil
 			}
+		}
 
+		if Mode.IsDir() {
 			Dirs = append(Dirs, &Dir{Path: Path, Mode: uint32(Mode)})
 		} else if Mode.IsRegular() {
 			Size := fileInfo.Size()
