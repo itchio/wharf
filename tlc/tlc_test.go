@@ -61,6 +61,7 @@ func Test_Prepare(t *testing.T) {
 	must(t, err)
 
 	info2, err := tlc.Walk(tmpPath2, nil)
+	must(t, err)
 	assert.Equal(t, info, info2, "must recreate same structure")
 }
 
@@ -97,7 +98,7 @@ var symlinks = []symlinkEntry{
 	{"dir_a/baz", "foo/file_o"},
 }
 
-var testSymlinks = runtime.GOOS != "windows" 
+var testSymlinks = runtime.GOOS != "windows"
 
 func mktestdir(t *testing.T, name string) string {
 	tmpPath, err := ioutil.TempDir(".", "tmp_"+name)

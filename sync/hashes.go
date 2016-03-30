@@ -7,23 +7,26 @@ import (
 )
 
 func (ctx *SyncContext) splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// still have more data than blockSize ? return a block-full
 	if len(data) >= ctx.blockSize {
 		return ctx.blockSize, data[:ctx.blockSize], nil
 	}
 
 	if atEOF {
+		// at eof, but still have data: return all of it (must be <= ctx.blockSize)
 		if len(data) > 0 {
 			return len(data), data, nil
-		} else {
-			return 0, nil, io.EOF
 		}
+
+		// at eof, no data left, signal EOF ourselves.
+		return 0, nil, io.EOF
 	}
 
 	// wait for more data
 	return 0, nil, nil
 }
 
-// Calculate the signature of target.
+// CreateSignature calculate the signature of target.
 func (ctx *SyncContext) CreateSignature(fileIndex int64, fileReader io.Reader, writeHash SignatureWriter) error {
 	s := bufio.NewScanner(fileReader)
 	s.Split(ctx.splitFunc)
@@ -91,7 +94,7 @@ func findUniqueHash(hh []BlockHash, hashValue []byte, shortSize int32, preferred
 	return nil
 }
 
-// Use a faster way to identify a set of bytes.
+// βhash implements the rolling hash when signing an entire block at a time
 func βhash(block []byte) (β uint32, β1 uint32, β2 uint32) {
 	var a, b uint32
 	for i, val := range block {

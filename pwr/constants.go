@@ -6,7 +6,7 @@ import (
 	"github.com/itchio/wharf/sync"
 )
 
-var endianness = binary.LittleEndian
+var Endianness = binary.LittleEndian
 
 const (
 	PatchMagic = int32(iota + 0xFEF5F00)

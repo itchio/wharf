@@ -2,6 +2,8 @@ package wire
 
 import "encoding/binary"
 
-var ENDIANNESS = binary.LittleEndian
+// Endianness is the byte order of everything in wharf's wire format
+var Endianness = binary.LittleEndian
 
-const DEBUG_WIRE = false
+// DebugWire controls debug printouts of wharf's wire format
+const DebugWire = false

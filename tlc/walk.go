@@ -7,11 +7,18 @@ import (
 )
 
 const (
+	// ModeMask is or'd with files being diffed
 	ModeMask = 0644
+
+	// NullPath can be specified instead of a directory to yield an empty container
+	NullPath = "/dev/null"
 )
 
+// A FilterFunc allows ignoring certain files or directories when walking the filesystem
+// When a directory is ignored by a FilterFunc, all its children are, too!
 type FilterFunc func(fileInfo os.FileInfo) bool
 
+// Walk goes through every file in a director
 func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 	if filter == nil {
 		// default filter is a passthrough
@@ -49,9 +56,8 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		if !filter(fileInfo) {
 			if Mode.IsDir() {
 				return filepath.SkipDir
-			} else {
-				return nil
 			}
+			return nil
 		}
 
 		if Mode.IsDir() {
@@ -76,7 +82,7 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		return nil
 	}
 
-	if BasePath == "/dev/null" {
+	if BasePath == NullPath {
 		// empty container is fine - /dev/null is legal even on Win32 where it doesn't exist
 	} else {
 		fi, err := os.Lstat(BasePath)

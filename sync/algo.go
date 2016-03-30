@@ -1,5 +1,14 @@
+// Package sync computes a list of operations needed to mutate one file
+// into another file, re-using as much of the former as possible.
+//
 // Base on code from: https://bitbucket.org/kardianos/rsync/
-// Original algorithm: http://www.samba.org/~tridge/phd_thesis.pdf
+// Original rsync algorithm: http://www.samba.org/~tridge/phd_thesis.pdf
+//
+// The main change in our fork is supporting blocks of sizes less than
+// the context's block size (instead of just passing them as OpData),
+// and being able to pick from a hash library that can span multiple
+// files, and not just the 'old version' of a file (at the same path).
+// This allows us to handle renames gracefully (incl. partial rewrites)
 //
 // Definitions
 //   Source: The final content.
@@ -14,8 +23,13 @@ import (
 	"os"
 )
 
+// MaxDataOp is the maximum number of 'fresh bytes' that can be contained
+// in a single Data operation
 const MaxDataOp = (4 * 1024 * 1024)
 
+// NewContext creates a new SyncContext, given a blocksize.
+// It uses MD5 as a 'strong hash' (in the sense of an RSync paper,
+// and compared to the very weak rolling hash)
 func NewContext(BlockSize int) *SyncContext {
 	return &SyncContext{
 		blockSize:    BlockSize,
@@ -23,7 +37,7 @@ func NewContext(BlockSize int) *SyncContext {
 	}
 }
 
-// Apply the difference to the target.
+// ApplyPatch applies the difference to the target.
 func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Operation) error {
 	blockSize := int64(ctx.blockSize)
 
@@ -55,7 +69,7 @@ func (ctx *SyncContext) ApplyPatch(output io.Writer, pool FilePool, ops chan Ope
 	return nil
 }
 
-// Create the operation list to mutate the target signature into the source.
+// ComputeDiff creates the operation list to mutate the target signature into the source.
 // Any data operation from the OperationWriter must have the data copied out
 // within the span of the function; the data buffer underlying the operation
 // data is reused.
@@ -75,7 +89,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 	var n, validTo int
 	var αPop, αPush, β, β1, β2 uint32
 	var rolling, lastRun bool
-	var shortSize int32 = 0
+	var shortSize int32
 
 	// Store the previous non-data operation for combining.
 	var prevOp *Operation
@@ -219,7 +233,7 @@ func (ctx *SyncContext) ComputeDiff(source io.Reader, library *BlockLibrary, ops
 				if rolling {
 					αPop = uint32(buffer[sum.tail])
 				}
-				sum.tail += 1
+				sum.tail++
 
 				// May trigger "data wrap".
 				data.head = sum.tail

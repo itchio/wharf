@@ -21,6 +21,7 @@ var (
 	ErrIncompatiblePatch = errors.New("unsupported patch")
 )
 
+// ApplyContext holds the state while applying a patch
 type ApplyContext struct {
 	Consumer *StateConsumer
 
@@ -165,7 +166,8 @@ func lazilyPatchFile(sctx *sync.SyncContext, targetPool *tlc.ContainerFilePool, 
 				realops = make(chan sync.Operation)
 
 				outputPath := outputPool.GetPath(fileIndex)
-				writer, err := os.Create(outputPath)
+				var writer io.WriteCloser
+				writer, err = os.Create(outputPath)
 				if err != nil {
 					return 0, err
 				}
