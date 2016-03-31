@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/itchio/wharf/pwr"
 )
@@ -42,7 +43,7 @@ func ExtractTar(archive string, dir string, consumer *pwr.StateConsumer) (*Extra
 		}
 
 		rel := header.Name
-		filename := path.Join(dir, rel)
+		filename := path.Join(dir, filepath.FromSlash(rel))
 
 		switch header.Typeflag {
 		case tar.TypeDir:

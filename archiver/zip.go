@@ -2,11 +2,15 @@ package archiver
 
 import (
 	"archive/zip"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/sync"
+	"github.com/itchio/wharf/tlc"
 )
 
 func ExtractZip(archive string, dir string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
@@ -20,13 +24,12 @@ func ExtractZip(archive string, dir string, consumer *pwr.StateConsumer) (*Extra
 	if err != nil {
 		return nil, err
 	}
-
 	defer reader.Close()
 
 	for _, file := range reader.File {
 		err = func() error {
 			rel := file.Name
-			filename := path.Join(dir, rel)
+			filename := path.Join(dir, filepath.FromSlash(rel))
 
 			info := file.FileInfo()
 			mode := info.Mode()
@@ -69,5 +72,72 @@ func ExtractZip(archive string, dir string, consumer *pwr.StateConsumer) (*Extra
 		Dirs:     dirCount,
 		Files:    regCount,
 		Symlinks: symlinkCount,
+	}, nil
+}
+
+func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, consumer *pwr.StateConsumer) (*CompressResult, error) {
+	var uncompressedSize int64
+	var compressedSize int64
+
+	archiveWriter, err := os.Create(archive)
+	if err != nil {
+		return nil, err
+	}
+
+	zipWriter := zip.NewWriter(archiveWriter)
+	defer zipWriter.Close()
+
+	for _, dir := range container.Dirs {
+		fh := zip.FileHeader{
+			Name: dir.Path,
+		}
+		fh.SetMode(os.FileMode(dir.Mode))
+
+		_, err := zipWriter.CreateHeader(&fh)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for fileIndex, file := range container.Files {
+		fh := zip.FileHeader{
+			Name:               file.Path,
+			UncompressedSize64: uint64(file.Size),
+		}
+		fh.SetMode(os.FileMode(file.Mode))
+
+		entryWriter, err := zipWriter.CreateHeader(&fh)
+		if err != nil {
+			return nil, err
+		}
+
+		entryReader, err := pool.GetReader(int64(fileIndex))
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = io.Copy(entryWriter, entryReader)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, symlink := range container.Symlinks {
+		fh := zip.FileHeader{
+			Name: symlink.Path,
+		}
+		fh.SetMode(os.FileMode(symlink.Mode))
+
+		entryWriter, err := zipWriter.CreateHeader(&fh)
+		if err != nil {
+			return nil, err
+		}
+
+		entryWriter.Write([]byte(symlink.Dest))
+	}
+
+	return &CompressResult{
+		UncompressedSize: uncompressedSize,
+		CompressedSize:   compressedSize,
 	}, nil
 }

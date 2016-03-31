@@ -25,6 +25,11 @@ type ExtractResult struct {
 	Symlinks int
 }
 
+type CompressResult struct {
+	UncompressedSize int64
+	CompressedSize   int64
+}
+
 func Extract(archivePath string, destPath string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
 	return ExtractZip(archivePath, destPath, consumer)
 }
