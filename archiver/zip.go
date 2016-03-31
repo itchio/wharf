@@ -76,19 +76,22 @@ func ExtractZip(archive string, dir string, consumer *pwr.StateConsumer) (*Extra
 	}, nil
 }
 
-func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, consumer *pwr.StateConsumer) (*CompressResult, error) {
+func CompressZip(archiveWriter io.Writer, container *tlc.Container, pool sync.FilePool, consumer *pwr.StateConsumer) (*CompressResult, error) {
+	var err error
 	var uncompressedSize int64
 	var compressedSize int64
-
-	archiveWriter, err := os.Create(archive)
-	if err != nil {
-		return nil, err
-	}
 
 	archiveCounter := counter.NewWriter(archiveWriter)
 
 	zipWriter := zip.NewWriter(archiveCounter)
 	defer zipWriter.Close()
+	defer func() {
+		if zipWriter != nil {
+			if zErr := zipWriter.Close(); err == nil && zErr != nil {
+				err = zErr
+			}
+		}
+	}()
 
 	for _, dir := range container.Dirs {
 		fh := zip.FileHeader{
@@ -142,10 +145,12 @@ func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, c
 		entryWriter.Write([]byte(symlink.Dest))
 	}
 
-	err = zipWriter.Flush()
+	err = zipWriter.Close()
 	if err != nil {
 		return nil, err
 	}
+	zipWriter = nil
+
 	compressedSize = archiveCounter.Count()
 
 	return &CompressResult{
