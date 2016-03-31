@@ -1,6 +1,8 @@
 package pwr
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/itchio/wharf/counter"
@@ -145,4 +147,24 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 	}
 
 	return container, signature, nil
+}
+
+func CompareHashes(refHashes []sync.BlockHash, actualHashes []sync.BlockHash) error {
+	if len(actualHashes) != len(refHashes) {
+		return fmt.Errorf("Expected %d blocks, got %d.", len(refHashes), len(actualHashes))
+	}
+
+	for i, refHash := range refHashes {
+		hash := actualHashes[i]
+
+		if refHash.WeakHash != hash.WeakHash {
+			return fmt.Errorf("At block %d / %d, expected weak hash %x, got %x", i, len(refHashes), refHash.WeakHash, hash.WeakHash)
+		}
+
+		if !bytes.Equal(refHash.StrongHash, hash.StrongHash) {
+			return fmt.Errorf("At block %d / %d, expected strong hash %x, got %x", i, len(refHashes), refHash.WeakHash, hash.WeakHash)
+		}
+	}
+
+	return nil
 }

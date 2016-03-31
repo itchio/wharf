@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
@@ -84,12 +85,14 @@ func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, c
 		return nil, err
 	}
 
-	zipWriter := zip.NewWriter(archiveWriter)
+	archiveCounter := counter.NewWriter(archiveWriter)
+
+	zipWriter := zip.NewWriter(archiveCounter)
 	defer zipWriter.Close()
 
 	for _, dir := range container.Dirs {
 		fh := zip.FileHeader{
-			Name: dir.Path,
+			Name: dir.Path + "/",
 		}
 		fh.SetMode(os.FileMode(dir.Mode))
 
@@ -103,6 +106,7 @@ func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, c
 		fh := zip.FileHeader{
 			Name:               file.Path,
 			UncompressedSize64: uint64(file.Size),
+			Method:             zip.Deflate,
 		}
 		fh.SetMode(os.FileMode(file.Mode))
 
@@ -116,10 +120,12 @@ func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, c
 			return nil, err
 		}
 
-		_, err = io.Copy(entryWriter, entryReader)
+		copiedBytes, err := io.Copy(entryWriter, entryReader)
 		if err != nil {
 			return nil, err
 		}
+
+		uncompressedSize += copiedBytes
 	}
 
 	for _, symlink := range container.Symlinks {
@@ -135,6 +141,12 @@ func CompressZip(archive string, container *tlc.Container, pool sync.FilePool, c
 
 		entryWriter.Write([]byte(symlink.Dest))
 	}
+
+	err = zipWriter.Flush()
+	if err != nil {
+		return nil, err
+	}
+	compressedSize = archiveCounter.Count()
 
 	return &CompressResult{
 		UncompressedSize: uncompressedSize,

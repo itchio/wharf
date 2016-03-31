@@ -103,3 +103,8 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 	container := &Container{Size: TotalOffset, Dirs: Dirs, Symlinks: Symlinks, Files: Files}
 	return container, nil
 }
+
+func (container *Container) Stats() string {
+	return fmt.Sprintf("%d files, %d dirs, %d symlinks",
+		len(container.Files), len(container.Dirs), len(container.Symlinks))
+}
