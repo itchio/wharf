@@ -1,0 +1,104 @@
+package archiver
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/itchio/wharf/pwr"
+)
+
+const (
+	// ModeMask is or'd with files walked by butler
+	ModeMask = 0666
+
+	// LuckyMode is used when wiping in last-chance mode
+	LuckyMode = 0777
+
+	// DirMode is the default mode for directories created by butler
+	DirMode = LuckyMode
+)
+
+type ExtractResult struct {
+	Dirs     int
+	Files    int
+	Symlinks int
+}
+
+func Extract(archivePath string, destPath string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
+	return ExtractZip(archivePath, destPath, consumer)
+}
+
+func Mkdir(dstpath string) error {
+	dirstat, err := os.Lstat(dstpath)
+	if err != nil {
+		// main case - dir doesn't exist yet
+		err = os.MkdirAll(dstpath, DirMode)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if dirstat.IsDir() {
+		// is already a dir, good!
+	} else {
+		// is a file or symlink for example, turn into a dir
+		err = os.Remove(dstpath)
+		if err != nil {
+			return err
+		}
+		err = os.MkdirAll(dstpath, DirMode)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func Symlink(linkname string, filename string, consumer *pwr.StateConsumer) error {
+	consumer.Debugf("ln -s %s %s", linkname, filename)
+
+	err := os.RemoveAll(filename)
+	if err != nil {
+		return err
+	}
+
+	err = os.Symlink(linkname, filename)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func CopyFile(filename string, mode os.FileMode, fileReader io.Reader, consumer *pwr.StateConsumer) error {
+	consumer.Debugf("extract %s", filename)
+	err := os.RemoveAll(filename)
+	if err != nil {
+		return err
+	}
+
+	dirname := filepath.Dir(filename)
+	err = os.MkdirAll(dirname, LuckyMode)
+	if err != nil {
+		return err
+	}
+
+	writer, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+
+	_, err = io.Copy(writer, fileReader)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chmod(filename, mode)
+	if err != nil {
+		return err
+	}
+	return nil
+}
