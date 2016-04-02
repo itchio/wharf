@@ -30,8 +30,32 @@ type CompressResult struct {
 	CompressedSize   int64
 }
 
-func Extract(archivePath string, destPath string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
-	return ExtractZip(archivePath, destPath, consumer)
+func ExtractPath(archive string, destPath string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
+	var result *ExtractResult
+	var err error
+
+	stat, err := os.Lstat(archive)
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := os.Open(archive)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if cErr := file.Close(); cErr != nil && err == nil {
+			err = cErr
+		}
+	}()
+
+	result, err = Extract(file, stat.Size(), destPath, consumer)
+	return result, err
+}
+
+func Extract(readerAt io.ReaderAt, size int64, destPath string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
+	return ExtractZip(readerAt, size, destPath, consumer)
 }
 
 func Mkdir(dstpath string) error {

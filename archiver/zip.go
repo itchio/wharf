@@ -14,18 +14,17 @@ import (
 	"github.com/itchio/wharf/tlc"
 )
 
-func ExtractZip(archive string, dir string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
-	consumer.Infof("Extracting %s to %s", archive, dir)
+func ExtractZip(readerAt io.ReaderAt, size int64, dir string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
+	consumer.Infof("Extracting a zip archive to %s", dir)
 
 	dirCount := 0
 	regCount := 0
 	symlinkCount := 0
 
-	reader, err := zip.OpenReader(archive)
+	reader, err := zip.NewReader(readerAt, size)
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
 
 	for _, file := range reader.File {
 		err = func() error {
