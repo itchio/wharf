@@ -3,8 +3,8 @@ package pwr
 import (
 	"fmt"
 
+	"github.com/itchio/wharf/wdec"
 	"github.com/itchio/wharf/wire"
-	"gopkg.in/kothar/brotli-go.v0/dec"
 	"gopkg.in/kothar/brotli-go.v0/enc"
 )
 
@@ -57,7 +57,8 @@ func UncompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*w
 	case CompressionAlgorithm_UNCOMPRESSED:
 		return ctx, nil
 	case CompressionAlgorithm_BROTLI:
-		brotliReader := dec.NewBrotliReader(ctx.Reader())
+		// TODO: revert to canonical brotli-go fork
+		brotliReader := wdec.NewBrotliReader(ctx.Reader())
 		return wire.NewReadContext(brotliReader), nil
 	default:
 		return nil, fmt.Errorf("unknown compression algorithm: %v", compression.Algorithm)
