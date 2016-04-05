@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
@@ -24,6 +25,8 @@ func ComputeSignature(container *tlc.Container, basePath string, consumer *State
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("Just computed %d hashes\n", len(signature))
 
 	return signature, nil
 }
@@ -84,7 +87,7 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 		return nil, nil, err
 	}
 
-	sigWire, err := UncompressWire(rawSigWire, header.Compression)
+	sigWire, err := DecompressWire(rawSigWire, header.Compression)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,7 +134,7 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 			shortSize = 0
 		}
 
-		signature = append(signature, sync.BlockHash{
+		blockHash := sync.BlockHash{
 			FileIndex:  fileIndex,
 			BlockIndex: blockIndex,
 
@@ -139,30 +142,58 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 			StrongHash: hash.StrongHash,
 
 			ShortSize: shortSize,
-		})
+		}
+		signature = append(signature, blockHash)
+
+		if container.Files[fileIndex].Size == 0 {
+			log.Printf("Just wrote shortsize %d for a 0-length file", shortSize)
+		}
 
 		// still in same file
 		byteOffset += blockSize64
 		blockIndex++
 	}
 
+	log.Printf("Just read %d hashes\n", len(signature))
+
 	return container, signature, nil
 }
 
-func CompareHashes(refHashes []sync.BlockHash, actualHashes []sync.BlockHash) error {
+// CompareHashes returns an error if the signatures aren't exactly the same
+func CompareHashes(refHashes []sync.BlockHash, actualHashes []sync.BlockHash, refContainer *tlc.Container) error {
 	if len(actualHashes) != len(refHashes) {
 		return fmt.Errorf("Expected %d blocks, got %d.", len(refHashes), len(actualHashes))
+	}
+
+	location := func(i int) string {
+		var hash = refHashes[i]
+		var fileIndex = hash.FileIndex
+		var file = refContainer.Files[fileIndex]
+		byteOffset := (hash.BlockIndex * int64(BlockSize))
+		return fmt.Sprintf("At block %d / %d (%d/%d bytes into %s)", i, len(refHashes), byteOffset, file.Size, file.Path)
 	}
 
 	for i, refHash := range refHashes {
 		hash := actualHashes[i]
 
 		if refHash.WeakHash != hash.WeakHash {
-			return fmt.Errorf("At block %d / %d, expected weak hash %x, got %x", i, len(refHashes), refHash.WeakHash, hash.WeakHash)
+			return fmt.Errorf("%s, expected weak hash %x, got %x", location(i), refHash.WeakHash, hash.WeakHash)
 		}
 
 		if !bytes.Equal(refHash.StrongHash, hash.StrongHash) {
-			return fmt.Errorf("At block %d / %d, expected strong hash %x, got %x", i, len(refHashes), refHash.WeakHash, hash.WeakHash)
+			return fmt.Errorf("%s, expected strong hash %v, got %v", location(i), refHash.StrongHash, hash.StrongHash)
+		}
+
+		if refHash.ShortSize != hash.ShortSize {
+			return fmt.Errorf("%s, expected short size %d, got %d", location(i), refHash.ShortSize, hash.ShortSize)
+		}
+
+		if refHash.BlockIndex != hash.BlockIndex {
+			return fmt.Errorf("%s, expected block index %d, got %d", location(i), refHash.BlockIndex, hash.BlockIndex)
+		}
+
+		if refHash.FileIndex != hash.FileIndex {
+			return fmt.Errorf("%s, expected file index %d, got %d", location(i), refHash.FileIndex, hash.FileIndex)
 		}
 	}
 

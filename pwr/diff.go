@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
@@ -16,7 +17,7 @@ type DiffContext struct {
 	Consumer    *StateConsumer
 
 	SourceContainer *tlc.Container
-	SourcePath      string
+	FilePool        sync.FilePool
 
 	TargetContainer *tlc.Container
 	TargetSignature []sync.BlockHash
@@ -28,7 +29,7 @@ type DiffContext struct {
 // WritePatch outputs a pwr patch to patchWriter
 func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Writer) error {
 	if dctx.Compression == nil {
-		dctx.Compression = CompressionDefault()
+		return fmt.Errorf("No compression settings specified, bailing out")
 	}
 
 	// signature header
@@ -111,7 +112,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 		Type: SyncOp_HEY_YOU_DID_IT,
 	}
 
-	filePool := dctx.SourceContainer.NewFilePool(dctx.SourcePath)
+	filePool := dctx.FilePool
 	defer func() {
 		if fErr := filePool.Close(); fErr != nil && err == nil {
 			err = fErr
@@ -120,7 +121,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 
 	for fileIndex, f := range dctx.SourceContainer.Files {
 		dctx.Consumer.ProgressLabel(f.Path)
-		dctx.Consumer.Debug(f.Path)
+		dctx.Consumer.Debug(fmt.Sprintf("%s (%s)", f.Path, humanize.Bytes(uint64(f.Size))))
 		fileOffset = f.Offset
 
 		syncHeader.Reset()

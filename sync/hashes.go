@@ -33,9 +33,7 @@ func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, write
 
 	blockIndex := int64(0)
 
-	for s.Scan() {
-		block := s.Bytes()
-
+	hashBlock := func(block []byte) error {
 		weakHash, _, _ := βhash(block)
 		strongHash := ctx.uniqueHash(block)
 
@@ -55,6 +53,22 @@ func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, write
 			return err
 		}
 		blockIndex++
+		return nil
+	}
+
+	for s.Scan() {
+		err := hashBlock(s.Bytes())
+		if err != nil {
+			return err
+		}
+	}
+
+	// let empty files have a 0-length shortblock
+	if blockIndex == 0 {
+		err := hashBlock([]byte{})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -49,7 +49,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		return fmt.Errorf("while reading message: %s", err)
 	}
 
-	patchWire, err := UncompressWire(rawPatchWire, header.Compression)
+	patchWire, err := DecompressWire(rawPatchWire, header.Compression)
 	if err != nil {
 		return err
 	}

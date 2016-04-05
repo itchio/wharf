@@ -62,6 +62,7 @@ func (cfp *ContainerFilePool) GetPath(fileIndex int64) string {
 // returned reader if the file index is similar. The cache size is 1, so
 // reading in parallel from different files is not supported.
 func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
+
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
 			err := cfp.reader.Close()
@@ -72,10 +73,10 @@ func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) 
 		}
 
 		reader, err := os.Open(cfp.GetPath(fileIndex))
+
 		if err != nil {
 			return nil, err
 		}
-
 		cfp.reader = reader
 	}
 

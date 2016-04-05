@@ -2,6 +2,7 @@ package tlc
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -38,6 +39,7 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		if err != nil {
 			if os.IsPermission(err) {
 				// ...except permission errors, those are fine
+				log.Printf("Permission error: %s\n", err.Error())
 			} else {
 				return err
 			}

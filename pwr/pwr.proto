@@ -41,8 +41,9 @@ message BlockHash {
 // Compression
 
 enum CompressionAlgorithm {
-  UNCOMPRESSED = 0;
+  NONE = 0;
   BROTLI = 1;
+  GZIP = 2;
 }
 
 message CompressionSettings {
