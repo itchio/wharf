@@ -84,18 +84,22 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 	header := &SignatureHeader{}
 	err = rawSigWire.ReadMessage(header)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("While reading signature header: %s", err.Error())
 	}
 
 	sigWire, err := DecompressWire(rawSigWire, header.Compression)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("While decompressing signature wire: %s", err.Error())
 	}
 
 	container := &tlc.Container{}
 	err = sigWire.ReadMessage(container)
 	if err != nil {
-		return nil, nil, err
+		if err == io.EOF {
+			// ok
+		} else {
+			return nil, nil, fmt.Errorf("While reading signature container: %s", err.Error())
+		}
 	}
 
 	var signature []sync.BlockHash
