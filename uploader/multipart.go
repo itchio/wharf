@@ -123,6 +123,7 @@ func doReq(req *http.Request, done chan bool, errs chan error) {
 	res, err := client.Do(req)
 	if err != nil {
 		errs <- err
+		return
 	}
 
 	if res.StatusCode/100 != 2 {
