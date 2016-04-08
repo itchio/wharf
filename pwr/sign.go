@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
