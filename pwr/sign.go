@@ -26,8 +26,6 @@ func ComputeSignature(container *tlc.Container, basePath string, consumer *State
 		return nil, err
 	}
 
-	log.Printf("Just computed %d hashes\n", len(signature))
-
 	return signature, nil
 }
 
@@ -149,16 +147,10 @@ func ReadSignature(signatureReader io.Reader) (*tlc.Container, []sync.BlockHash,
 		}
 		signature = append(signature, blockHash)
 
-		if container.Files[fileIndex].Size == 0 {
-			log.Printf("Just wrote shortsize %d for a 0-length file", shortSize)
-		}
-
 		// still in same file
 		byteOffset += blockSize64
 		blockIndex++
 	}
-
-	log.Printf("Just read %d hashes\n", len(signature))
 
 	return container, signature, nil
 }
