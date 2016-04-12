@@ -1,7 +1,6 @@
 # wharf
 
 ![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)
-[![Build Status](https://ci.itch.ovh/buildStatus/icon?job=wharf)](https://ci.itch.ovh/job/wharf)
 
 wharf is a protocol for incrementally transferring software builds over
 the network using minimal time/bandwidth.
