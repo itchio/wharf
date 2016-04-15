@@ -4,32 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+
+	"github.com/itchio/wharf/splitfunc"
 )
-
-func (ctx *Context) splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	// still have more data than blockSize ? return a block-full
-	if len(data) >= ctx.blockSize {
-		return ctx.blockSize, data[:ctx.blockSize], nil
-	}
-
-	if atEOF {
-		// at eof, but still have data: return all of it (must be <= ctx.blockSize)
-		if len(data) > 0 {
-			return len(data), data, nil
-		}
-
-		// at eof, no data left, signal EOF ourselves.
-		return 0, nil, io.EOF
-	}
-
-	// wait for more data
-	return 0, nil, nil
-}
 
 // CreateSignature calculate the signature of target.
 func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, writeHash SignatureWriter) error {
 	s := bufio.NewScanner(fileReader)
-	s.Split(ctx.splitFunc)
+	s.Split(splitfunc.New(ctx.blockSize))
 
 	blockIndex := int64(0)
 
