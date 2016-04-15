@@ -13,7 +13,7 @@ func New(blockSize int) bufio.SplitFunc {
 		}
 
 		if atEOF {
-			// at eof, but still have data: return all of it (must be <= ctx.blockSize)
+			// at eof, but still have data: return all of it (must be <= blockSize)
 			if len(data) > 0 {
 				return len(data), data, nil
 			}
