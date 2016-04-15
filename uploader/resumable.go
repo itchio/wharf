@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/dustin/go-humanize"
+	"github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/splitfunc"
@@ -18,6 +19,8 @@ var seed = 0
 
 // ResumableUpload keeps track of an upload and reports back on its progress
 type ResumableUpload struct {
+	c *itchio.Client
+
 	TotalBytes    int64
 	UploadedBytes int64
 	OnProgress    func()
@@ -73,6 +76,7 @@ func NewResumableUpload(uploadURL string, done chan bool, errs chan error, consu
 	ru.id = seed
 	seed++
 	ru.consumer = consumer
+	ru.c = itchio.ClientWithKey("x")
 
 	pipeR, pipeW := io.Pipe()
 
@@ -143,7 +147,7 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 
 		req.Header.Set("content-range", contentRange)
 
-		res, err := http.DefaultClient.Do(req)
+		res, err := ru.c.Do(req)
 		if err != nil {
 			return err
 		}
