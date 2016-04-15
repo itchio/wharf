@@ -11,6 +11,7 @@ import (
 // CreateSignature calculate the signature of target.
 func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, writeHash SignatureWriter) error {
 	s := bufio.NewScanner(fileReader)
+	s.Buffer(make([]byte, ctx.blockSize), 0)
 	s.Split(splitfunc.New(ctx.blockSize))
 
 	blockIndex := int64(0)
@@ -43,6 +44,11 @@ func (ctx *Context) CreateSignature(fileIndex int64, fileReader io.Reader, write
 		if err != nil {
 			return err
 		}
+	}
+
+	err := s.Err()
+	if err != nil {
+		return err
 	}
 
 	// let empty files have a 0-length shortblock
