@@ -34,15 +34,22 @@ type ApplyContext struct {
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
 
+	SignatureFilePath string
+
 	TouchedFiles int
 	NoopFiles    int
 	DeletedFiles int
+	StageSize    int64
 }
 
 // ApplyPatch reads a patch, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	actualOutputPath := actx.OutputPath
 	if actx.InPlace {
+		// applying in-place is a bit tricky: we can't overwrite files in the
+		// target directory (old) while we're reading the patch otherwise
+		// we might be copying new bytes instead of old bytes into later files
+		// so, we rebuild 'touched' files in a staging area
 		stagePath := actualOutputPath + "-stage"
 		defer os.RemoveAll(stagePath)
 		actx.OutputPath = stagePath
@@ -81,35 +88,15 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
-	sourceFileMap := make(map[string]bool)
 	var deletedFiles []string
-	if actx.InPlace {
-		for _, f := range actx.SourceContainer.Files {
-			sourceFileMap[f.Path] = true
-		}
-		for _, s := range actx.SourceContainer.Symlinks {
-			sourceFileMap[s.Path] = true
-		}
-		for _, d := range actx.SourceContainer.Dirs {
-			sourceFileMap[d.Path] = true
-		}
 
-		for _, f := range actx.TargetContainer.Files {
-			if !sourceFileMap[f.Path] {
-				deletedFiles = append(deletedFiles, f.Path)
-			}
-		}
-		for _, s := range actx.TargetContainer.Symlinks {
-			if !sourceFileMap[s.Path] {
-				deletedFiles = append(deletedFiles, s.Path)
-			}
-		}
-		for _, d := range actx.TargetContainer.Dirs {
-			if !sourceFileMap[d.Path] {
-				deletedFiles = append(deletedFiles, d.Path)
-			}
-		}
+	if actx.InPlace {
+		// when working in-place, we have to keep track of which files were deleted
+		// from one version to the other, so that we too may delete them in the end.
+		deletedFiles = detectRemovedFiles(actx.SourceContainer, actx.TargetContainer)
 	} else {
+		// when rebuilding in a fresh directory, there's no need to worry about
+		// deleted files, because they won't even exist in the first place.
 		err = sourceContainer.Prepare(actx.OutputPath)
 		if err != nil {
 			return err
@@ -123,6 +110,11 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	fileOffset := int64(0)
 	sourceBytes := sourceContainer.Size
 	onSourceWrite := func(count int64) {
+		// we measure patching progress as the number of total bytes written
+		// to the source container. no-ops (untouched files) count too, so the
+		// progress bar may jump ahead a bit at times, but that's a good surprise
+		// measuring progress by bytes of the patch read would just be a different
+		// kind of inaccuracy (due to decompression buffers, etc.)
 		actx.Consumer.Progress(float64(fileOffset+count) / float64(sourceBytes))
 	}
 
@@ -131,6 +123,10 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		actx.Consumer.Debug(f.Path)
 		fileOffset = f.Offset
 
+		// each series of patch operations is preceded by a SyncHeader giving
+		// us the file index - it's a super basic measure to make sure the
+		// patch file we're reading and the patching algorithm somewhat agree
+		// on what's happening.
 		sh.Reset()
 		err := patchWire.ReadMessage(sh)
 		if err != nil {
@@ -154,19 +150,20 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 		if noop {
 			actx.NoopFiles++
-		}
-
-		err = <-errc
-		if err != nil {
-			return fmt.Errorf("while reading patch: %s", err.Error())
-		}
-
-		if bytesWritten >= 0 {
+		} else {
 			actx.TouchedFiles++
 			if bytesWritten != f.Size {
 				return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
 			}
 		}
+
+		// using errc to signal the end of processing, rather than having a separate
+		// done channel. not sure if there's any upside to either
+		err = <-errc
+		if err != nil {
+			return fmt.Errorf("while reading patch: %s", err.Error())
+		}
+
 	}
 
 	err = targetPool.Close()
@@ -177,7 +174,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	if actx.InPlace {
 		actx.DeletedFiles = len(deletedFiles)
 
-		err := mergeFolders(actualOutputPath, actx.OutputPath)
+		actx.StageSize, err = mergeFolders(actualOutputPath, actx.OutputPath)
 		if err != nil {
 			return fmt.Errorf("in mergeFolders: %s", err.Error())
 		}
@@ -192,14 +189,47 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	return nil
 }
 
-func mergeFolders(outPath string, stagePath string) error {
+func detectRemovedFiles(sourceContainer *tlc.Container, targetContainer *tlc.Container) []string {
+	// first make a map of all the file paths in source, for later lookup
+	sourceFileMap := make(map[string]bool)
+	for _, f := range sourceContainer.Files {
+		sourceFileMap[f.Path] = true
+	}
+	for _, s := range sourceContainer.Symlinks {
+		sourceFileMap[s.Path] = true
+	}
+	for _, d := range sourceContainer.Dirs {
+		sourceFileMap[d.Path] = true
+	}
+
+	// then walk through target container paths, if they're not in source, they were deleted
+	var deletedFiles []string
+	for _, f := range targetContainer.Files {
+		if !sourceFileMap[f.Path] {
+			deletedFiles = append(deletedFiles, f.Path)
+		}
+	}
+	for _, s := range targetContainer.Symlinks {
+		if !sourceFileMap[s.Path] {
+			deletedFiles = append(deletedFiles, s.Path)
+		}
+	}
+	for _, d := range targetContainer.Dirs {
+		if !sourceFileMap[d.Path] {
+			deletedFiles = append(deletedFiles, d.Path)
+		}
+	}
+	return deletedFiles
+}
+
+func mergeFolders(outPath string, stagePath string) (int64, error) {
 	var filter tlc.FilterFunc = func(fi os.FileInfo) bool {
 		return true
 	}
 
 	stageContainer, err := tlc.Walk(stagePath, filter)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	move := func(path string) error {
@@ -229,18 +259,18 @@ func mergeFolders(outPath string, stagePath string) error {
 	for _, f := range stageContainer.Files {
 		err := move(f.Path)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	for _, s := range stageContainer.Symlinks {
 		err := move(s.Path)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
-	return nil
+	return stageContainer.Size, nil
 }
 
 type byDecreasingLength []string
@@ -286,6 +316,9 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 		if first {
 			first = false
 
+			// if the first operation is a blockrange that copies an
+			// entire file from target into a file from source that has
+			// the same name and size, then it's a no-op!
 			if op.Type == sync.OpBlockRange && op.BlockIndex == 0 {
 				outputSize := outputPool.GetSize(fileIndex)
 				numOutputBlocks := numBlocks(outputSize)
@@ -300,7 +333,6 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 
 			if noop {
 				go func() {
-					written = -1
 					errs <- nil
 				}()
 			} else {
@@ -358,16 +390,8 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 
 func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 	defer close(ops)
-	totalOps := 0
-	opsCount := []int{0, 0, 0}
-	opsBytes := []int64{0, 0, 0}
 
 	rop := &SyncOp{}
-	sendOp := func(op sync.Operation) {
-		totalOps++
-		opsCount[op.Type]++
-		ops <- op
-	}
 
 	readingOps := true
 	for readingOps {
@@ -378,30 +402,33 @@ func readOps(rc *wire.ReadContext, ops chan sync.Operation, errc chan error) {
 			return
 		}
 
-		var op = sync.Operation{}
-
 		switch rop.Type {
 		case SyncOp_BLOCK_RANGE:
-			sendOp(sync.Operation{
+			ops <- sync.Operation{
 				Type:       sync.OpBlockRange,
 				FileIndex:  rop.FileIndex,
 				BlockIndex: rop.BlockIndex,
 				BlockSpan:  rop.BlockSpan,
-			})
-			opsBytes[op.Type] += int64(BlockSize) * op.BlockSpan
+			}
 
 		case SyncOp_DATA:
-			sendOp(sync.Operation{
+			ops <- sync.Operation{
 				Type: sync.OpData,
 				Data: rop.Data,
-			})
-			opsBytes[op.Type] += int64(len(rop.Data))
+			}
 
 		default:
 			switch rop.Type {
 			case SyncOp_HEY_YOU_DID_IT:
+				// series of patching operations always end with a SyncOp_HEY_YOU_DID_IT.
+				// this helps detect truncated patch files, and, again, basic boundary
+				// safety measures are cheap and reassuring.
 				readingOps = false
 			default:
+				// if you get this, then you're probably implementing an extension
+				// to the wharf patch format in which case, I'd love to get in touch
+				// with you to know why & discuss adding it to the spec so other
+				// people can share it: amos@itch.io
 				fmt.Printf("unrecognized rop type %d\n", rop.Type)
 				errc <- ErrMalformedPatch
 				return
