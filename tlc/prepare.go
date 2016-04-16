@@ -73,7 +73,12 @@ func (c *Container) prepareFile(basePath string, fileEntry *File) error {
 
 func (c *Container) prepareSymlink(basePath string, link *Symlink) error {
 	fullPath := filepath.Join(basePath, link.Path)
-	err := os.Symlink(link.Dest, fullPath)
+	err := os.RemoveAll(fullPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.Symlink(link.Dest, fullPath)
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/sync"
@@ -33,10 +35,19 @@ type ApplyContext struct {
 	SourceContainer *tlc.Container
 
 	TouchedFiles int
+	NoopFiles    int
+	DeletedFiles int
 }
 
 // ApplyPatch reads a patch, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
+	actualOutputPath := actx.OutputPath
+	if actx.InPlace {
+		stagePath := actualOutputPath + "-stage"
+		defer os.RemoveAll(stagePath)
+		actx.OutputPath = stagePath
+	}
+
 	rawPatchWire := wire.NewReadContext(patchReader)
 	err := rawPatchWire.ExpectMagic(PatchMagic)
 	if err != nil {
@@ -70,9 +81,39 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
-	err = sourceContainer.Prepare(actx.OutputPath)
-	if err != nil {
-		return err
+	sourceFileMap := make(map[string]bool)
+	deletedFiles := make([]string, 0)
+	if actx.InPlace {
+		for _, f := range actx.SourceContainer.Files {
+			sourceFileMap[f.Path] = true
+		}
+		for _, s := range actx.SourceContainer.Symlinks {
+			sourceFileMap[s.Path] = true
+		}
+		for _, d := range actx.SourceContainer.Dirs {
+			sourceFileMap[d.Path] = true
+		}
+
+		for _, f := range actx.TargetContainer.Files {
+			if !sourceFileMap[f.Path] {
+				deletedFiles = append(deletedFiles, f.Path)
+			}
+		}
+		for _, s := range actx.TargetContainer.Symlinks {
+			if !sourceFileMap[s.Path] {
+				deletedFiles = append(deletedFiles, s.Path)
+			}
+		}
+		for _, d := range actx.TargetContainer.Dirs {
+			if !sourceFileMap[d.Path] {
+				deletedFiles = append(deletedFiles, d.Path)
+			}
+		}
+	} else {
+		err = sourceContainer.Prepare(actx.OutputPath)
+		if err != nil {
+			return err
+		}
 	}
 	outputPool := sourceContainer.NewFilePool(actx.OutputPath)
 
@@ -106,9 +147,13 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 		go readOps(patchWire, ops, errc)
 
-		bytesWritten, err := lazilyPatchFile(sctx, targetPool, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
+		bytesWritten, noop, err := lazilyPatchFile(sctx, targetPool, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
 		if err != nil {
 			return err
+		}
+
+		if noop {
+			actx.NoopFiles++
 		}
 
 		err = <-errc
@@ -124,24 +169,119 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		}
 	}
 
+	if actx.InPlace {
+		actx.DeletedFiles = len(deletedFiles)
+
+		err := mergeFolders(actualOutputPath, actx.OutputPath)
+		if err != nil {
+			return fmt.Errorf("in mergeFolders: %s", err.Error())
+		}
+
+		err = deleteFiles(actualOutputPath, deletedFiles)
+		if err != nil {
+			return fmt.Errorf("in deleteFiles: %s", err.Error())
+		}
+		actx.OutputPath = actualOutputPath
+	}
+
+	return nil
+}
+
+func mergeFolders(outPath string, stagePath string) error {
+	var filter tlc.FilterFunc = func(fi os.FileInfo) bool {
+		return true
+	}
+
+	stageContainer, err := tlc.Walk(stagePath, filter)
+	if err != nil {
+		return err
+	}
+
+	move := func(path string) error {
+		p := filepath.FromSlash(path)
+		op := filepath.Join(outPath, p)
+		sp := filepath.Join(stagePath, p)
+
+		err := os.Remove(op)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+		}
+
+		err = os.MkdirAll(filepath.Dir(op), os.FileMode(0755))
+		if err != nil {
+			return err
+		}
+
+		err = os.Rename(sp, op)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	for _, f := range stageContainer.Files {
+		err := move(f.Path)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, s := range stageContainer.Symlinks {
+		err := move(s.Path)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type ByDecreasingLength []string
+
+func (s ByDecreasingLength) Len() int {
+	return len(s)
+}
+
+func (s ByDecreasingLength) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s ByDecreasingLength) Less(i, j int) bool {
+	return len(s[j]) < len(s[i])
+}
+
+func deleteFiles(outPath string, deletedFiles []string) error {
+	sort.Sort(ByDecreasingLength(deletedFiles))
+
+	for _, f := range deletedFiles {
+		p := filepath.FromSlash(f)
+		op := filepath.Join(outPath, p)
+		err := os.Remove(op)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
 func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outputPool *tlc.ContainerFilePool,
-	fileIndex int64, onSourceWrite counter.CountCallback, ops chan sync.Operation, inplace bool) (written int64, err error) {
+	fileIndex int64, onSourceWrite counter.CountCallback, ops chan sync.Operation, inplace bool) (written int64, noop bool, err error) {
 
 	var realops chan sync.Operation
 
 	errs := make(chan error)
 	first := true
-	noop := false
 
 	for op := range ops {
 		if first {
 			first = false
 
 			if op.Type == sync.OpBlockRange && op.BlockIndex == 0 {
-				// fmt.Printf("blockspan %d\n", op.BlockSpan)
 				outputSize := outputPool.GetSize(fileIndex)
 				numOutputBlocks := numBlocks(outputSize)
 
@@ -149,14 +289,7 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 					op.BlockSpan == numOutputBlocks &&
 					outputSize == targetPool.GetSize(op.FileIndex) &&
 					outputPool.GetRelativePath(fileIndex) == targetPool.GetRelativePath(op.FileIndex) {
-					// fmt.Printf("no-op!\n")
 					noop = true
-				} else {
-					// fmt.Printf("%d vs %d, %d vs %d, %s vs %s (outputsize = %d)\n",
-					// 	op.BlockSpan, numOutputBlocks,
-					// 	outputSize, targetPool.GetSize(op.FileIndex),
-					// 	outputPool.GetRelativePath(fileIndex), targetPool.GetRelativePath(op.FileIndex),
-					// 	outputSize)
 				}
 			}
 
@@ -169,10 +302,15 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 				realops = make(chan sync.Operation)
 
 				outputPath := outputPool.GetPath(fileIndex)
+				err = os.MkdirAll(filepath.Dir(outputPath), os.FileMode(0755))
+				if err != nil {
+					return 0, false, err
+				}
+
 				var writer io.WriteCloser
 				writer, err = os.Create(outputPath)
 				if err != nil {
-					return 0, err
+					return 0, false, err
 				}
 
 				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
@@ -207,7 +345,7 @@ func lazilyPatchFile(sctx *sync.Context, targetPool *tlc.ContainerFilePool, outp
 
 	err = <-errs
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	return
