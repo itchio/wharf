@@ -190,7 +190,11 @@ type SinglePool struct {
 	reader io.ReadSeeker
 }
 
-func (sp *SinglePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
+func (sp *SinglePool) GetReader(fileIndex int64) (io.Reader, error) {
+	return sp.GetReadSeeker(fileIndex)
+}
+
+func (sp *SinglePool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
 	return sp.reader, nil
 }
 
