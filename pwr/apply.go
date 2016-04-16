@@ -82,7 +82,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	targetPool := targetContainer.NewFilePool(actx.TargetPath)
 
 	sourceFileMap := make(map[string]bool)
-	deletedFiles := make([]string, 0)
+	var deletedFiles []string
 	if actx.InPlace {
 		for _, f := range actx.SourceContainer.Files {
 			sourceFileMap[f.Path] = true
@@ -169,6 +169,11 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		}
 	}
 
+	err = targetPool.Close()
+	if err != nil {
+		return err
+	}
+
 	if actx.InPlace {
 		actx.DeletedFiles = len(deletedFiles)
 
@@ -238,22 +243,22 @@ func mergeFolders(outPath string, stagePath string) error {
 	return nil
 }
 
-type ByDecreasingLength []string
+type byDecreasingLength []string
 
-func (s ByDecreasingLength) Len() int {
+func (s byDecreasingLength) Len() int {
 	return len(s)
 }
 
-func (s ByDecreasingLength) Swap(i, j int) {
+func (s byDecreasingLength) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (s ByDecreasingLength) Less(i, j int) bool {
+func (s byDecreasingLength) Less(i, j int) bool {
 	return len(s[j]) < len(s[i])
 }
 
 func deleteFiles(outPath string, deletedFiles []string) error {
-	sort.Sort(ByDecreasingLength(deletedFiles))
+	sort.Sort(byDecreasingLength(deletedFiles))
 
 	for _, f := range deletedFiles {
 		p := filepath.FromSlash(f)
