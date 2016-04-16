@@ -2,11 +2,17 @@ package wire
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
 
 	"github.com/golang/protobuf/proto"
+)
+
+var (
+	// ErrFormat is returned when we find a magic number that isn't the one we expected
+	ErrFormat = errors.New("wrong magic (invalid input file)")
 )
 
 // ReadContext holds state of a wharf wire format reader
@@ -46,7 +52,7 @@ func (r *ReadContext) ExpectMagic(magic int32) error {
 	}
 
 	if magic != readMagic {
-		return fmt.Errorf("expected magic %x, but read %x", magic, readMagic)
+		return ErrFormat
 	}
 
 	return nil

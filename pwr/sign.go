@@ -14,10 +14,10 @@ import (
 // ComputeSignature compute the signature of all blocks of all files in a given container,
 // by reading them from disk, relative to `basePath`, and notifying `consumer` of its
 // progress
-func ComputeSignature(container *tlc.Container, basePath string, consumer *StateConsumer) ([]sync.BlockHash, error) {
+func ComputeSignature(container *tlc.Container, pool sync.FilePool, consumer *StateConsumer) ([]sync.BlockHash, error) {
 	var signature []sync.BlockHash
 
-	err := ComputeSignatureToWriter(container, basePath, consumer, func(bl sync.BlockHash) error {
+	err := ComputeSignatureToWriter(container, pool, consumer, func(bl sync.BlockHash) error {
 		signature = append(signature, bl)
 		return nil
 	})
@@ -30,10 +30,9 @@ func ComputeSignature(container *tlc.Container, basePath string, consumer *State
 
 // ComputeSignatureToWriter is a variant of ComputeSignature that writes hashes
 // to a callback
-func ComputeSignatureToWriter(container *tlc.Container, basePath string, consumer *StateConsumer, sigWriter sync.SignatureWriter) error {
+func ComputeSignatureToWriter(container *tlc.Container, pool sync.FilePool, consumer *StateConsumer, sigWriter sync.SignatureWriter) error {
 	var err error
 
-	pool := container.NewFilePool(basePath)
 	defer func() {
 		if pErr := pool.Close(); pErr != nil && err == nil {
 			err = pErr

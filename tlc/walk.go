@@ -1,9 +1,12 @@
 package tlc
 
 import (
+	"archive/zip"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -28,9 +31,9 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 		}
 	}
 
-	Dirs := make([]*Dir, 0, 0)
-	Symlinks := make([]*Symlink, 0, 0)
-	Files := make([]*File, 0, 0)
+	var Dirs []*Dir
+	var Symlinks []*Symlink
+	var Files []*File
 
 	TotalOffset := int64(0)
 
@@ -106,6 +109,88 @@ func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 	return container, nil
 }
 
+// WalkZip walks all file in a zip archive and returns a container
+func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
+	if filter == nil {
+		// default filter is a passthrough
+		filter = func(fileInfo os.FileInfo) bool {
+			return true
+		}
+	}
+
+	var Dirs []*Dir
+	var Symlinks []*Symlink
+	var Files []*File
+
+	dirMap := make(map[string]os.FileMode)
+
+	TotalOffset := int64(0)
+
+	for _, file := range zr.File {
+		// don't trust zip files to have directory entries for
+		// all directories. it's a miracle anything works.
+		dir := path.Dir(file.Name)
+		if dir != "" && dirMap[dir] == 0 {
+			dirMap[dir] = os.FileMode(0777)
+		}
+
+		info := file.FileInfo()
+		mode := info.Mode() | ModeMask
+
+		if info.IsDir() {
+			dirMap[dir] = mode
+		} else if mode&os.ModeSymlink > 0 {
+			var linkname []byte
+
+			err := func() error {
+				reader, err := file.Open()
+				if err != nil {
+					return err
+				}
+				defer reader.Close()
+
+				linkname, err = ioutil.ReadAll(reader)
+				if err != nil {
+					return err
+				}
+				return nil
+			}()
+
+			if err != nil {
+				return nil, err
+			}
+
+			Symlinks = append(Symlinks, &Symlink{
+				Path: file.Name,
+				Dest: string(linkname),
+				Mode: uint32(mode),
+			})
+		} else {
+			Size := info.Size()
+
+			Files = append(Files, &File{
+				Path:   file.Name,
+				Mode:   uint32(mode),
+				Size:   Size,
+				Offset: TotalOffset,
+			})
+
+			TotalOffset += Size
+		}
+	}
+
+	for dirPath, dirMode := range dirMap {
+		Dirs = append(Dirs, &Dir{
+			Path: dirPath,
+			Mode: uint32(dirMode),
+		})
+	}
+
+	container := &Container{Size: TotalOffset, Dirs: Dirs, Symlinks: Symlinks, Files: Files}
+	return container, nil
+}
+
+// Stats return a human-readable summary of the contents of a container
 func (container *Container) Stats() string {
 	return fmt.Sprintf("%d files, %d dirs, %d symlinks",
 		len(container.Files), len(container.Dirs), len(container.Symlinks))
