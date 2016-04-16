@@ -82,6 +82,7 @@ func (cfp *ContainerFilePool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, err
 			return nil, err
 		}
 		cfp.reader = reader
+		cfp.fileIndex = fileIndex
 	}
 
 	return cfp.reader, nil
