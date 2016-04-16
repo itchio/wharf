@@ -52,7 +52,7 @@ func ComputeSignatureToWriter(container *tlc.Container, pool sync.FilePool, cons
 		consumer.ProgressLabel(f.Path)
 		fileOffset = f.Offset
 
-		var reader io.ReadSeeker
+		var reader io.Reader
 		reader, err = pool.GetReader(int64(fileIndex))
 		if err != nil {
 			return err

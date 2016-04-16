@@ -131,7 +131,7 @@ func (dctx *DiffContext) WritePatch(patchWriter io.Writer, signatureWriter io.Wr
 			return err
 		}
 
-		var sourceReader io.ReadSeeker
+		var sourceReader io.Reader
 		sourceReader, err = filePool.GetReader(int64(fileIndex))
 		if err != nil {
 			return err

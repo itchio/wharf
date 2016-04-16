@@ -44,7 +44,7 @@ func (ctx *Context) ApplyPatch(output io.Writer, pool FilePool, ops chan Operati
 	for op := range ops {
 		switch op.Type {
 		case OpBlockRange:
-			target, err := pool.GetReader(op.FileIndex)
+			target, err := pool.GetReadSeeker(op.FileIndex)
 			if err != nil {
 				return err
 			}

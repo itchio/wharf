@@ -58,7 +58,8 @@ type Context struct {
 
 // A FilePool gives read+seek access to an ordered list of files, by index
 type FilePool interface {
-	GetReader(fileIndex int64) (io.ReadSeeker, error)
+	GetReader(fileIndex int64) (io.Reader, error)
+	GetReadSeeker(fileIndex int64) (io.ReadSeeker, error)
 	Close() error
 }
 

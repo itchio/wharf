@@ -57,12 +57,16 @@ func (cfp *ContainerFilePool) GetPath(fileIndex int64) string {
 	return fullPath
 }
 
-// GetReader returns an io.ReadSeeker for the file at index fileIndex
+// GetReader returns an io.Reader for the file at index fileIndex
 // Successive calls to `GetReader` will attempt to re-use the last
 // returned reader if the file index is similar. The cache size is 1, so
 // reading in parallel from different files is not supported.
-func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.ReadSeeker, error) {
+func (cfp *ContainerFilePool) GetReader(fileIndex int64) (io.Reader, error) {
+	return cfp.GetReadSeeker(fileIndex)
+}
 
+// GetReadSeeker is like GetReader but the returned object allows seeking
+func (cfp *ContainerFilePool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
 			err := cfp.reader.Close()
