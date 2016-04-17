@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 
+	"github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pwr"
 )
@@ -118,9 +119,9 @@ func NewMultipartUpload(uploadURL string, uploadParams map[string]string, fileNa
 }
 
 func doReq(req *http.Request, done chan bool, errs chan error) {
-	client := &http.Client{}
+	c := itchio.ClientWithKey("x")
 
-	res, err := client.Do(req)
+	res, err := c.Do(req)
 	if err != nil {
 		errs <- err
 		return
