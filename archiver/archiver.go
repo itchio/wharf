@@ -16,7 +16,7 @@ const (
 	LuckyMode = 0777
 
 	// DirMode is the default mode for directories created by butler
-	DirMode = LuckyMode
+	DirMode = 0755
 )
 
 type ExtractResult struct {

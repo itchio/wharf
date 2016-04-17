@@ -131,7 +131,7 @@ func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
 		// all directories. it's a miracle anything works.
 		dir := path.Dir(file.Name)
 		if dir != "" && dirMap[dir] == 0 {
-			dirMap[dir] = os.FileMode(0777)
+			dirMap[dir] = os.FileMode(0755)
 		}
 
 		info := file.FileInfo()
