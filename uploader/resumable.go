@@ -97,16 +97,7 @@ func NewResumableUpload(uploadURL string, done chan bool, errs chan error, consu
 	}
 	ru.writeCounter = counter.NewWriterCallback(onWrite, bufferedWriter)
 
-	onRead := func(count int64) {
-		ru.Debugf("onread %d", count)
-		ru.UploadedBytes = count
-		if ru.OnProgress != nil {
-			ru.OnProgress()
-		}
-	}
-	readCounter := counter.NewReaderCallback(onRead, pipeR)
-
-	go ru.uploadChunks(readCounter, done, errs)
+	go ru.uploadChunks(pipeR, done, errs)
 
 	return ru, nil
 }
@@ -131,7 +122,14 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 		ru.Debugf("received %d bytes", buflen)
 
 		body := bytes.NewReader(buf)
-		req, err := http.NewRequest("PUT", ru.uploadURL, body)
+		countingReader := counter.NewReaderCallback(func(count int64) {
+			ru.UploadedBytes = offset + count
+			if ru.OnProgress != nil {
+				ru.OnProgress()
+			}
+		}, body)
+
+		req, err := http.NewRequest("PUT", ru.uploadURL, countingReader)
 		if err != nil {
 			return err
 		}

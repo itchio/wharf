@@ -22,13 +22,15 @@ const (
 // When a directory is ignored by a FilterFunc, all its children are, too!
 type FilterFunc func(fileInfo os.FileInfo) bool
 
+// DefaultFilter is a passthrough that filters out no files at all
+var DefaultFilter FilterFunc = func(fileInfo os.FileInfo) bool {
+	return true
+}
+
 // Walk goes through every file in a director
 func Walk(BasePath string, filter FilterFunc) (*Container, error) {
 	if filter == nil {
-		// default filter is a passthrough
-		filter = func(fileInfo os.FileInfo) bool {
-			return true
-		}
+		filter = DefaultFilter
 	}
 
 	var Dirs []*Dir
