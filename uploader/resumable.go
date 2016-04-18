@@ -107,13 +107,16 @@ func (ru *ResumableUpload) Debugf(f string, args ...interface{}) {
 }
 
 const minBlockSize = 256 * 1024 // 256KB
+// FIXME: until we get smarter about how much data to upload, this
+// helps high-RTT connections hurt less
+const fixedBlockSize = minBlockSize * 4
 
 func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs chan error) {
 	var offset int64 = 0
 
 	s := bufio.NewScanner(reader)
-	s.Buffer(make([]byte, minBlockSize), 0)
-	s.Split(splitfunc.New(minBlockSize))
+	s.Buffer(make([]byte, fixedBlockSize), 0)
+	s.Split(splitfunc.New(fixedBlockSize))
 
 	sentEnd := false
 
