@@ -107,20 +107,11 @@ func (ru *ResumableUpload) Debugf(f string, args ...interface{}) {
 }
 
 const minBlockSize = 256 * 1024 // 256KB
-// FIXME: until we get smarter about how much data to upload, this
-// helps high-RTT connections hurt less
-const fixedBlockSize = minBlockSize * 4
 
 func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs chan error) {
 	var offset int64 = 0
 
-	s := bufio.NewScanner(reader)
-	s.Buffer(make([]byte, fixedBlockSize), 0)
-	s.Split(splitfunc.New(fixedBlockSize))
-
-	sentEnd := false
-
-	sendBytes := func(buf []byte) error {
+	sendBytes := func(buf []byte, isEnd bool) error {
 		buflen := int64(len(buf))
 		ru.Debugf("received %d bytes", buflen)
 
@@ -141,9 +132,8 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 		end := start + buflen - 1
 		contentRange := fmt.Sprintf("bytes %d-%d/*", offset, end)
 
-		if buflen < minBlockSize {
+		if isEnd {
 			contentRange = fmt.Sprintf("bytes %d-%d/%d", offset, end, offset+buflen)
-			sentEnd = true
 		}
 
 		req.Header.Set("content-range", contentRange)
@@ -165,11 +155,26 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 		return nil
 	}
 
+	splitSize := 4 * minBlockSize
+
+	s := bufio.NewScanner(reader)
+	s.Buffer(make([]byte, splitSize), 0)
+	s.Split(splitfunc.New(splitSize))
+
+	buf1 := make([]byte, 0, splitSize)
+	buf2 := make([]byte, 0, splitSize)
+
 	for s.Scan() {
-		err := sendBytes(s.Bytes())
-		if err != nil {
-			errs <- err
-			return
+		buf2 = append(buf2[:0], buf1...)
+		buf1 = append(buf1[:0], s.Bytes()...)
+
+		if len(buf2) > 0 {
+			ru.Debugf("sending %d block", len(buf2))
+			err := sendBytes(buf2, false)
+			if err != nil {
+				errs <- err
+				return
+			}
 		}
 	}
 
@@ -180,13 +185,11 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 		return
 	}
 
-	if !sentEnd {
-		ru.Debugf("sending empty packet b/c we're doing a round number! %d", offset)
-		err := sendBytes([]byte{})
-		if err != nil {
-			errs <- err
-			return
-		}
+	ru.Debugf("sending last block, %d bytes", len(buf1))
+	err = sendBytes(buf1, true)
+	if err != nil {
+		errs <- err
+		return
 	}
 
 	done <- true
