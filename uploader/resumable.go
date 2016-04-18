@@ -181,8 +181,12 @@ func (ru *ResumableUpload) uploadChunks(reader io.Reader, done chan bool, errs c
 	}
 
 	if !sentEnd {
-		ru.Debugf("sending empty packet b/c we're doing a round number", offset)
-		sendBytes([]byte{})
+		ru.Debugf("sending empty packet b/c we're doing a round number! %d", offset)
+		err := sendBytes([]byte{})
+		if err != nil {
+			errs <- err
+			return
+		}
 	}
 
 	done <- true
