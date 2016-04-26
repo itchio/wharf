@@ -1,6 +1,7 @@
 package pwr
 
 import (
+	"archive/zip"
 	"bytes"
 	"errors"
 	"fmt"
@@ -287,7 +288,26 @@ func (actx *ApplyContext) patchThings(patchWire *wire.ReadContext, hashPaths cha
 		targetContainer := actx.TargetContainer
 		targetPool := actx.TargetPool
 		if targetPool == nil {
-			targetPool = targetContainer.NewFilePool(actx.TargetPath)
+			targetInfo, err := os.Lstat(actx.TargetPath)
+			if err != nil {
+				return err
+			}
+
+			if targetInfo.IsDir() {
+				targetPool = targetContainer.NewFilePool(actx.TargetPath)
+			} else {
+				fr, err := os.Open(actx.TargetPath)
+				if err != nil {
+					return err
+				}
+
+				zr, err := zip.NewReader(fr, targetInfo.Size())
+				if err != nil {
+					return err
+				}
+
+				targetPool = targetContainer.NewZipPool(zr)
+			}
 		}
 
 		fileOffset := int64(0)
