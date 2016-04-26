@@ -17,6 +17,7 @@ message SyncOp {
   enum Type {
     BLOCK_RANGE = 0;
     DATA = 1;
+    REMOTE_DATA = 2;
     HEY_YOU_DID_IT = 2049; // <3 @GranPC & @tomasduda
   }
   Type type = 1;
@@ -25,6 +26,8 @@ message SyncOp {
   int64 blockIndex = 3;
   int64 blockSpan = 4;
   bytes data = 5;
+  int64 remoteSize = 6;
+  string remotePath = 7;
 }
 
 // Signature file format
