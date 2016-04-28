@@ -70,6 +70,11 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		// we might be copying new bytes instead of old bytes into later files
 		// so, we rebuild 'touched' files in a staging area
 		stagePath := actualOutputPath + "-stage"
+		err := os.MkdirAll(stagePath, os.FileMode(0755))
+		if err != nil {
+			return err
+		}
+
 		defer os.RemoveAll(stagePath)
 		actx.OutputPath = stagePath
 	}
