@@ -22,7 +22,6 @@ func Test_Walk(t *testing.T) {
 	must(t, err)
 
 	dirs := []string{
-		".",
 		"foo",
 		"foo/dir_a",
 		"foo/dir_b",
