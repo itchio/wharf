@@ -10,7 +10,7 @@ import (
 type brotliDecompressor struct{}
 
 func (bc *brotliDecompressor) Apply(reader io.Reader) (io.Reader, error) {
-	br := brotli.NewReader(reader)
+	br := brotli.NewReader(reader, nil)
 	return br, nil
 }
 
