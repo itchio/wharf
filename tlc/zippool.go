@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/sync"
 )
 
@@ -80,7 +81,7 @@ func (cfp *ContainerZipPool) GetReader(fileIndex int64) (io.Reader, error) {
 		if cfp.reader != nil {
 			err := cfp.reader.Close()
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, 1)
 			}
 			cfp.reader = nil
 			cfp.fileIndex = -1
@@ -88,13 +89,13 @@ func (cfp *ContainerZipPool) GetReader(fileIndex int64) (io.Reader, error) {
 
 		f := cfp.fmap[cfp.GetRelativePath(fileIndex)]
 		if f == nil {
-			return nil, os.ErrNotExist
+			return nil, errors.Wrap(os.ErrNotExist, 1)
 		}
 
 		reader, err := f.Open()
 
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, 1)
 		}
 		cfp.reader = reader
 		cfp.fileIndex = fileIndex
@@ -109,7 +110,7 @@ func (cfp *ContainerZipPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, erro
 		if cfp.readSeeker != nil {
 			err := cfp.readSeeker.Close()
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, 1)
 			}
 			cfp.readSeeker = nil
 			cfp.seekFileIndex = -1
@@ -118,18 +119,18 @@ func (cfp *ContainerZipPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, erro
 		key := cfp.GetRelativePath(fileIndex)
 		f := cfp.fmap[key]
 		if f == nil {
-			return nil, os.ErrNotExist
+			return nil, errors.Wrap(os.ErrNotExist, 1)
 		}
 
 		reader, err := f.Open()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, 1)
 		}
 		defer reader.Close()
 
 		buf, err := ioutil.ReadAll(reader)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, 1)
 		}
 
 		cfp.readSeeker = &closableBuf{bytes.NewReader(buf)}
@@ -144,7 +145,7 @@ func (cfp *ContainerZipPool) Close() error {
 	if cfp.reader != nil {
 		err := cfp.reader.Close()
 		if err != nil {
-			return err
+			return errors.Wrap(err, 1)
 		}
 
 		cfp.reader = nil
@@ -154,7 +155,7 @@ func (cfp *ContainerZipPool) Close() error {
 	if cfp.readSeeker != nil {
 		err := cfp.readSeeker.Close()
 		if err != nil {
-			return err
+			return errors.Wrap(err, 1)
 		}
 
 		cfp.readSeeker = nil
