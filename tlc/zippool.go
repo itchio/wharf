@@ -3,6 +3,7 @@ package tlc
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -38,7 +39,7 @@ func (c *Container) NewZipPool(zipReader *zip.Reader) *ContainerZipPool {
 		} else if (info.Mode() & os.ModeSymlink) > 0 {
 			// muffin ether
 		} else {
-			key := filepath.Clean(filepath.ToSlash(f.Name))
+			key := filepath.ToSlash(filepath.Clean(f.Name))
 			fmap[key] = f
 		}
 	}
@@ -87,9 +88,17 @@ func (cfp *ContainerZipPool) GetReader(fileIndex int64) (io.Reader, error) {
 			cfp.fileIndex = -1
 		}
 
-		f := cfp.fmap[cfp.GetRelativePath(fileIndex)]
+		relPath := cfp.GetRelativePath(fileIndex)
+		f := cfp.fmap[relPath]
 		if f == nil {
-			return nil, errors.Wrap(os.ErrNotExist, 1)
+			if os.Getenv("VERBOSE_ZIP_POOL") != "" {
+				fmt.Printf("\nzip contents:\n")
+				for k := range cfp.fmap {
+					fmt.Printf("\n- %s", k)
+				}
+				fmt.Println()
+			}
+			return nil, errors.WrapPrefix(os.ErrNotExist, relPath, 1)
 		}
 
 		reader, err := f.Open()
