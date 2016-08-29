@@ -200,7 +200,7 @@ func (ru *ResumableUpload) trySendBytes(buf []byte, offset int64, isLast bool) e
 
 	res, err := ru.c.HTTPClient.Do(req)
 	if err != nil {
-		ru.Debugf("while uploading %d-%d, with reader %d: \n%s", start, end, countingReader.Id, err.Error())
+		ru.Debugf("while uploading %d-%d: \n%s", start, end, err.Error())
 		return &netError{err, GcsUnknown}
 	}
 
