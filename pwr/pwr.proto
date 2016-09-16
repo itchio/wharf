@@ -52,3 +52,18 @@ message CompressionSettings {
   CompressionAlgorithm algorithm = 1;
   int32 quality = 2;
 }
+
+// Manifest file format
+
+message ManifestHeader {
+  CompressionSettings compression = 1;
+  HashAlgorithm algorithm = 2;
+}
+
+enum HashAlgorithm {
+  SHAKE128_32 = 0;
+}
+
+message ManifestBlockHash {
+  bytes hash = 1;
+}
