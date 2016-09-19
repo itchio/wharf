@@ -124,7 +124,11 @@ func Test_Walk(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+	if testSymlinks {
+		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+	} else {
+		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", info.Stats(), "should report correct stats")
+	}
 
 	totalSize := int64(0)
 	for _, regular := range regulars {
