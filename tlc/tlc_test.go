@@ -57,8 +57,10 @@ func Test_WalkZip(t *testing.T) {
 	must(t, err)
 	defer zipWriter.Close()
 
-	_, err = archiver.CompressZip(zipWriter, info, info.NewFilePool(tmpPath), &pwr.StateConsumer{})
+	fp := info.NewFilePool(tmpPath)
+	_, err = archiver.CompressZip(zipWriter, info, fp, &pwr.StateConsumer{})
 	must(t, err)
+	defer fp.Close()
 
 	zipSize, err := zipWriter.Seek(0, os.SEEK_CUR)
 	must(t, err)
