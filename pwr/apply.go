@@ -1,7 +1,6 @@
 package pwr
 
 import (
-	"archive/zip"
 	"bytes"
 	"fmt"
 	"io"
@@ -176,70 +175,6 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	return nil
 }
 
-// behold, a good example of resisting the urge to optimize
-// prematurely: while *computing* hashes from files is done using 4
-// workers, comparing the hashes is done completely linearly,
-// by reading the entire signature first, and advancing 1 block
-// at most, whereas we could 1) stream read 2) parallel check 3)
-// skip untouched files. but it's so far from mattering, that code
-// will probably remain untouched for years.
-func (actx *ApplyContext) checkHashes(ss signatureSet) error {
-	reader, err := os.Open(actx.SignatureFilePath)
-	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-	defer reader.Close()
-
-	container, allSigs, err := ReadSignature(reader)
-	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-
-	skip := int64(-1)
-	check := int64(-1)
-	var checkSig signature
-	checkOffset := 0
-
-	for _, bh := range allSigs {
-		if bh.FileIndex == skip {
-			continue
-		}
-
-		if bh.FileIndex != check {
-			if check > 0 && checkOffset != len(checkSig) {
-				return fmt.Errorf("In %s, expected %d blocks, got %d", container.Files[check].Path, checkOffset, len(checkSig))
-			}
-
-			checkOffset = 0
-			checkSig = ss[container.Files[bh.FileIndex].Path]
-			if checkSig != nil {
-				check = bh.FileIndex
-			} else {
-				skip = bh.FileIndex
-			}
-		}
-
-		if bh.FileIndex == check {
-			ah := checkSig[checkOffset]
-			if ah.WeakHash != bh.WeakHash {
-				return fmt.Errorf("%s: weak hash mismatch @ block %d (%s into the file)",
-					container.Files[bh.FileIndex].Path,
-					checkOffset,
-					humanize.IBytes(uint64(BlockSize*checkOffset)))
-			}
-			if !bytes.Equal(ah.StrongHash, bh.StrongHash) {
-				return fmt.Errorf("%s: strong hash mismatch @ block %d (%s into the file)",
-					container.Files[bh.FileIndex].Path,
-					checkOffset,
-					humanize.IBytes(uint64(BlockSize*checkOffset)))
-			}
-			checkOffset++
-		}
-	}
-
-	return nil
-}
-
 func (actx *ApplyContext) hashThings(ss signatureSet, hashPaths chan string, doneOut chan bool, errOut chan error) {
 	c := make(chan signatureResult)
 	done := make(chan struct{})
@@ -300,6 +235,65 @@ func (actx *ApplyContext) hashThings(ss signatureSet, hashPaths chan string, don
 	doneOut <- true
 }
 
+// computing hashes is done with several workers, in parallel,
+// but checking is done linearly
+func (actx *ApplyContext) checkHashes(ss signatureSet) error {
+	reader, err := os.Open(actx.SignatureFilePath)
+	if err != nil {
+		return errors.Wrap(err, 1)
+	}
+	defer reader.Close()
+
+	container, allSigs, err := ReadSignature(reader)
+	if err != nil {
+		return errors.Wrap(err, 1)
+	}
+
+	skip := int64(-1)
+	check := int64(-1)
+	var checkSig signature
+	checkOffset := 0
+
+	for _, bh := range allSigs {
+		if bh.FileIndex == skip {
+			continue
+		}
+
+		if bh.FileIndex != check {
+			if check > 0 && checkOffset != len(checkSig) {
+				return fmt.Errorf("In %s, expected %d blocks, got %d", container.Files[check].Path, checkOffset, len(checkSig))
+			}
+
+			checkOffset = 0
+			checkSig = ss[container.Files[bh.FileIndex].Path]
+			if checkSig != nil {
+				check = bh.FileIndex
+			} else {
+				skip = bh.FileIndex
+			}
+		}
+
+		if bh.FileIndex == check {
+			ah := checkSig[checkOffset]
+			if ah.WeakHash != bh.WeakHash {
+				return fmt.Errorf("%s: weak hash mismatch @ block %d (%s into the file)",
+					container.Files[bh.FileIndex].Path,
+					checkOffset,
+					humanize.IBytes(uint64(BlockSize*checkOffset)))
+			}
+			if !bytes.Equal(ah.StrongHash, bh.StrongHash) {
+				return fmt.Errorf("%s: strong hash mismatch @ block %d (%s into the file)",
+					container.Files[bh.FileIndex].Path,
+					checkOffset,
+					humanize.IBytes(uint64(BlockSize*checkOffset)))
+			}
+			checkOffset++
+		}
+	}
+
+	return nil
+}
+
 func (actx *ApplyContext) patchThings(patchWire *wire.ReadContext, hashPaths chan string, done chan bool, errs chan error) {
 	err := func() error {
 		sourceContainer := actx.SourceContainer
@@ -311,29 +305,13 @@ func (actx *ApplyContext) patchThings(patchWire *wire.ReadContext, hashPaths cha
 		targetContainer := actx.TargetContainer
 		targetPool := actx.TargetPool
 		if targetPool == nil {
-			if actx.TargetPath == "/dev/null" {
-				targetPool = targetContainer.NewFilePool(actx.TargetPath)
-			} else {
-				targetInfo, err := os.Lstat(actx.TargetPath)
-				if err != nil {
-					return errors.Wrap(err, 1)
-				}
-
-				if targetInfo.IsDir() {
-					targetPool = targetContainer.NewFilePool(actx.TargetPath)
-				} else {
-					fr, err := os.Open(actx.TargetPath)
-					if err != nil {
-						return errors.Wrap(err, 1)
-					}
-
-					zr, err := zip.NewReader(fr, targetInfo.Size())
-					if err != nil {
-						return errors.Wrap(err, 1)
-					}
-
-					targetPool = targetContainer.NewZipPool(zr)
-				}
+			if actx.TargetPath == "" {
+				return fmt.Errorf("apply: need either TargetPool or TargetPath")
+			}
+			var cErr error
+			targetPool, cErr = targetContainer.NewPool(actx.TargetPath)
+			if cErr != nil {
+				return cErr
 			}
 		}
 
