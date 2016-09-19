@@ -16,6 +16,10 @@ type NullPool struct {
 var _ sync.Pool = (*NullPool)(nil)
 var _ sync.WritablePool = (*NullPool)(nil)
 
+func New(container *tlc.Container) *NullPool {
+	return &NullPool{container}
+}
+
 func (fp *NullPool) GetReader(fileIndex int64) (io.Reader, error) {
 	return fp.GetReadSeeker(fileIndex)
 }
