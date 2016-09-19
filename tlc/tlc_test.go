@@ -1,15 +1,85 @@
 package tlc_test
 
 import (
+	"archive/zip"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/tlc"
 	"github.com/stretchr/testify/assert"
 )
+
+func Test_NonDirWalk(t *testing.T) {
+	tmpPath, err := ioutil.TempDir("", "nondirwalk")
+	must(t, err)
+	defer func() {
+		err := os.RemoveAll(tmpPath)
+		must(t, err)
+	}()
+
+	f, err := os.Create("foobar")
+	must(t, err)
+	defer func() {
+		err := os.RemoveAll(tmpPath)
+		must(t, err)
+	}()
+	must(t, f.Close())
+
+	_, err = tlc.Walk(f.Name(), nil)
+	assert.NotNil(t, err, "should refuse to walk non-directory")
+}
+
+func Test_WalkZip(t *testing.T) {
+	tmpPath := mktestdir(t, "walkzip")
+	defer func() {
+		err := os.RemoveAll(tmpPath)
+		must(t, err)
+	}()
+
+	tmpPath2, err := ioutil.TempDir("", "walkzip2")
+	must(t, err)
+	defer func() {
+		err := os.RemoveAll(tmpPath2)
+		must(t, err)
+	}()
+
+	info, err := tlc.Walk(tmpPath, nil)
+	must(t, err)
+
+	zipPath := path.Join(tmpPath2, "container.zip")
+	zipWriter, err := os.Create(zipPath)
+	must(t, err)
+	defer zipWriter.Close()
+
+	_, err = archiver.CompressZip(zipWriter, info, info.NewFilePool(tmpPath), &pwr.StateConsumer{})
+	must(t, err)
+
+	zipSize, err := zipWriter.Seek(0, os.SEEK_CUR)
+	must(t, err)
+
+	zipReader, err := zip.NewReader(zipWriter, zipSize)
+	must(t, err)
+
+	zipInfo, err := tlc.WalkZip(zipReader, nil)
+	must(t, err)
+
+	assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+
+	totalSize := int64(0)
+	for _, regular := range regulars {
+		totalSize += int64(regular.Size)
+	}
+	assert.Equal(t, totalSize, info.Size, "should report correct size")
+
+	must(t, info.EnsureEqual(zipInfo))
+	must(t, zipInfo.EnsureEqual(info))
+}
 
 func Test_Walk(t *testing.T) {
 	tmpPath := mktestdir(t, "walk")
@@ -47,6 +117,14 @@ func Test_Walk(t *testing.T) {
 			assert.Equal(t, symlink.Oldname, info.Symlinks[i].Dest, "symlink should point to correct path")
 		}
 	}
+
+	assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+
+	totalSize := int64(0)
+	for _, regular := range regulars {
+		totalSize += int64(regular.Size)
+	}
+	assert.Equal(t, totalSize, info.Size, "should report correct size")
 }
 
 func Test_Prepare(t *testing.T) {
@@ -60,6 +138,10 @@ func Test_Prepare(t *testing.T) {
 	must(t, err)
 
 	tmpPath2, err := ioutil.TempDir(".", "tmp_prepare")
+	defer func() {
+		err := os.RemoveAll(tmpPath2)
+		must(t, err)
+	}()
 	must(t, err)
 
 	err = info.Prepare(tmpPath2)
