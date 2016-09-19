@@ -1,24 +1,19 @@
-package tlc
+package pools
 
 import (
 	"archive/zip"
-	"io"
 	"os"
 
 	"github.com/go-errors/errors"
+	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/wharf/pools/zippool"
 	"github.com/itchio/wharf/sync"
+	"github.com/itchio/wharf/tlc"
 )
 
-// ReadCloseSeeker unifies io.Reader, io.Seeker, and io.Closer
-type ReadCloseSeeker interface {
-	io.Reader
-	io.Seeker
-	io.Closer
-}
-
-func (c *Container) NewPool(basePath string) (sync.Pool, error) {
+func New(c *tlc.Container, basePath string) (sync.Pool, error) {
 	if basePath == "/dev/null" {
-		return c.NewFilePool(basePath), nil
+		return fspool.New(c, basePath), nil
 	}
 
 	targetInfo, err := os.Lstat(basePath)
@@ -27,7 +22,7 @@ func (c *Container) NewPool(basePath string) (sync.Pool, error) {
 	}
 
 	if targetInfo.IsDir() {
-		return c.NewFilePool(basePath), nil
+		return fspool.New(c, basePath), nil
 	} else {
 		fr, err := os.Open(basePath)
 		if err != nil {
@@ -39,6 +34,6 @@ func (c *Container) NewPool(basePath string) (sync.Pool, error) {
 			return nil, errors.Wrap(err, 1)
 		}
 
-		return c.NewZipPool(zr), nil
+		return zippool.New(c, zr), nil
 	}
 }

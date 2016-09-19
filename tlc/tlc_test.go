@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/tlc"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,7 @@ func Test_WalkZip(t *testing.T) {
 		must(t, err)
 	}()
 
-	info, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
 
 	zipPath := path.Join(tmpPath2, "container.zip")
@@ -58,8 +59,8 @@ func Test_WalkZip(t *testing.T) {
 	must(t, err)
 	defer zipWriter.Close()
 
-	fp := info.NewFilePool(tmpPath)
-	_, err = archiver.CompressZip(zipWriter, info, fp, &pwr.StateConsumer{})
+	fp := fspool.New(container, tmpPath)
+	_, err = archiver.CompressZip(zipWriter, container, fp, &pwr.StateConsumer{})
 	must(t, err)
 	defer fp.Close()
 
@@ -69,23 +70,22 @@ func Test_WalkZip(t *testing.T) {
 	zipReader, err := zip.NewReader(zipWriter, zipSize)
 	must(t, err)
 
-	zipInfo, err := tlc.WalkZip(zipReader, nil)
+	zipContainer, err := tlc.WalkZip(zipReader, nil)
 	must(t, err)
 
 	if testSymlinks {
-		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", container.Stats(), "should report correct stats")
 	} else {
-		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", info.Stats(), "should report correct stats")
+		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", container.Stats(), "should report correct stats")
 	}
 
 	totalSize := int64(0)
 	for _, regular := range regulars {
 		totalSize += int64(regular.Size)
 	}
-	assert.Equal(t, totalSize, info.Size, "should report correct size")
+	assert.Equal(t, totalSize, container.Size, "should report correct size")
 
-	must(t, info.EnsureEqual(zipInfo))
-	must(t, zipInfo.EnsureEqual(info))
+	must(t, container.EnsureEqual(zipContainer))
 }
 
 func Test_Walk(t *testing.T) {
@@ -95,7 +95,7 @@ func Test_Walk(t *testing.T) {
 		must(t, err)
 	}()
 
-	info, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
 
 	dirs := []string{
@@ -104,7 +104,7 @@ func Test_Walk(t *testing.T) {
 		"foo/dir_b",
 	}
 	for i, dir := range dirs {
-		assert.Equal(t, dir, info.Dirs[i].Path, "dirs should be all listed")
+		assert.Equal(t, dir, container.Dirs[i].Path, "dirs should be all listed")
 	}
 
 	files := []string{
@@ -115,27 +115,27 @@ func Test_Walk(t *testing.T) {
 		"foo/file_z",
 	}
 	for i, file := range files {
-		assert.Equal(t, file, info.Files[i].Path, "files should be all listed")
+		assert.Equal(t, file, container.Files[i].Path, "files should be all listed")
 	}
 
 	if testSymlinks {
 		for i, symlink := range symlinks {
-			assert.Equal(t, symlink.Newname, info.Symlinks[i].Path, "symlink should be at correct path")
-			assert.Equal(t, symlink.Oldname, info.Symlinks[i].Dest, "symlink should point to correct path")
+			assert.Equal(t, symlink.Newname, container.Symlinks[i].Path, "symlink should be at correct path")
+			assert.Equal(t, symlink.Oldname, container.Symlinks[i].Dest, "symlink should point to correct path")
 		}
 	}
 
 	if testSymlinks {
-		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", container.Stats(), "should report correct stats")
 	} else {
-		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", info.Stats(), "should report correct stats")
+		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", container.Stats(), "should report correct stats")
 	}
 
 	totalSize := int64(0)
 	for _, regular := range regulars {
 		totalSize += int64(regular.Size)
 	}
-	assert.Equal(t, totalSize, info.Size, "should report correct size")
+	assert.Equal(t, totalSize, container.Size, "should report correct size")
 }
 
 func Test_Prepare(t *testing.T) {
@@ -145,7 +145,7 @@ func Test_Prepare(t *testing.T) {
 		must(t, err)
 	}()
 
-	info, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
 
 	tmpPath2, err := ioutil.TempDir("", "prepare")
@@ -155,12 +155,13 @@ func Test_Prepare(t *testing.T) {
 	}()
 	must(t, err)
 
-	err = info.Prepare(tmpPath2)
+	err = container.Prepare(tmpPath2)
 	must(t, err)
 
-	info2, err := tlc.Walk(tmpPath2, nil)
+	container2, err := tlc.Walk(tmpPath2, nil)
 	must(t, err)
-	assert.Equal(t, info, info2, "must recreate same structure")
+
+	must(t, container.EnsureEqual(container2))
 }
 
 // Support code

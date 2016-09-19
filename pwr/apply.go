@@ -12,6 +12,8 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
+	"github.com/itchio/wharf/pools"
+	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/sync"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -299,7 +301,7 @@ func (actx *ApplyContext) patchThings(patchWire *wire.ReadContext, hashPaths cha
 		sourceContainer := actx.SourceContainer
 		outputPool := actx.OutputPool
 		if outputPool == nil {
-			outputPool = sourceContainer.NewFilePool(actx.OutputPath)
+			outputPool = fspool.New(sourceContainer, actx.OutputPath)
 		}
 
 		targetContainer := actx.TargetContainer
@@ -309,7 +311,7 @@ func (actx *ApplyContext) patchThings(patchWire *wire.ReadContext, hashPaths cha
 				return fmt.Errorf("apply: need either TargetPool or TargetPath")
 			}
 			var cErr error
-			targetPool, cErr = targetContainer.NewPool(actx.TargetPath)
+			targetPool, cErr = pools.New(targetContainer, actx.TargetPath)
 			if cErr != nil {
 				return cErr
 			}
