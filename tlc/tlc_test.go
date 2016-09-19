@@ -69,7 +69,11 @@ func Test_WalkZip(t *testing.T) {
 	zipInfo, err := tlc.WalkZip(zipReader, nil)
 	must(t, err)
 
-	assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+	if testSymlinks {
+		assert.Equal(t, "5 files, 3 dirs, 2 symlinks", info.Stats(), "should report correct stats")
+	} else {
+		assert.Equal(t, "5 files, 3 dirs, 0 symlinks", info.Stats(), "should report correct stats")
+	}
 
 	totalSize := int64(0)
 	for _, regular := range regulars {
@@ -137,7 +141,7 @@ func Test_Prepare(t *testing.T) {
 	info, err := tlc.Walk(tmpPath, nil)
 	must(t, err)
 
-	tmpPath2, err := ioutil.TempDir(".", "tmp_prepare")
+	tmpPath2, err := ioutil.TempDir("", "prepare")
 	defer func() {
 		err := os.RemoveAll(tmpPath2)
 		must(t, err)
@@ -188,7 +192,7 @@ var symlinks = []symlinkEntry{
 var testSymlinks = runtime.GOOS != "windows"
 
 func mktestdir(t *testing.T, name string) string {
-	tmpPath, err := ioutil.TempDir(".", "tmp_"+name)
+	tmpPath, err := ioutil.TempDir("", "tmp_"+name)
 	must(t, err)
 
 	must(t, os.RemoveAll(tmpPath))
