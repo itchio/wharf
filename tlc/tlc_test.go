@@ -23,7 +23,8 @@ func Test_NonDirWalk(t *testing.T) {
 		must(t, err)
 	}()
 
-	f, err := os.Create("foobar")
+	foobarPath := path.Join(tmpPath, "foobar")
+	f, err := os.Create(foobarPath)
 	must(t, err)
 	defer func() {
 		err := os.RemoveAll(tmpPath)
