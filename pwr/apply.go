@@ -35,9 +35,9 @@ type ApplyContext struct {
 	InPlace    bool
 
 	TargetContainer *tlc.Container
-	TargetPool      sync.FilePool
+	TargetPool      sync.Pool
 	SourceContainer *tlc.Container
-	OutputPool      sync.WritableFilePool
+	OutputPool      sync.WritablePool
 
 	SignatureFilePath string
 
@@ -510,7 +510,7 @@ func deleteFiles(outPath string, deletedFiles []string) error {
 	return nil
 }
 
-func lazilyPatchFile(sctx *sync.Context, targetContainer *tlc.Container, targetPool sync.FilePool, outputContainer *tlc.Container, outputPool sync.WritableFilePool,
+func lazilyPatchFile(sctx *sync.Context, targetContainer *tlc.Container, targetPool sync.Pool, outputContainer *tlc.Container, outputPool sync.WritablePool,
 	fileIndex int64, onSourceWrite counter.CountCallback, ops chan sync.Operation, inplace bool) (written int64, noop bool, err error) {
 
 	var realops chan sync.Operation

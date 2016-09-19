@@ -16,7 +16,7 @@ type ReadCloseSeeker interface {
 	io.Closer
 }
 
-func (c *Container) NewPool(basePath string) (sync.FilePool, error) {
+func (c *Container) NewPool(basePath string) (sync.Pool, error) {
 	if basePath == "/dev/null" {
 		return c.NewFilePool(basePath), nil
 	}

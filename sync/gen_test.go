@@ -166,11 +166,11 @@ func Test_GenData(t *testing.T) {
 		}()
 
 		result := new(bytes.Buffer)
-		filePool := &SinglePool{reader: targetBuffer}
+		pool := &SinglePool{reader: targetBuffer}
 
 		_, err = targetBuffer.Seek(0, 0)
 		must(t, err)
-		err = rs.ApplyPatch(result, filePool, opsOut)
+		err = rs.ApplyPatch(result, pool, opsOut)
 		if err != nil {
 			t.Errorf("Failed to apply delta: %s", err)
 		}
@@ -189,6 +189,8 @@ func Test_GenData(t *testing.T) {
 type SinglePool struct {
 	reader io.ReadSeeker
 }
+
+var _ sync.Pool = (*SinglePool)(nil)
 
 func (sp *SinglePool) GetReader(fileIndex int64) (io.Reader, error) {
 	return sp.GetReadSeeker(fileIndex)

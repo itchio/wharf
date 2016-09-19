@@ -9,7 +9,7 @@ import (
 	"github.com/itchio/wharf/sync"
 )
 
-// ContainerFilePool implements the sync.FilePool interface based on a Container
+// ContainerFilePool implements the sync.Pool interface based on a Container
 type ContainerFilePool struct {
 	container *Container
 	basePath  string
@@ -18,8 +18,8 @@ type ContainerFilePool struct {
 	reader    ReadCloseSeeker
 }
 
-var _ sync.FilePool = (*ContainerFilePool)(nil)
-var _ sync.WritableFilePool = (*ContainerFilePool)(nil)
+var _ sync.Pool = (*ContainerFilePool)(nil)
+var _ sync.WritablePool = (*ContainerFilePool)(nil)
 
 // NewFilePool creates a new ContainerFilePool from the given Container
 // metadata and a base path on-disk to allow reading from files.

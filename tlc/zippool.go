@@ -25,7 +25,7 @@ type ContainerZipPool struct {
 	readSeeker    ReadCloseSeeker
 }
 
-var _ sync.FilePool = (*ContainerZipPool)(nil)
+var _ sync.Pool = (*ContainerZipPool)(nil)
 
 // NewZipPool creates a new ContainerZipPool from the given Container
 // metadata and a base path on-disk to allow reading from files.
