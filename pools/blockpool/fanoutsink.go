@@ -32,12 +32,20 @@ func (fos *FanOutSink) Clone() Sink {
 		sinkClones[i] = sink.Clone()
 	}
 
-	return NewFanOutSink(sinkClones)
+	return &FanOutSink{
+		sinks:  sinkClones,
+		stores: make(chan storeOp),
+	}
 }
 
 // NewFanOutSink returns a newly initialized FanOutSink
-func NewFanOutSink(sinks []Sink) *FanOutSink {
+func NewFanOutSink(templateSink Sink, numSinks int) *FanOutSink {
 	stores := make(chan storeOp)
+	sinks := make([]Sink, numSinks)
+
+	for i := 0; i < numSinks; i++ {
+		sinks[i] = templateSink.Clone()
+	}
 
 	return &FanOutSink{
 		sinks:  sinks,

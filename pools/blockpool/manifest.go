@@ -12,7 +12,7 @@ import (
 
 // WriteManifest writes container info and block addresses in wharf's manifest format
 // Does not close manifestWriter.
-func WriteManifest(manifestWriter io.Writer, compression *pwr.CompressionSettings, container *tlc.Container, blockHashes BlockHashMap) error {
+func WriteManifest(manifestWriter io.Writer, compression *pwr.CompressionSettings, container *tlc.Container, blockHashes *BlockHashMap) error {
 	rawWire := wire.NewWriteContext(manifestWriter)
 	err := rawWire.WriteMagic(pwr.ManifestMagic)
 	if err != nil {
@@ -77,9 +77,9 @@ func WriteManifest(manifestWriter io.Writer, compression *pwr.CompressionSetting
 
 // ReadManifest reads container info and block addresses from a wharf manifest file.
 // Does not close manifestReader.
-func ReadManifest(manifestReader io.Reader) (*tlc.Container, BlockHashMap, error) {
+func ReadManifest(manifestReader io.Reader) (*tlc.Container, *BlockHashMap, error) {
 	container := &tlc.Container{}
-	blockHashes := make(BlockHashMap)
+	blockHashes := NewBlockHashMap()
 
 	rawWire := wire.NewReadContext(manifestReader)
 	err := rawWire.ExpectMagic(pwr.ManifestMagic)
