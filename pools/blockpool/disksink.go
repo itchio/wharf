@@ -26,6 +26,17 @@ type DiskSink struct {
 	shake   sha3.ShakeHash
 }
 
+// Clone returns a copy of this disk sink, suitable for fan-out
+func (ds *DiskSink) Clone() Sink {
+	return &DiskSink{
+		BasePath: ds.BasePath,
+
+		Container:      ds.Container,
+		BlockAddresses: ds.BlockAddresses,
+		BlockHashes:    ds.BlockHashes,
+	}
+}
+
 var _ Sink = (*DiskSink)(nil)
 
 // Store should not be called concurrently, as it will result in corrupted hashes
