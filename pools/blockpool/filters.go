@@ -40,14 +40,9 @@ func (bf BlockFilter) Stats(container *tlc.Container) string {
 	usedSize := int64(0)
 
 	for i, f := range container.Files {
-		numBlocks := (f.Size + BigBlockSize - 1) / BigBlockSize
+		numBlocks := ComputeNumBlocks(f.Size)
 		for j := int64(0); j < numBlocks; j++ {
-			totalBlocks++
-			size := BigBlockSize
-			alignedSize := (j + 1) * BigBlockSize
-			if alignedSize > f.Size {
-				size = f.Size % BigBlockSize
-			}
+			size := ComputeBlockSize(f.Size, j)
 
 			totalBlocks++
 			totalSize += size
