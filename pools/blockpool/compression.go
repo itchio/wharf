@@ -28,12 +28,12 @@ func (cs *CompressingSink) Store(loc BlockLocation, data []byte) error {
 		cs.compressedBuf = make([]byte, BigBlockSize*2)
 	}
 
-	_, err := zstd.CompressLevel(cs.compressedBuf, data, 9)
+	compressedData, err := zstd.CompressLevel(cs.compressedBuf, data, 9)
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
 
-	return cs.Sink.Store(loc, cs.compressedBuf)
+	return cs.Sink.Store(loc, compressedData)
 }
 
 // GetContainer returns the underlying source's container
