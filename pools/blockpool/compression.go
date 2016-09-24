@@ -63,24 +63,24 @@ type DecompressingSource struct {
 var _ Source = (*DecompressingSource)(nil)
 
 // Fetch first fetches from the underlying source, then decompresses
-func (ds *DecompressingSource) Fetch(loc BlockLocation, data []byte) error {
+func (ds *DecompressingSource) Fetch(loc BlockLocation, data []byte) (int, error) {
 	if ds.compressedBuf == nil {
 		// planning for the worst case scenario - that compressing the data
 		// actually increased the block size
 		ds.compressedBuf = make([]byte, BigBlockSize*2)
 	}
 
-	err := ds.Source.Fetch(loc, ds.compressedBuf)
+	compressedSize, err := ds.Source.Fetch(loc, ds.compressedBuf)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return 0, errors.Wrap(err, 1)
 	}
 
-	_, err = zstd.Decompress(data, ds.compressedBuf)
+	decompressedBuf, err := zstd.Decompress(data, ds.compressedBuf[:compressedSize])
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return 0, errors.Wrap(err, 1)
 	}
 
-	return nil
+	return len(decompressedBuf), nil
 }
 
 // GetContainer returns the underlying source's container
