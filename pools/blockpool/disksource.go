@@ -46,14 +46,13 @@ func (ds *DiskSource) Fetch(loc BlockLocation, data []byte) error {
 
 	defer fr.Close()
 
-	readBytes, err := io.ReadFull(fr, data)
+	_, err := io.ReadFull(fr, data)
 	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-
-	if readBytes != len(data) {
-		err = fmt.Errorf("short read! expected %d bytes, read %d bytes from disk", len(data), readBytes)
-		return errors.Wrap(err, 1)
+		if err == io.ErrUnexpectedEOF {
+			// all good
+		} else {
+			return errors.Wrap(err, 1)
+		}
 	}
 
 	return nil
