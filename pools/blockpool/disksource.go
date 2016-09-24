@@ -46,7 +46,7 @@ func (ds *DiskSource) Fetch(loc BlockLocation, data []byte) error {
 
 	defer fr.Close()
 
-	_, err := io.ReadFull(fr, data)
+	_, err = io.ReadFull(fr, data)
 	if err != nil {
 		if err == io.ErrUnexpectedEOF {
 			// all good
