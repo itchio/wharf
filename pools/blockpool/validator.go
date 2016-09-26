@@ -22,7 +22,7 @@ type SignatureInfo struct {
 // in Signature
 type ValidatingSink struct {
 	Sink      Sink
-	Signature SignatureInfo
+	Signature *SignatureInfo
 
 	hashGroups map[BlockLocation][]sync.BlockHash
 	blockBuf   []byte
