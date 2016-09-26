@@ -14,8 +14,8 @@ import (
 
 // A SignatureInfo contains all the hashes for small-blocks of a given container
 type SignatureInfo struct {
-	container *tlc.Container
-	hashes    []sync.BlockHash
+	Container *tlc.Container
+	Hashes    []sync.BlockHash
 }
 
 // A ValidatingSink only stores blocks if they match the signature provided
@@ -92,7 +92,7 @@ func (vs *ValidatingSink) makeHashGroups() error {
 	vs.hashGroups = make(map[BlockLocation][]sync.BlockHash)
 	hashIndex := int64(0)
 
-	for _, f := range vs.Signature.container.Files {
+	for _, f := range vs.Signature.Container.Files {
 		fileIndex := pathToFileIndex[f.Path]
 
 		if f.Size == 0 {
@@ -111,7 +111,7 @@ func (vs *ValidatingSink) makeHashGroups() error {
 			blockSize := ComputeBlockSize(f.Size, blockIndex)
 			numSmallBlocks := (blockSize + smallBlockSize - 1) / smallBlockSize
 
-			vs.hashGroups[loc] = vs.Signature.hashes[hashIndex : hashIndex+numSmallBlocks]
+			vs.hashGroups[loc] = vs.Signature.Hashes[hashIndex : hashIndex+numSmallBlocks]
 			hashIndex += numSmallBlocks
 		}
 	}
