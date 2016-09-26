@@ -21,19 +21,27 @@ type SignatureInfo struct {
 // A ValidatingSink only stores blocks if they match the signature provided
 // in Signature
 type ValidatingSink struct {
+	// required
 	Sink      Sink
 	Signature *SignatureInfo
 
+	// optional
+	Consumer *pwr.StateConsumer
+
+	// internal
 	hashGroups map[BlockLocation][]sync.BlockHash
 	blockBuf   []byte
 	split      bufio.SplitFunc
-	sctx       sync.Context
+	sctx       *sync.Context
 }
 
 var _ Sink = (*ValidatingSink)(nil)
 
 func (vs *ValidatingSink) Store(loc BlockLocation, data []byte) error {
+	vs.log("validating %+v (%d bytes)", loc, len(data))
+
 	if vs.hashGroups == nil {
+		vs.log("making hash groups")
 		err := vs.makeHashGroups()
 		if err != nil {
 			return errors.Wrap(err, 1)
@@ -41,6 +49,7 @@ func (vs *ValidatingSink) Store(loc BlockLocation, data []byte) error {
 
 		vs.blockBuf = make([]byte, pwr.BlockSize)
 		vs.split = splitfunc.New(pwr.BlockSize)
+		vs.sctx = sync.NewContext(pwr.BlockSize)
 	}
 
 	hashGroup := vs.hashGroups[loc]
@@ -53,7 +62,10 @@ func (vs *ValidatingSink) Store(loc BlockLocation, data []byte) error {
 	hashIndex := 0
 
 	for ; s.Scan(); hashIndex++ {
-		weakHash, strongHash := vs.sctx.HashBlock(s.Bytes())
+		smallBlock := s.Bytes()
+		vs.log("validating sub #%d of %+v (%d bytes)", hashIndex, loc, len(smallBlock))
+
+		weakHash, strongHash := vs.sctx.HashBlock(smallBlock)
 		bh := hashGroup[hashIndex]
 
 		if bh.WeakHash != weakHash {
@@ -76,7 +88,7 @@ func (vs *ValidatingSink) GetContainer() *tlc.Container {
 
 func (vs *ValidatingSink) Clone() Sink {
 	return &ValidatingSink{
-		Sink:      vs.Sink,
+		Sink:      vs.Sink.Clone(),
 		Signature: vs.Signature,
 	}
 }
@@ -117,4 +129,12 @@ func (vs *ValidatingSink) makeHashGroups() error {
 	}
 
 	return nil
+}
+
+func (vs *ValidatingSink) log(format string, args ...interface{}) {
+	if vs.Consumer == nil {
+		return
+	}
+
+	vs.Consumer.Infof(format, args...)
 }
