@@ -25,6 +25,13 @@ var (
 	ErrIncompatiblePatch = errors.New("unsupported patch")
 )
 
+// VetApplyFunc gives a chance to the caller to abort the application
+// before any ops are read/applied - it's the right place to check for
+// limits on container size, or number of files, for example.
+// By the time it's called, TargetContainer and SourceContainer are
+// valid. A VetApplyFunc should only read data from actx, not write to it.
+type VetApplyFunc func(actx *ApplyContext) error
+
 // ApplyContext holds the state while applying a patch
 type ApplyContext struct {
 	Consumer *StateConsumer
@@ -37,6 +44,8 @@ type ApplyContext struct {
 	TargetPool      sync.Pool
 	SourceContainer *tlc.Container
 	OutputPool      sync.WritablePool
+
+	VetApply VetApplyFunc
 
 	Signature *SignatureInfo
 
@@ -104,6 +113,13 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		return errors.Wrap(err, 1)
 	}
 	actx.SourceContainer = sourceContainer
+
+	if actx.VetApply != nil {
+		err = actx.VetApply(actx)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+	}
 
 	var deletedFiles []string
 
