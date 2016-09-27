@@ -66,21 +66,27 @@ type signatureResult struct {
 // ApplyPatch reads a patch, parses it, and generates the new file tree
 func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	actualOutputPath := actx.OutputPath
-	if actx.InPlace {
-		// applying in-place is a bit tricky: we can't overwrite files in the
-		// target directory (old) while we're reading the patch otherwise
-		// we might be copying new bytes instead of old bytes into later files
-		// so, we rebuild 'touched' files in a staging area
-		stagePath := actualOutputPath + "-stage"
-		err := os.MkdirAll(stagePath, os.FileMode(0755))
-		if err != nil {
-			return errors.Wrap(err, 1)
-		}
+	if actx.OutputPool == nil {
+		if actx.InPlace {
+			// applying in-place is a bit tricky: we can't overwrite files in the
+			// target directory (old) while we're reading the patch otherwise
+			// we might be copying new bytes instead of old bytes into later files
+			// so, we rebuild 'touched' files in a staging area
+			stagePath := actualOutputPath + "-stage"
+			err := os.MkdirAll(stagePath, os.FileMode(0755))
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
 
-		defer os.RemoveAll(stagePath)
-		actx.OutputPath = stagePath
+			defer os.RemoveAll(stagePath)
+			actx.OutputPath = stagePath
+		} else {
+			os.MkdirAll(actx.OutputPath, os.FileMode(0755))
+		}
 	} else {
-		os.MkdirAll(actx.OutputPath, os.FileMode(0755))
+		if actualOutputPath != "" {
+			return fmt.Errorf("cannot specify both OutputPath and OutputPool")
+		}
 	}
 
 	rawPatchWire := wire.NewReadContext(patchReader)
