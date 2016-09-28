@@ -1,9 +1,9 @@
 package blockpool
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -83,6 +83,7 @@ func (ds *DiskSink) Store(loc BlockLocation, data []byte) error {
 	fileSize := ds.Container.Files[int(loc.FileIndex)].Size
 	blockSize := ComputeBlockSize(fileSize, loc.BlockIndex)
 	addr := fmt.Sprintf("shake128-32/%x/%d", ds.hashBuf, blockSize)
+
 	path := filepath.Join(ds.BasePath, addr)
 
 	err = os.MkdirAll(filepath.Dir(path), 0755)
@@ -90,19 +91,24 @@ func (ds *DiskSink) Store(loc BlockLocation, data []byte) error {
 		return errors.Wrap(err, 1)
 	}
 
+	// create file only if it doesn't exist yet
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			// block's already there!
+			return nil
+		}
+		return errors.Wrap(err, 1)
+	}
+
+	defer file.Close()
+
 	if ds.Compressor == nil {
-		err = ioutil.WriteFile(path, data, 0644)
+		_, err = io.Copy(file, bytes.NewReader(data))
 		if err != nil {
 			return errors.Wrap(err, 1)
 		}
 	} else {
-		file, err := os.Create(path)
-		if err != nil {
-			return errors.Wrap(err, 1)
-		}
-
-		defer file.Close()
-
 		err = ds.Compressor.Compress(file, data)
 		if err != nil {
 			return errors.Wrap(err, 1)
