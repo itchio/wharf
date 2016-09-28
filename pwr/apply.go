@@ -264,6 +264,11 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		return errors.Wrap(err, 1)
 	}
 
+	err = outputPool.Close()
+	if err != nil {
+		return errors.Wrap(err, 1)
+	}
+
 	return nil
 }
 

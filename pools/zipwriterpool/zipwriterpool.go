@@ -54,7 +54,7 @@ func (zwp *ZipWriterPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 }
 
 func (zwp *ZipWriterPool) Close() error {
-	err := zwp.zw.Flush()
+	err := zwp.zw.Close()
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
