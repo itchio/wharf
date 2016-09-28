@@ -16,6 +16,8 @@ type DiskSource struct {
 	BasePath       string
 	BlockAddresses BlockAddressMap
 
+	Decompressor *Decompressor
+
 	Container *tlc.Container
 }
 
@@ -46,16 +48,20 @@ func (ds *DiskSource) Fetch(loc BlockLocation, data []byte) (int, error) {
 
 	defer fr.Close()
 
-	bytesRead, err := io.ReadFull(fr, data)
-	if err != nil {
-		if err == io.ErrUnexpectedEOF {
-			// all good
-		} else {
-			return 0, errors.Wrap(err, 1)
+	if ds.Decompressor == nil {
+		bytesRead, err := io.ReadFull(fr, data)
+		if err != nil {
+			if err == io.ErrUnexpectedEOF {
+				// all good
+			} else {
+				return 0, errors.Wrap(err, 1)
+			}
 		}
+
+		return bytesRead, nil
 	}
 
-	return bytesRead, nil
+	return ds.Decompressor.Decompress(data, fr)
 }
 
 // GetContainer returns the tlc container this disk source is paired with

@@ -21,6 +21,8 @@ type DiskSink struct {
 	Container   *tlc.Container
 	BlockHashes *BlockHashMap
 
+	Compressor *Compressor
+
 	hashBuf []byte
 	shake   sha3.ShakeHash
 	writing bool
@@ -82,9 +84,23 @@ func (ds *DiskSink) Store(loc BlockLocation, data []byte) error {
 		return errors.Wrap(err, 1)
 	}
 
-	err = ioutil.WriteFile(path, data, 0644)
-	if err != nil {
-		return errors.Wrap(err, 1)
+	if ds.Compressor == nil {
+		err = ioutil.WriteFile(path, data, 0644)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+	} else {
+		file, err := os.Create(path)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		defer file.Close()
+
+		err = ds.Compressor.Compress(file, data)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
 	}
 
 	return nil
