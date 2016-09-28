@@ -30,12 +30,18 @@ type DiskSink struct {
 
 // Clone returns a copy of this disk sink, suitable for fan-out
 func (ds *DiskSink) Clone() Sink {
-	return &DiskSink{
+	dsc := &DiskSink{
 		BasePath: ds.BasePath,
 
 		Container:   ds.Container,
 		BlockHashes: ds.BlockHashes,
 	}
+
+	if ds.Compressor != nil {
+		dsc.Compressor = ds.Compressor.Clone()
+	}
+
+	return dsc
 }
 
 var _ Sink = (*DiskSink)(nil)

@@ -25,12 +25,18 @@ var _ Source = (*DiskSource)(nil)
 
 // Clone returns a copy of this disk source, suitable for fan-in
 func (ds *DiskSource) Clone() Source {
-	return &DiskSource{
+	dsc := &DiskSource{
 		BasePath:       ds.BasePath,
 		BlockAddresses: ds.BlockAddresses,
 
 		Container: ds.Container,
 	}
+
+	if ds.Decompressor != nil {
+		dsc.Decompressor = ds.Decompressor.Clone()
+	}
+
+	return dsc
 }
 
 // Fetch reads a block from disk
