@@ -1,4 +1,4 @@
-package sync_test
+package wsync_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/itchio/wharf/sync"
+	"github.com/itchio/wharf/wsync"
 )
 
 type RandReader struct {
@@ -121,8 +121,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := sync.NewContext(16 * 1024)
-	rsDelta := sync.NewContext(16 * 1024)
+	rs := wsync.NewContext(16 * 1024)
+	rsDelta := wsync.NewContext(16 * 1024)
 	for _, p := range pairs {
 		(&p.Source).Fill(t)
 		(&p.Target).Fill(t)
@@ -130,25 +130,25 @@ func Test_GenData(t *testing.T) {
 		sourceBuffer := bytes.NewReader(p.Source.Data)
 		targetBuffer := bytes.NewReader(p.Target.Data)
 
-		sig := make([]sync.BlockHash, 0, 10)
-		err := rs.CreateSignature(0, targetBuffer, func(bl sync.BlockHash) error {
+		sig := make([]wsync.BlockHash, 0, 10)
+		err := rs.CreateSignature(0, targetBuffer, func(bl wsync.BlockHash) error {
 			sig = append(sig, bl)
 			return nil
 		})
 		if err != nil {
 			t.Errorf("Failed to create signature: %s", err)
 		}
-		lib := sync.NewBlockLibrary(sig)
+		lib := wsync.NewBlockLibrary(sig)
 
-		opsOut := make(chan sync.Operation)
+		opsOut := make(chan wsync.Operation)
 		go func() {
 			var blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
-			err := rsDelta.ComputeDiff(sourceBuffer, lib, func(op sync.Operation) error {
+			err := rsDelta.ComputeDiff(sourceBuffer, lib, func(op wsync.Operation) error {
 				switch op.Type {
-				case sync.OpBlockRange:
+				case wsync.OpBlockRange:
 					blockRangeCt++
-				case sync.OpData:
+				case wsync.OpData:
 					// Copy data buffer so it may be reused in internal buffer.
 					b := make([]byte, len(op.Data))
 					copy(b, op.Data)
@@ -190,7 +190,7 @@ type SinglePool struct {
 	reader io.ReadSeeker
 }
 
-var _ sync.Pool = (*SinglePool)(nil)
+var _ wsync.Pool = (*SinglePool)(nil)
 
 func (sp *SinglePool) GetReader(fileIndex int64) (io.Reader, error) {
 	return sp.GetReadSeeker(fileIndex)
