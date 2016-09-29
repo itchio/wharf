@@ -33,7 +33,7 @@ func Test_NonDirWalk(t *testing.T) {
 	}()
 	must(t, f.Close())
 
-	_, err = tlc.Walk(f.Name(), nil)
+	_, err = tlc.WalkDir(f.Name(), nil)
 	assert.NotNil(t, err, "should refuse to walk non-directory")
 }
 
@@ -51,7 +51,7 @@ func Test_WalkZip(t *testing.T) {
 		must(t, err)
 	}()
 
-	container, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.WalkDir(tmpPath, nil)
 	must(t, err)
 
 	zipPath := path.Join(tmpPath2, "container.zip")
@@ -95,7 +95,7 @@ func Test_Walk(t *testing.T) {
 		must(t, err)
 	}()
 
-	container, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.WalkDir(tmpPath, nil)
 	must(t, err)
 
 	dirs := []string{
@@ -145,7 +145,7 @@ func Test_Prepare(t *testing.T) {
 		must(t, err)
 	}()
 
-	container, err := tlc.Walk(tmpPath, nil)
+	container, err := tlc.WalkDir(tmpPath, nil)
 	must(t, err)
 
 	tmpPath2, err := ioutil.TempDir("", "prepare")
@@ -158,7 +158,7 @@ func Test_Prepare(t *testing.T) {
 	err = container.Prepare(tmpPath2)
 	must(t, err)
 
-	container2, err := tlc.Walk(tmpPath2, nil)
+	container2, err := tlc.WalkDir(tmpPath2, nil)
 	must(t, err)
 
 	must(t, container.EnsureEqual(container2))
