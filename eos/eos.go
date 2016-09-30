@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/itchio/wharf/eos/httpfile"
+	"github.com/itchio/httpfile"
 	"github.com/itchio/wharf/eos/option"
 )
 

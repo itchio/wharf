@@ -19,8 +19,8 @@ import (
 
 	"github.com/alecthomas/assert"
 
+	"github.com/itchio/httpfile"
 	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/eos/httpfile"
 )
 
 func init() {
