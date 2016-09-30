@@ -23,7 +23,7 @@ type File interface {
 
 type Handler interface {
 	Scheme() string
-	MakeResource(u *url.URL) (httpfile.Resource, error)
+	MakeResource(u *url.URL) (httpfile.GetURLFunc, httpfile.NeedsRenewalFunc, error)
 }
 
 var handlers = make(map[string]Handler)
@@ -72,18 +72,18 @@ func Open(name string, opts ...option.Option) (File, error) {
 		return os.Open(name)
 	case "http", "https":
 		res := &simpleHTTPResource{name}
-		return httpfile.New(res, settings.HTTPClient)
+		return httpfile.New(res.GetURL, res.NeedsRenewal, settings.HTTPClient)
 	default:
 		handler := handlers[u.Scheme]
 		if handler == nil {
 			return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
 		}
 
-		res, err := handler.MakeResource(u)
+		getURL, needsRenewal, err := handler.MakeResource(u)
 		if err != nil {
 			return nil, err
 		}
 
-		return httpfile.New(res, settings.HTTPClient)
+		return httpfile.New(getURL, needsRenewal, settings.HTTPClient)
 	}
 }

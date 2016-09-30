@@ -52,8 +52,8 @@ func (ifs *itchfs) Scheme() string {
 	return "itchfs"
 }
 
-func (ifs *itchfs) MakeResource(u *url.URL) (httpfile.Resource, error) {
-	return ifs, nil
+func (ifs *itchfs) MakeResource(u *url.URL) (httpfile.GetURLFunc, httpfile.NeedsRenewalFunc, error) {
+	return ifs.GetURL, ifs.NeedsRenewal, nil
 }
 
 func (ifs *itchfs) GetURL() (string, error) {
