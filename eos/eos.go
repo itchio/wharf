@@ -5,11 +5,10 @@ package eos
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 
-	"github.com/go-errors/errors"
-	itchio "github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/eos/httpfile"
 	"github.com/itchio/wharf/eos/option"
 )
@@ -20,6 +19,40 @@ type File interface {
 	io.ReaderAt
 
 	Stat() (os.FileInfo, error)
+}
+
+type Handler interface {
+	Scheme() string
+	MakeResource(u *url.URL) (httpfile.Resource, error)
+}
+
+var handlers = make(map[string]Handler)
+
+func RegisterHandler(h Handler) error {
+	scheme := h.Scheme()
+
+	if handlers[scheme] != nil {
+		return fmt.Errorf("already have a handler for %s:", scheme)
+	}
+
+	handlers[h.Scheme()] = h
+	return nil
+}
+
+func DeregisterHandler(h Handler) {
+	delete(handlers, h.Scheme())
+}
+
+type simpleHTTPResource struct {
+	url string
+}
+
+func (shr *simpleHTTPResource) GetURL() (string, error) {
+	return shr.url, nil
+}
+
+func (shr *simpleHTTPResource) NeedsRenewal(req *http.Request) bool {
+	return false
 }
 
 func Open(name string, opts ...option.Option) (File, error) {
@@ -38,52 +71,19 @@ func Open(name string, opts ...option.Option) (File, error) {
 	case "":
 		return os.Open(name)
 	case "http", "https":
-		getURL := func() (string, error) {
-			return name, nil
-		}
-		return httpfile.New(getURL, settings.HTTPClient)
-	case "itchfs":
-		getURL, err := makeItchUrlGetter(u, settings)
-		if err != nil {
-			return nil, err
-		}
-
-		hf, err := httpfile.New(getURL, settings.HTTPClient)
-		if err != nil {
-			return nil, err
-		}
-
-		return hf, nil
+		res := &simpleHTTPResource{name}
+		return httpfile.New(res, settings.HTTPClient)
 	default:
-		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
+		handler := handlers[u.Scheme]
+		if handler == nil {
+			return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
+		}
+
+		res, err := handler.MakeResource(u)
+		if err != nil {
+			return nil, err
+		}
+
+		return httpfile.New(res, settings.HTTPClient)
 	}
-}
-
-func makeItchUrlGetter(u *url.URL, settings *option.EOSSettings) (httpfile.GetURLFunc, error) {
-	vals := u.Query()
-
-	apiKey := vals.Get("api_key")
-	if apiKey == "" {
-		return nil, fmt.Errorf("missing API key")
-	}
-
-	var itchClient *itchio.Client
-
-	if settings.ItchClient != nil {
-		itchClient = settings.ItchClient
-		itchClient.Key = apiKey
-	} else {
-		itchClient = itchio.ClientWithKey(apiKey)
-	}
-
-	if u.Host != "" {
-		return nil, fmt.Errorf("invalid itchfs URL (must start with itchfs:///): %s", u.String())
-	}
-
-	source, err := ObtainSource(itchClient, u.Path)
-	if err != nil {
-		return nil, errors.Wrap(err, 1)
-	}
-
-	return source.makeGetURL()
 }

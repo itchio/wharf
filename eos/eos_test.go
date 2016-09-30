@@ -22,7 +22,6 @@ import (
 	itchio "github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/eos/httpfile"
-	"github.com/itchio/wharf/eos/option"
 )
 
 func init() {
@@ -46,6 +45,18 @@ func Test_OpenLocalFile(t *testing.T) {
 	assert.Nil(t, f.Close())
 }
 
+type itchfs struct {
+	url string
+}
+
+func (ifs *itchfs) Scheme() string {
+	return "itchfs"
+}
+
+func (ifs *itchfs) MakeURLGetter(u url.URL) string {
+	return ifs.url
+}
+
 func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	fakeData := []byte("aaaabbbb")
 
@@ -59,7 +70,11 @@ func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	}`)
 	defer apiServer.CloseClientConnections()
 
-	f, err := eos.Open("itchfs:///upload/187770/download/builds/6996?api_key=foo", option.WithItchClient(client))
+	ifs := &itchfs{apiServer.URL}
+	eos.RegisterHandler(ifs)
+	defer eos.DeregisterHandler(ifs)
+
+	f, err := eos.Open("itchfs:///upload/187770/download/builds/6996?api_key=foo")
 	assert.Nil(t, err)
 
 	s, err := f.Stat()

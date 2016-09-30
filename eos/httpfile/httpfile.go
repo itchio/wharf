@@ -17,9 +17,14 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// A GetURLFunc returns a URL we can download the resource from.
-// It's handy to have this as a function rather than a constant for signed expiring URLs
-type GetURLFunc func() (urlString string, err error)
+type Resource interface {
+	// GetURL returns a URL we can download the resource from.
+	// It's handy to have this as a function rather than a constant for signed expiring URLs
+	GetURL() (urlString string, err error)
+
+	// Expired analyzes an HTTP request and returns true if it needs to be renewed
+	NeedsRenewal(req *http.Request) bool
+}
 
 // amount we're willing to download and throw away
 const maxDiscard int64 = 1 * 1024 * 1024 // 1MB
@@ -27,8 +32,8 @@ const maxDiscard int64 = 1 * 1024 * 1024 // 1MB
 var ErrNotFound = errors.New("HTTP file not found on server")
 
 type HTTPFile struct {
-	getURL GetURLFunc
-	client *http.Client
+	resource Resource
+	client   *http.Client
 
 	Consumer *pwr.StateConsumer
 
@@ -82,8 +87,8 @@ var _ io.Reader = (*HTTPFile)(nil)
 var _ io.ReaderAt = (*HTTPFile)(nil)
 var _ io.Closer = (*HTTPFile)(nil)
 
-func New(getURL GetURLFunc, client *http.Client) (*HTTPFile, error) {
-	urlStr, err := getURL()
+func New(resource Resource, client *http.Client) (*HTTPFile, error) {
+	urlStr, err := resource.GetURL()
 	if err != nil {
 		return nil, errors.Wrap(err, 1)
 	}
@@ -113,8 +118,8 @@ func New(getURL GetURLFunc, client *http.Client) (*HTTPFile, error) {
 	}
 
 	hf := &HTTPFile{
-		getURL: getURL,
-		client: client,
+		resource: resource,
+		client:   client,
 
 		name:    parsedUrl.Path,
 		size:    res.ContentLength,
@@ -178,7 +183,7 @@ func (hf *HTTPFile) borrowReader(offset int64) (*httpReader, error) {
 	hf.log("borrow: making fresh for offset %d", offset)
 
 	// provision a new one
-	urlStr, err := hf.getURL()
+	urlStr, err := hf.resource.GetURL()
 	if err != nil {
 		return nil, errors.Wrap(err, 1)
 	}
