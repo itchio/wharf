@@ -37,6 +37,11 @@ func Open(name string, opts ...option.Option) (File, error) {
 	switch u.Scheme {
 	case "":
 		return os.Open(name)
+	case "http", "https":
+		getURL := func() (string, error) {
+			return name, nil
+		}
+		return httpfile.New(getURL, settings.HTTPClient)
 	case "itchfs":
 		getURL, err := makeItchUrlGetter(u, settings)
 		if err != nil {

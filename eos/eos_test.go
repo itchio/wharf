@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/assert"
 	itchio "github.com/itchio/go-itchio"
@@ -17,7 +20,7 @@ import (
 	"github.com/itchio/wharf/eos/option"
 )
 
-func Test_Open(t *testing.T) {
+func Test_OpenLocalFile(t *testing.T) {
 	f, err := eos.Open("/dev/null")
 	assert.Nil(t, err)
 
@@ -31,10 +34,8 @@ func Test_Open(t *testing.T) {
 func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	fakeData := []byte("aaaabbbb")
 
-	storageServer := fakeStorage(t, fakeData)
+	storageServer := fakeStorage(t, fakeData, time.Duration(0))
 	defer storageServer.Close()
-
-	t.Logf("storage server URL: %s", storageServer.URL)
 
 	apiServer, client := fakeAPI(200, `{
 		"archive": {
@@ -50,11 +51,91 @@ func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, int64(len(fakeData)), s.Size())
 
+	readFakeData, err := ioutil.ReadAll(f)
+	assert.Nil(t, err)
+	assert.Equal(t, len(fakeData), len(readFakeData))
+	assert.Equal(t, fakeData, readFakeData)
+
+	readBytes, err := f.ReadAt(readFakeData, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, len(fakeData), readBytes)
+	assert.Equal(t, fakeData, readFakeData)
+
+	err = f.Close()
+	if err != nil {
+		t.Fatal(err)
+		t.FailNow()
+	}
+}
+
+func Test_HttpFile(t *testing.T) {
+	fakeData := []byte("aaaabbbb")
+
+	storageServer := fakeStorage(t, fakeData, time.Duration(0))
+	defer storageServer.Close()
+
+	f, err := eos.Open(storageServer.URL)
+	assert.Nil(t, err)
+
+	s, err := f.Stat()
+	assert.Nil(t, err)
+	assert.Equal(t, int64(len(fakeData)), s.Size())
+
 	buf := make([]byte, 4)
 	readBytes, err := f.ReadAt(buf, 4)
 	assert.Nil(t, err)
 	assert.Equal(t, len(buf), readBytes)
 	assert.Equal(t, []byte("bbbb"), buf)
+
+	err = f.Close()
+	if err != nil {
+		t.Fatal(err)
+		t.FailNow()
+	}
+}
+
+func Test_HttpFileConcurrentReadAt(t *testing.T) {
+	fakeData := []byte("abcdefghijklmnopqrstuvwxyz")
+
+	storageServer := fakeStorage(t, fakeData, time.Duration(200))
+	defer storageServer.Close()
+
+	f, err := eos.Open(storageServer.URL)
+	assert.Nil(t, err)
+
+	s, err := f.Stat()
+	assert.Nil(t, err)
+	assert.Equal(t, int64(len(fakeData)), s.Size())
+
+	done := make(chan bool)
+	errs := make(chan error)
+
+	rand.Seed(0xDEAD)
+	for i := range rand.Perm(len(fakeData)) {
+		go func(i int) {
+			buf := make([]byte, 1)
+			readBytes, err := f.ReadAt(buf, int64(i))
+			if err != nil {
+				errs <- err
+				return
+			}
+
+			assert.Equal(t, readBytes, 1)
+			assert.Equal(t, buf[0], fakeData[i])
+
+			done <- true
+		}(i)
+	}
+
+	for i := 0; i < len(fakeData); i++ {
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+			t.FailNow()
+		case <-done:
+			// good!
+		}
+	}
 
 	err = f.Close()
 	if err != nil {
@@ -89,7 +170,7 @@ func fakeAPI(code int, body string) (*httptest.Server, *itchio.Client) {
 	return server, client
 }
 
-func fakeStorage(t *testing.T, content []byte) *httptest.Server {
+func fakeStorage(t *testing.T, content []byte, delay time.Duration) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "HEAD" {
 			w.Header().Set("content-length", fmt.Sprintf("%d", len(content)))
@@ -98,8 +179,11 @@ func fakeStorage(t *testing.T, content []byte) *httptest.Server {
 		}
 
 		if r.Method != "GET" {
-
+			http.Error(w, "Invalid method", 400)
+			return
 		}
+
+		time.Sleep(delay)
 
 		w.Header().Set("content-type", "application/octet-stream")
 		rangeHeader := r.Header.Get("Range")

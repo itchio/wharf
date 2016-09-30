@@ -97,6 +97,14 @@ func (hf *HTTPFile) Read(data []byte) (int, error) {
 
 	hf.log("Read(%d)", len(data))
 
+	if hf.offset == -1 {
+		err := hf.seek(0)
+		if err != nil {
+			hf.log("Read: seek error: %s", err.Error())
+			return 0, errors.Wrap(err, 1)
+		}
+	}
+
 	bytesRead, err := hf.reader.Read(data)
 	hf.offset += int64(bytesRead)
 
