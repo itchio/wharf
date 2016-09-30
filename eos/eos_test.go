@@ -19,7 +19,6 @@ import (
 
 	"github.com/alecthomas/assert"
 
-	itchio "github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/eos/httpfile"
 )
@@ -53,8 +52,16 @@ func (ifs *itchfs) Scheme() string {
 	return "itchfs"
 }
 
-func (ifs *itchfs) MakeURLGetter(u url.URL) string {
-	return ifs.url
+func (ifs *itchfs) MakeResource(u *url.URL) (httpfile.Resource, error) {
+	return ifs, nil
+}
+
+func (ifs *itchfs) GetURL() (string, error) {
+	return ifs.url, nil
+}
+
+func (ifs *itchfs) NeedsRenewal(req *http.Request) bool {
+	return false
 }
 
 func Test_OpenRemoteDownloadBuild(t *testing.T) {
@@ -63,14 +70,7 @@ func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	storageServer := fakeStorage(t, fakeData, time.Duration(0))
 	defer storageServer.CloseClientConnections()
 
-	apiServer, client := fakeAPI(200, `{
-		"archive": {
-			"url": "`+storageServer.URL+`"
-		}
-	}`)
-	defer apiServer.CloseClientConnections()
-
-	ifs := &itchfs{apiServer.URL}
+	ifs := &itchfs{storageServer.URL}
 	eos.RegisterHandler(ifs)
 	defer eos.DeregisterHandler(ifs)
 
@@ -283,32 +283,6 @@ func Test_HttpFileConcurrentReadAt(t *testing.T) {
 	}
 
 	assert.Equal(t, 0, hf.NumReaders())
-}
-
-func fakeAPI(code int, body string) (*httptest.Server, *itchio.Client) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("content-Type", "application/json")
-		w.WriteHeader(200)
-		fmt.Fprintln(w, body)
-	}))
-
-	// Make a transport that reroutes all traffic to the example server
-	transport := &http.Transport{
-		Proxy: func(req *http.Request) (*url.URL, error) {
-			return url.Parse(server.URL)
-		},
-	}
-
-	// Make a http.Client with the transport
-	httpClient := &http.Client{Transport: transport}
-
-	client := &itchio.Client{
-		Key:        "APIKEY",
-		HTTPClient: httpClient,
-		BaseURL:    server.URL,
-	}
-
-	return server, client
 }
 
 func fakeStorage(t *testing.T, content []byte, delay time.Duration) *httptest.Server {
