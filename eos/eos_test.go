@@ -5,20 +5,35 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	_ "net/http/pprof"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alecthomas/assert"
+
 	itchio "github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/eos"
+	"github.com/itchio/wharf/eos/httpfile"
 	"github.com/itchio/wharf/eos/option"
 )
+
+func init() {
+	debugPort := os.Getenv("EOS_DEBUG_PORT")
+
+	if debugPort != "" {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:"+debugPort, nil))
+		}()
+	}
+}
 
 func Test_OpenLocalFile(t *testing.T) {
 	f, err := eos.Open("/dev/null")
@@ -35,14 +50,14 @@ func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	fakeData := []byte("aaaabbbb")
 
 	storageServer := fakeStorage(t, fakeData, time.Duration(0))
-	defer storageServer.Close()
+	defer storageServer.CloseClientConnections()
 
 	apiServer, client := fakeAPI(200, `{
 		"archive": {
 			"url": "`+storageServer.URL+`"
 		}
 	}`)
-	defer apiServer.Close()
+	defer apiServer.CloseClientConnections()
 
 	f, err := eos.Open("itchfs:///upload/187770/download/builds/6996?api_key=foo", option.WithItchClient(client))
 	assert.Nil(t, err)
@@ -72,7 +87,7 @@ func Test_HttpFile(t *testing.T) {
 	fakeData := []byte("aaaabbbb")
 
 	storageServer := fakeStorage(t, fakeData, time.Duration(0))
-	defer storageServer.Close()
+	defer storageServer.CloseClientConnections()
 
 	f, err := eos.Open(storageServer.URL)
 	assert.Nil(t, err)
@@ -94,14 +109,114 @@ func Test_HttpFile(t *testing.T) {
 	}
 }
 
-func Test_HttpFileConcurrentReadAt(t *testing.T) {
-	fakeData := []byte("abcdefghijklmnopqrstuvwxyz")
+var _bigFakeData []byte
 
-	storageServer := fakeStorage(t, fakeData, time.Duration(200))
-	defer storageServer.Close()
+func getBigFakeData() []byte {
+	if _bigFakeData == nil {
+		for i := 1; i < 5; i++ {
+			_bigFakeData = append(_bigFakeData, bytes.Repeat([]byte{byte(i * 10)}, 1*1024*1024)...)
+		}
+	}
+
+	return _bigFakeData
+}
+
+func Test_HttpFileSequentialReads(t *testing.T) {
+	fakeData := getBigFakeData()
+
+	storageServer := fakeStorage(t, fakeData, time.Duration(0))
+	defer storageServer.CloseClientConnections()
 
 	f, err := eos.Open(storageServer.URL)
 	assert.Nil(t, err)
+
+	hf, ok := f.(*httpfile.HTTPFile)
+	assert.True(t, ok)
+
+	hf.ReaderStaleThreshold = time.Millisecond * time.Duration(100)
+
+	readBuf := make([]byte, 256)
+	offset := int64(0)
+	readIndex := 0
+
+	sequentialReadStop := int64(len(readBuf) * 10)
+
+	for offset < sequentialReadStop {
+		readIndex++
+
+		if readIndex%4 == 0 {
+			offset += int64(len(readBuf))
+			continue
+		}
+
+		readBytes, err := f.ReadAt(readBuf, offset)
+		assert.Nil(t, err)
+		assert.Equal(t, len(readBuf), readBytes)
+
+		offset += int64(readBytes)
+	}
+
+	assert.Equal(t, 1, hf.NumReaders())
+
+	// forcing to provision a new reader
+	readBytes, err := f.ReadAt(readBuf, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+
+	assert.Equal(t, 2, hf.NumReaders())
+
+	// re-using the first one
+	readBytes, err = f.ReadAt(readBuf, sequentialReadStop+int64(len(readBuf)))
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+
+	assert.Equal(t, 2, hf.NumReaders())
+
+	// forcing a third one
+	readBytes, err = f.ReadAt(readBuf, int64(len(fakeData))-int64(len(readBuf)))
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+
+	assert.Equal(t, 3, hf.NumReaders())
+
+	// re-using second one
+	readBytes, err = f.ReadAt(readBuf, int64(len(readBuf)))
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+
+	assert.Equal(t, 3, hf.NumReaders())
+
+	// and again, skipping a few
+	readBytes, err = f.ReadAt(readBuf, int64(len(readBuf)*3))
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+
+	assert.Equal(t, 3, hf.NumReaders())
+
+	// wait for readers to become stale
+	time.Sleep(time.Millisecond * time.Duration(200))
+
+	// now just read something random, should be back to 1 reader
+	readBytes, err = f.ReadAt(readBuf, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, len(readBuf), readBytes)
+	assert.Equal(t, 1, hf.NumReaders())
+
+	err = f.Close()
+	assert.Nil(t, err)
+}
+
+func Test_HttpFileConcurrentReadAt(t *testing.T) {
+	fakeData := []byte("abcdefghijklmnopqrstuvwxyz")
+
+	storageServer := fakeStorage(t, fakeData, time.Duration(10)*time.Millisecond)
+	defer storageServer.CloseClientConnections()
+
+	f, err := eos.Open(storageServer.URL)
+	assert.Nil(t, err)
+
+	hf, ok := f.(*httpfile.HTTPFile)
+	assert.True(t, ok)
 
 	s, err := f.Stat()
 	assert.Nil(t, err)
@@ -110,7 +225,7 @@ func Test_HttpFileConcurrentReadAt(t *testing.T) {
 	done := make(chan bool)
 	errs := make(chan error)
 
-	rand.Seed(0xDEAD)
+	rand.Seed(0xDEADBEEF)
 	for i := range rand.Perm(len(fakeData)) {
 		go func(i int) {
 			buf := make([]byte, 1)
@@ -121,13 +236,20 @@ func Test_HttpFileConcurrentReadAt(t *testing.T) {
 			}
 
 			assert.Equal(t, readBytes, 1)
-			assert.Equal(t, buf[0], fakeData[i])
+			assert.Equal(t, string(buf), string(fakeData[i:i+1]))
 
 			done <- true
 		}(i)
 	}
 
+	maxReaders := 0
+
 	for i := 0; i < len(fakeData); i++ {
+		numReaders := hf.NumReaders()
+		if numReaders > maxReaders {
+			maxReaders = numReaders
+		}
+
 		select {
 		case err := <-errs:
 			t.Fatal(err)
@@ -137,16 +259,20 @@ func Test_HttpFileConcurrentReadAt(t *testing.T) {
 		}
 	}
 
+	t.Logf("maximum number of readers: %d (total reads: %d)", maxReaders, len(fakeData))
+
 	err = f.Close()
 	if err != nil {
 		t.Fatal(err)
 		t.FailNow()
 	}
+
+	assert.Equal(t, 0, hf.NumReaders())
 }
 
 func fakeAPI(code int, body string) (*httptest.Server, *itchio.Client) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("content-Type", "application/json")
 		w.WriteHeader(200)
 		fmt.Fprintln(w, body)
 	}))
@@ -189,12 +315,12 @@ func fakeStorage(t *testing.T, content []byte, delay time.Duration) *httptest.Se
 		rangeHeader := r.Header.Get("Range")
 
 		start := int64(0)
-		end := int64(len(content))
+		end := int64(len(content)) - 1
 
 		if rangeHeader == "" {
 			w.WriteHeader(200)
 		} else {
-			t.Logf("rangeHeader: %s", rangeHeader)
+			// t.Logf("rangeHeader: %s", rangeHeader)
 
 			equalTokens := strings.Split(rangeHeader, "=")
 			if len(equalTokens) != 2 {
@@ -230,12 +356,17 @@ func fakeStorage(t *testing.T, content []byte, delay time.Duration) *httptest.Se
 			w.WriteHeader(206)
 		}
 
-		sr := io.NewSectionReader(bytes.NewReader(content), start, end-start+1)
+		sr := io.NewSectionReader(bytes.NewReader(content), start, end+1-start)
 		_, err := io.Copy(w, sr)
 		if err != nil {
-			t.Fatalf("storage copy error: %s", err.Error())
-			t.FailNow()
-			return
+			if strings.Contains(err.Error(), "broken pipe") {
+				// ignore
+			} else if strings.Contains(err.Error(), "protocol wrong type for socket") {
+				// ignore
+			} else {
+				t.Logf("storage copy error: %s", err.Error())
+				return
+			}
 		}
 
 		return
