@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/go-errors/errors"
 	"github.com/itchio/httpfile"
 	"github.com/itchio/wharf/eos/option"
 )
@@ -64,7 +65,7 @@ func Open(name string, opts ...option.Option) (File, error) {
 
 	u, err := url.Parse(name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, 1)
 	}
 
 	switch u.Scheme {
@@ -81,7 +82,7 @@ func Open(name string, opts ...option.Option) (File, error) {
 
 		getURL, needsRenewal, err := handler.MakeResource(u)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, 1)
 		}
 
 		return httpfile.New(getURL, needsRenewal, settings.HTTPClient)
