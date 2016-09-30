@@ -1,0 +1,13 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/itchio/go-itchio",
+			"repository": "https://github.com/itchio/go-itchio",
+			"vcs": "git",
+			"revision": "8b92f3124d00c2e86d1e17849d91869d122d4797",
+			"branch": "master",
+			"notests": true
+		}
+	]
+}
