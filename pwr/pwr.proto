@@ -67,3 +67,15 @@ enum HashAlgorithm {
 message ManifestBlockHash {
   bytes hash = 1;
 }
+
+// Wounds files format
+
+message WoundsHeader {
+
+}
+
+message Wound {
+  int64 fileIndex = 1;
+  int64 blockIndex = 2;
+  int64 blockSpan = 3;
+}
