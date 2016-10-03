@@ -86,7 +86,9 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 
 		for chunkSize := range doneBytes {
 			done += chunkSize
-			vctx.Consumer.Progress(float64(done) / float64(signature.Container.Size))
+			if vctx.Consumer != nil && vctx.Consumer.Progress != nil {
+				vctx.Consumer.Progress(float64(done) / float64(signature.Container.Size))
+			}
 		}
 	}()
 
