@@ -158,18 +158,18 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 			return
 		}
 
+		err = writer.Close()
+		if err != nil {
+			errs <- errors.Wrap(err, 1)
+			return
+		}
+
 		if writtenBytes != file.Size {
 			vctx.Wounds <- &Wound{
 				FileIndex: fileIndex,
 				Start:     writtenBytes,
 				End:       file.Size,
 			}
-		}
-
-		err = writer.Close()
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
 		}
 	}
 
