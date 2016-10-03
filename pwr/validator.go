@@ -8,7 +8,6 @@ import (
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/nullpool"
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
 )
 
@@ -19,10 +18,8 @@ type ValidatorContext struct {
 	Consumer *StateConsumer
 
 	// internal
-	Container      *tlc.Container
-	TargetPool     wsync.Pool
-	ValidatingPool wsync.WritablePool
-	Wounds         chan *Wound
+	TargetPool wsync.Pool
+	Wounds     chan *Wound
 }
 
 func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) error {
@@ -59,22 +56,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		}()
 	}
 
-	var err error
-	vctx.TargetPool, err = pools.New(signature.Container, target)
-	if err != nil {
-		return err
-	}
-
-	vctx.Container = signature.Container
-
-	vctx.ValidatingPool = &ValidatingPool{
-		Pool:      nullpool.New(signature.Container),
-		Container: signature.Container,
-		Signature: signature,
-
-		Wounds: vctx.Wounds,
-	}
-
 	numWorkers := vctx.NumWorkers
 	if numWorkers == 0 {
 		numWorkers = runtime.NumCPU() + 1
@@ -83,16 +64,11 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(fileIndices, done, errs)
+		go vctx.validate(target, signature, fileIndices, done, errs)
 	}
 
 	for fileIndex := range signature.Container.Files {
 		fileIndices <- int64(fileIndex)
-	}
-
-	err = vctx.TargetPool.Close()
-	if err != nil {
-		return errors.Wrap(err, 1)
 	}
 
 	close(vctx.Wounds)
@@ -109,11 +85,25 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	return nil
 }
 
-func (vctx *ValidatorContext) validate(fileIndices chan int64, done chan bool, errs chan error) {
-	for fileIndex := range fileIndices {
-		file := vctx.Container.Files[fileIndex]
+func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64, done chan bool, errs chan error) {
+	targetPool, err := pools.New(signature.Container, target)
+	if err != nil {
+		errs <- err
+		return
+	}
 
-		reader, err := vctx.TargetPool.GetReader(fileIndex)
+	validatingPool := &ValidatingPool{
+		Pool:      nullpool.New(signature.Container),
+		Container: signature.Container,
+		Signature: signature,
+
+		Wounds: vctx.Wounds,
+	}
+
+	for fileIndex := range fileIndices {
+		file := signature.Container.Files[fileIndex]
+
+		reader, err := targetPool.GetReader(fileIndex)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// that's one big wound
@@ -130,7 +120,7 @@ func (vctx *ValidatorContext) validate(fileIndices chan int64, done chan bool, e
 		}
 
 		var writer io.WriteCloser
-		writer, err = vctx.ValidatingPool.GetWriter(fileIndex)
+		writer, err = validatingPool.GetWriter(fileIndex)
 		if err != nil {
 			errs <- errors.Wrap(err, 1)
 			return
@@ -156,5 +146,11 @@ func (vctx *ValidatorContext) validate(fileIndices chan int64, done chan bool, e
 			errs <- errors.Wrap(err, 1)
 			return
 		}
+	}
+
+	err = targetPool.Close()
+	if err != nil {
+		errs <- errors.Wrap(err, 1)
+		return
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/tlc"
@@ -25,7 +24,6 @@ type ValidatingPool struct {
 
 	hashGroups map[int64][]wsync.BlockHash
 	sctx       *wsync.Context
-	mutex      sync.Mutex
 }
 
 var _ wsync.WritablePool = (*ValidatingPool)(nil)
@@ -39,9 +37,6 @@ func (vp *ValidatingPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) 
 }
 
 func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
-	vp.mutex.Lock()
-	defer vp.mutex.Unlock()
-
 	if vp.hashGroups == nil {
 		err := vp.makeHashGroups()
 		if err != nil {
