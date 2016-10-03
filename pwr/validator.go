@@ -71,15 +71,24 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		fileIndices <- int64(fileIndex)
 	}
 
-	close(vctx.Wounds)
-
-	for i := 0; i < numWorkers+1; i++ {
+	// wait for all workers to finish
+	for i := 0; i < numWorkers; i++ {
 		select {
 		case err := <-errs:
 			return err
 		case <-done:
 			// good!
 		}
+	}
+
+	close(vctx.Wounds)
+
+	// wait for wounds writer to finish
+	select {
+	case err := <-errs:
+		return err
+	case <-done:
+		// good!
 	}
 
 	return nil
