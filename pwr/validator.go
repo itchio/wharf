@@ -72,6 +72,7 @@ func (vc *ValidatorContext) Validate(target string, signature *SignatureInfo) er
 					BlockIndex: 0,
 					BlockSpan:  numBlocks(f.Size),
 				}
+				continue
 			} else {
 				return err
 			}
@@ -82,12 +83,34 @@ func (vc *ValidatorContext) Validate(target string, signature *SignatureInfo) er
 			return errors.Wrap(err, 1)
 		}
 
-		_, err = io.Copy(writer, reader)
+		writtenBytes, err := io.Copy(writer, reader)
 		if err != nil {
-			// TODO: handle ErrUnexpectedEOF (short files)
 			return err
 		}
+
+		if writtenBytes != f.Size {
+			totalBlocks := numBlocks(f.Size)
+			startBlock := writtenBytes / int64(BlockSize)
+			wounds <- &Wound{
+				FileIndex:  fileIndex,
+				BlockIndex: startBlock,
+				BlockSpan:  totalBlocks - startBlock,
+			}
+			vc.Consumer.Infof("short file: expected %d, got %d", writtenBytes, f.Size)
+		}
+
+		err = writer.Close()
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
 	}
+
+	err = targetPool.Close()
+	if err != nil {
+		return errors.Wrap(err, 1)
+	}
+
+	close(wounds)
 
 	select {
 	case err := <-errs:
