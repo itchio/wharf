@@ -71,6 +71,8 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		fileIndices <- int64(fileIndex)
 	}
 
+	close(fileIndices)
+
 	// wait for all workers to finish
 	for i := 0; i < numWorkers; i++ {
 		select {
