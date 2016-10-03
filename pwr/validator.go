@@ -164,7 +164,6 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 				Start:     writtenBytes,
 				End:       file.Size,
 			}
-			vctx.Consumer.Infof("short file: expected %d, got %d", writtenBytes, file.Size)
 		}
 
 		err = writer.Close()
