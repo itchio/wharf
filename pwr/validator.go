@@ -239,6 +239,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		return
 	}
 
+	close(wounds)
 	<-relayDone
 
 	done <- true
