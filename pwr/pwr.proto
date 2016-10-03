@@ -68,14 +68,15 @@ message ManifestBlockHash {
   bytes hash = 1;
 }
 
-// Wounds files format
-
+// Wounds files format: header, container, then any
+// number of Wounds
 message WoundsHeader {
 
 }
 
+// Describe a corrupted portion of a file, in [start,end)
 message Wound {
   int64 fileIndex = 1;
-  int64 blockIndex = 2;
-  int64 blockSpan = 3;
+  int64 start = 2;
+  int64 end = 3;
 }
