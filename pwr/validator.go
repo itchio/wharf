@@ -153,4 +153,6 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		errs <- errors.Wrap(err, 1)
 		return
 	}
+
+	done <- true
 }
