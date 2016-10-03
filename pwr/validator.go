@@ -155,7 +155,16 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		return
 	}
 
-	wounds := AggregateWounds(vctx.Wounds, MaxWoundSize)
+	aggregateOut := make(chan *Wound)
+	relayDone := make(chan bool)
+	go func() {
+		for w := range aggregateOut {
+			vctx.Wounds <- w
+		}
+		relayDone <- true
+	}()
+
+	wounds := AggregateWounds(aggregateOut, MaxWoundSize)
 
 	validatingPool := &ValidatingPool{
 		Pool:      nullpool.New(signature.Container),
@@ -229,6 +238,8 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		errs <- errors.Wrap(err, 1)
 		return
 	}
+
+	<-relayDone
 
 	done <- true
 }
