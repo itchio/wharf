@@ -120,8 +120,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	}
 
 	close(doneBytes)
-	vctx.Consumer.Progress(1.0)
-
 	close(vctx.Wounds)
 
 	// wait for wounds writer to finish
