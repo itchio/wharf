@@ -173,6 +173,7 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *SignatureInfo) error {
 	sourceContainer := actx.SourceContainer
 
+	var validatingPool *ValidatingPool
 	errs := make(chan error)
 	done := make(chan bool)
 	numTasks := 0
@@ -183,17 +184,17 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	}
 
 	if signature != nil {
-		vp := &ValidatingPool{
+		validatingPool = &ValidatingPool{
 			Pool:      outputPool,
 			Container: sourceContainer,
 			Signature: signature,
 		}
 
 		if actx.WoundsPath != "" {
-			vp.Wounds = make(chan *Wound)
+			validatingPool.Wounds = make(chan *Wound)
 
 			ww := &WoundsWriter{
-				Wounds: vp.Wounds,
+				Wounds: validatingPool.Wounds,
 			}
 			numTasks++
 
@@ -207,7 +208,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			}()
 		}
 
-		outputPool = vp
+		outputPool = validatingPool
 	}
 
 	targetContainer := actx.TargetContainer
@@ -293,6 +294,12 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	err = outputPool.Close()
 	if err != nil {
 		return errors.Wrap(err, 1)
+	}
+
+	if validatingPool != nil {
+		if validatingPool.Wounds != nil {
+			close(validatingPool.Wounds)
+		}
 	}
 
 	for i := 0; i < numTasks; i++ {
