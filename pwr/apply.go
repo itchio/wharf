@@ -190,16 +190,20 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			Signature: signature,
 		}
 
+		var woundsConsumer WoundsConsumer
+
 		if actx.WoundsPath != "" {
 			validatingPool.Wounds = make(chan *Wound)
 
-			ww := &WoundsWriter{
-				Wounds: validatingPool.Wounds,
+			woundsConsumer = &WoundsWriter{
+				WoundsPath: actx.WoundsPath,
 			}
 			numTasks++
+		}
 
+		if woundsConsumer != nil {
 			go func() {
-				err := ww.Do(signature, actx.WoundsPath)
+				err := woundsConsumer.Do(signature.Container, validatingPool.Wounds)
 				if err != nil {
 					errs <- err
 					return
