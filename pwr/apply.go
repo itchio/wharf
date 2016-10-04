@@ -45,6 +45,8 @@ type ApplyContext struct {
 	SourceContainer *tlc.Container
 	OutputPool      wsync.WritablePool
 
+	WoundsPath string
+
 	VetApply VetApplyFunc
 
 	Signature *SignatureInfo
@@ -171,17 +173,41 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *SignatureInfo) error {
 	sourceContainer := actx.SourceContainer
 
+	errs := make(chan error)
+	done := make(chan bool)
+	numTasks := 0
+
 	outputPool := actx.OutputPool
 	if outputPool == nil {
 		outputPool = fspool.New(sourceContainer, actx.OutputPath)
 	}
 
 	if signature != nil {
-		outputPool = &ValidatingPool{
+		vp := &ValidatingPool{
 			Pool:      outputPool,
 			Container: sourceContainer,
 			Signature: signature,
 		}
+
+		if actx.WoundsPath != "" {
+			vp.Wounds = make(chan *Wound)
+
+			ww := &WoundsWriter{
+				Wounds: vp.Wounds,
+			}
+			numTasks++
+
+			go func() {
+				err := ww.Do(signature, actx.WoundsPath)
+				if err != nil {
+					errs <- err
+					return
+				}
+				done <- true
+			}()
+		}
+
+		outputPool = vp
 	}
 
 	targetContainer := actx.TargetContainer
@@ -267,6 +293,15 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	err = outputPool.Close()
 	if err != nil {
 		return errors.Wrap(err, 1)
+	}
+
+	for i := 0; i < numTasks; i++ {
+		select {
+		case err = <-errs:
+			return errors.Wrap(err, 1)
+		case <-done:
+			// good!
+		}
 	}
 
 	return nil
