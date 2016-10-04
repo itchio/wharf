@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/go-errors/errors"
@@ -33,6 +34,9 @@ func NewHealer(spec string, target string) (Healer, error) {
 	switch healerType {
 	case "archive":
 		file, err := eos.Open(healerURL)
+		if err != nil {
+			return nil, errors.Wrap(err, 1)
+		}
 
 		ah := &ArchiveHealer{
 			File:   file,
@@ -69,6 +73,12 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	files := make(map[int64]bool)
 	fileIndices := make(chan int64)
 
+	if ah.NumWorkers == 0 {
+		ah.NumWorkers = runtime.NumCPU() + 1
+	}
+
+	defer ah.File.Close()
+
 	stat, err := ah.File.Stat()
 	if err != nil {
 		return err
@@ -87,10 +97,25 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	targetPool := fspool.New(container, ah.Target)
 
 	errs := make(chan error)
-	done := make(chan bool)
+	done := make(chan bool, ah.NumWorkers)
+	cancelled := make(chan struct{})
+
+	healed := make(chan int64)
+	countingDone := make(chan struct{})
+	defer func() {
+		close(healed)
+		<-countingDone
+	}()
+
+	go func() {
+		for healedChunk := range healed {
+			ah.totalHealed += healedChunk
+		}
+		close(countingDone)
+	}()
 
 	for i := 0; i < ah.NumWorkers; i++ {
-		go ah.heal(container, zipReader, stat.Size(), targetPool, fileIndices, errs, done)
+		go ah.heal(container, zipReader, stat.Size(), targetPool, fileIndices, errs, done, cancelled, healed)
 	}
 
 	for wound := range wounds {
@@ -102,72 +127,102 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 		}
 
 		files[wound.FileIndex] = true
-		fileIndices <- wound.FileIndex
+
+		select {
+		case err = <-errs:
+			// got an early error, cancel the rest
+			close(fileIndices)
+			close(cancelled)
+			return errors.Wrap(err, 1)
+		case fileIndices <- wound.FileIndex:
+			// queued for work!
+		}
 	}
 
+	// queued everything
 	close(fileIndices)
 
+	// expecting up to NumWorkers done, some may still
+	// send errors
 	for i := 0; i < ah.NumWorkers; i++ {
 		select {
 		case err = <-errs:
+			close(cancelled)
 			return errors.Wrap(err, 1)
 		case <-done:
 			// good!
 		}
 	}
 
-	err = ah.File.Close()
-	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-
 	return nil
 }
 
-func (ah *ArchiveHealer) heal(container *tlc.Container, zipReader *zip.Reader, zipSize int64, targetPool wsync.WritablePool,
-	fileIndices chan int64, errs chan error, done chan bool) {
+func (ah *ArchiveHealer) heal(container *tlc.Container, zipReader *zip.Reader, zipSize int64,
+	targetPool wsync.WritablePool,
+	fileIndices chan int64, errs chan error, done chan bool, cancelled chan struct{}, healed chan int64) {
 
 	var sourcePool wsync.Pool
 	var err error
 
 	sourcePool = zippool.New(container, zipReader)
+	defer sourcePool.Close()
 
-	for fileIndex := range fileIndices {
-		var reader io.Reader
-		var writer io.WriteCloser
-
-		reader, err = sourcePool.GetReader(fileIndex)
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
+	for {
+		select {
+		case <-cancelled:
+			// something else stopped the healing
 			return
-		}
+		case fileIndex, ok := <-fileIndices:
+			if !ok {
+				// no more files to heal
+				done <- true
+				return
+			}
 
-		writer, err = targetPool.GetWriter(fileIndex)
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
-		}
+			var healedChunk int64
+			healedChunk, err = ah.healOne(sourcePool, targetPool, fileIndex)
+			if err != nil {
+				select {
+				case <-cancelled:
+					// already cancelled, no need for more errors
+					return
+				case errs <- err:
+					return
+				}
+			}
 
-		_, err = io.Copy(writer, reader)
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
-		}
-
-		err = writer.Close()
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
+			healed <- healedChunk
 		}
 	}
+}
 
-	err = sourcePool.Close()
+func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64) (int64, error) {
+	var err error
+	var reader io.Reader
+	var writer io.WriteCloser
+	var healedBytes int64
+
+	reader, err = sourcePool.GetReader(fileIndex)
 	if err != nil {
-		errs <- errors.Wrap(err, 1)
-		return
+		return 0, err
 	}
 
-	done <- true
+	writer, err = targetPool.GetWriter(fileIndex)
+	if err != nil {
+		return 0, err
+	}
+
+	healedBytes, err = io.Copy(writer, reader)
+	if err != nil {
+		return healedBytes, err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return healedBytes, err
+	}
+
+	return healedBytes, err
 }
 
 func (ah *ArchiveHealer) TotalCorrupted() int64 {
