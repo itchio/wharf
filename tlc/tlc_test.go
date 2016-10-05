@@ -1,4 +1,4 @@
-package tlc_test
+package tlc
 
 import (
 	"archive/zip"
@@ -10,48 +10,33 @@ import (
 	"testing"
 
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/pwr"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/wharf/state"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_NonDirWalk(t *testing.T) {
 	tmpPath, err := ioutil.TempDir("", "nondirwalk")
 	must(t, err)
-	defer func() {
-		err := os.RemoveAll(tmpPath)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath)
 
 	foobarPath := path.Join(tmpPath, "foobar")
 	f, err := os.Create(foobarPath)
 	must(t, err)
-	defer func() {
-		err := os.RemoveAll(tmpPath)
-		must(t, err)
-	}()
 	must(t, f.Close())
 
-	_, err = tlc.WalkDir(f.Name(), nil)
+	_, err = WalkDir(f.Name(), nil)
 	assert.NotNil(t, err, "should refuse to walk non-directory")
 }
 
 func Test_WalkZip(t *testing.T) {
 	tmpPath := mktestdir(t, "walkzip")
-	defer func() {
-		err := os.RemoveAll(tmpPath)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath)
 
 	tmpPath2, err := ioutil.TempDir("", "walkzip2")
 	must(t, err)
-	defer func() {
-		err := os.RemoveAll(tmpPath2)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath2)
 
-	container, err := tlc.WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, nil)
 	must(t, err)
 
 	zipPath := path.Join(tmpPath2, "container.zip")
@@ -59,10 +44,8 @@ func Test_WalkZip(t *testing.T) {
 	must(t, err)
 	defer zipWriter.Close()
 
-	fp := fspool.New(container, tmpPath)
-	_, err = archiver.CompressZip(zipWriter, container, fp, &pwr.StateConsumer{})
+	_, err = archiver.CompressZip(zipWriter, tmpPath, &state.Consumer{})
 	must(t, err)
-	defer fp.Close()
 
 	zipSize, err := zipWriter.Seek(0, os.SEEK_CUR)
 	must(t, err)
@@ -70,7 +53,7 @@ func Test_WalkZip(t *testing.T) {
 	zipReader, err := zip.NewReader(zipWriter, zipSize)
 	must(t, err)
 
-	zipContainer, err := tlc.WalkZip(zipReader, nil)
+	zipContainer, err := WalkZip(zipReader, nil)
 	must(t, err)
 
 	if testSymlinks {
@@ -90,12 +73,9 @@ func Test_WalkZip(t *testing.T) {
 
 func Test_Walk(t *testing.T) {
 	tmpPath := mktestdir(t, "walk")
-	defer func() {
-		err := os.RemoveAll(tmpPath)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath)
 
-	container, err := tlc.WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, nil)
 	must(t, err)
 
 	dirs := []string{
@@ -140,25 +120,19 @@ func Test_Walk(t *testing.T) {
 
 func Test_Prepare(t *testing.T) {
 	tmpPath := mktestdir(t, "prepare")
-	defer func() {
-		err := os.RemoveAll(tmpPath)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath)
 
-	container, err := tlc.WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, nil)
 	must(t, err)
 
 	tmpPath2, err := ioutil.TempDir("", "prepare")
-	defer func() {
-		err := os.RemoveAll(tmpPath2)
-		must(t, err)
-	}()
+	defer os.RemoveAll(tmpPath2)
 	must(t, err)
 
 	err = container.Prepare(tmpPath2)
 	must(t, err)
 
-	container2, err := tlc.WalkDir(tmpPath2, nil)
+	container2, err := WalkDir(tmpPath2, nil)
 	must(t, err)
 
 	must(t, container.EnsureEqual(container2))

@@ -11,8 +11,8 @@ import (
 	"github.com/go-errors/errors"
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/splitfunc"
+	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/timeout"
 )
 
@@ -44,7 +44,7 @@ type ResumableUpload struct {
 	pipeWriter io.Closer
 
 	id       int
-	consumer *pwr.StateConsumer
+	consumer *state.Consumer
 
 	MaxChunkGroup int
 }
@@ -77,7 +77,7 @@ func (ru *ResumableUpload) Write(p []byte) (int, error) {
 	return ru.writeCounter.Write(p)
 }
 
-func NewResumableUpload(uploadURL string, done chan bool, errs chan error, consumer *pwr.StateConsumer) (*ResumableUpload, error) {
+func NewResumableUpload(uploadURL string, done chan bool, errs chan error, consumer *state.Consumer) (*ResumableUpload, error) {
 	ru := &ResumableUpload{}
 	ru.MaxChunkGroup = 64
 	ru.uploadURL = uploadURL

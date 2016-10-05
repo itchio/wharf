@@ -1,4 +1,4 @@
-package wsync_test
+package wsync
 
 // func Example() {
 // 	srcReader, _ := os.Open("content-v2.bin")

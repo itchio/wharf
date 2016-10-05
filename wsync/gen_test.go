@@ -1,12 +1,10 @@
-package wsync_test
+package wsync
 
 import (
 	"bytes"
 	"io"
 	"math/rand"
 	"testing"
-
-	"github.com/itchio/wharf/wsync"
 )
 
 type RandReader struct {
@@ -121,8 +119,8 @@ func Test_GenData(t *testing.T) {
 			Description: "Source and target both smaller then a block size.",
 		},
 	}
-	rs := wsync.NewContext(16 * 1024)
-	rsDelta := wsync.NewContext(16 * 1024)
+	rs := NewContext(16 * 1024)
+	rsDelta := NewContext(16 * 1024)
 	for _, p := range pairs {
 		(&p.Source).Fill(t)
 		(&p.Target).Fill(t)
@@ -130,25 +128,25 @@ func Test_GenData(t *testing.T) {
 		sourceBuffer := bytes.NewReader(p.Source.Data)
 		targetBuffer := bytes.NewReader(p.Target.Data)
 
-		sig := make([]wsync.BlockHash, 0, 10)
-		err := rs.CreateSignature(0, targetBuffer, func(bl wsync.BlockHash) error {
+		sig := make([]BlockHash, 0, 10)
+		err := rs.CreateSignature(0, targetBuffer, func(bl BlockHash) error {
 			sig = append(sig, bl)
 			return nil
 		})
 		if err != nil {
 			t.Errorf("Failed to create signature: %s", err)
 		}
-		lib := wsync.NewBlockLibrary(sig)
+		lib := NewBlockLibrary(sig)
 
-		opsOut := make(chan wsync.Operation)
+		opsOut := make(chan Operation)
 		go func() {
 			var blockRangeCt, dataCt, bytes int
 			defer close(opsOut)
-			err := rsDelta.ComputeDiff(sourceBuffer, lib, func(op wsync.Operation) error {
+			deltaErr := rsDelta.ComputeDiff(sourceBuffer, lib, func(op Operation) error {
 				switch op.Type {
-				case wsync.OpBlockRange:
+				case OpBlockRange:
 					blockRangeCt++
-				case wsync.OpData:
+				case OpData:
 					// Copy data buffer so it may be reused in internal buffer.
 					b := make([]byte, len(op.Data))
 					copy(b, op.Data)
@@ -160,8 +158,8 @@ func Test_GenData(t *testing.T) {
 				return nil
 			}, -1)
 			t.Logf("Range Ops:%5d, Data Ops: %5d, Data Len: %5dKiB, For %s.", blockRangeCt, dataCt, bytes/1024, p.Description)
-			if err != nil {
-				t.Errorf("Failed to create delta: %s", err)
+			if deltaErr != nil {
+				t.Errorf("Failed to create delta: %s", deltaErr)
 			}
 		}()
 
@@ -190,7 +188,7 @@ type SinglePool struct {
 	reader io.ReadSeeker
 }
 
-var _ wsync.Pool = (*SinglePool)(nil)
+var _ Pool = (*SinglePool)(nil)
 
 func (sp *SinglePool) GetReader(fileIndex int64) (io.Reader, error) {
 	return sp.GetReadSeeker(fileIndex)
@@ -202,11 +200,4 @@ func (sp *SinglePool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
 
 func (sp *SinglePool) Close() error {
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

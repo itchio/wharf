@@ -11,7 +11,7 @@ import (
 	"github.com/go-errors/errors"
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/state"
 )
 
 // MultipartUpload keeps track of an upload and reports back on its progress
@@ -59,7 +59,7 @@ func (mu *MultipartUpload) Write(p []byte) (int, error) {
 }
 
 func NewMultipartUpload(uploadURL string, uploadParams map[string]string, fileName string,
-	done chan bool, errs chan error, consumer *pwr.StateConsumer) (*MultipartUpload, error) {
+	done chan bool, errs chan error, consumer *state.Consumer) (*MultipartUpload, error) {
 
 	mu := &MultipartUpload{}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/nullpool"
+	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/wsync"
 )
 
@@ -19,7 +20,7 @@ type ValidatorContext struct {
 	WoundsPath string
 	NumWorkers int
 
-	Consumer *StateConsumer
+	Consumer *state.Consumer
 
 	// FailFast makes Validate return Wounds as errors and stop checking
 	FailFast bool

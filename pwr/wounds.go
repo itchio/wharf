@@ -6,6 +6,7 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
+	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 )
@@ -122,7 +123,7 @@ func (ww *WoundsWriter) TotalCorrupted() int64 {
 ///////////////////////////////
 
 type WoundsPrinter struct {
-	Consumer *StateConsumer
+	Consumer *state.Consumer
 
 	totalCorrupted int64
 }

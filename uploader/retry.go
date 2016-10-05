@@ -4,16 +4,16 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/state"
 )
 
 type RetryContext struct {
 	tries    int
 	maxTries int
-	consumer *pwr.StateConsumer
+	consumer *state.Consumer
 }
 
-func NewRetryContext(consumer *pwr.StateConsumer) *RetryContext {
+func NewRetryContext(consumer *state.Consumer) *RetryContext {
 	return &RetryContext{
 		tries:    1,
 		maxTries: 10,

@@ -11,6 +11,7 @@ import (
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
@@ -34,7 +35,7 @@ type VetApplyFunc func(actx *ApplyContext) error
 
 // ApplyContext holds the state while applying a patch
 type ApplyContext struct {
-	Consumer *StateConsumer
+	Consumer *state.Consumer
 
 	TargetPath string
 	OutputPath string

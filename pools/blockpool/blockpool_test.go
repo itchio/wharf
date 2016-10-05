@@ -1,4 +1,4 @@
-package blockpool_test
+package blockpool
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/alecthomas/assert"
-	"github.com/itchio/wharf/pools/blockpool"
 	"github.com/itchio/wharf/tlc"
 
 	"net/http"
@@ -22,41 +21,41 @@ func init() {
 
 func Test_BlockMath(t *testing.T) {
 	// number of blocks
-	assert.Equal(t, int64(0), blockpool.ComputeNumBlocks(0))
-	assert.Equal(t, int64(1), blockpool.ComputeNumBlocks(1))
-	assert.Equal(t, int64(1), blockpool.ComputeNumBlocks(blockpool.BigBlockSize-1))
-	assert.Equal(t, int64(1), blockpool.ComputeNumBlocks(blockpool.BigBlockSize))
-	assert.Equal(t, int64(2), blockpool.ComputeNumBlocks(blockpool.BigBlockSize+1))
-	assert.Equal(t, int64(2), blockpool.ComputeNumBlocks(blockpool.BigBlockSize*2-1))
-	assert.Equal(t, int64(3), blockpool.ComputeNumBlocks(blockpool.BigBlockSize*2+1))
+	assert.Equal(t, int64(0), ComputeNumBlocks(0))
+	assert.Equal(t, int64(1), ComputeNumBlocks(1))
+	assert.Equal(t, int64(1), ComputeNumBlocks(BigBlockSize-1))
+	assert.Equal(t, int64(1), ComputeNumBlocks(BigBlockSize))
+	assert.Equal(t, int64(2), ComputeNumBlocks(BigBlockSize+1))
+	assert.Equal(t, int64(2), ComputeNumBlocks(BigBlockSize*2-1))
+	assert.Equal(t, int64(3), ComputeNumBlocks(BigBlockSize*2+1))
 
 	// block sizes
-	assert.Equal(t, blockpool.BigBlockSize-1, blockpool.ComputeBlockSize(blockpool.BigBlockSize-1, 0))
+	assert.Equal(t, BigBlockSize-1, ComputeBlockSize(BigBlockSize-1, 0))
 
-	assert.Equal(t, blockpool.BigBlockSize, blockpool.ComputeBlockSize(blockpool.BigBlockSize, 0))
+	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize, 0))
 
-	assert.Equal(t, blockpool.BigBlockSize, blockpool.ComputeBlockSize(blockpool.BigBlockSize+1, 0))
-	assert.Equal(t, int64(1), blockpool.ComputeBlockSize(blockpool.BigBlockSize+1, 1))
+	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize+1, 0))
+	assert.Equal(t, int64(1), ComputeBlockSize(BigBlockSize+1, 1))
 
-	assert.Equal(t, blockpool.BigBlockSize, blockpool.ComputeBlockSize(blockpool.BigBlockSize*2-1, 0))
-	assert.Equal(t, blockpool.BigBlockSize-1, blockpool.ComputeBlockSize(blockpool.BigBlockSize*2-1, 1))
+	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2-1, 0))
+	assert.Equal(t, BigBlockSize-1, ComputeBlockSize(BigBlockSize*2-1, 1))
 
-	assert.Equal(t, blockpool.BigBlockSize, blockpool.ComputeBlockSize(blockpool.BigBlockSize*2+1, 0))
-	assert.Equal(t, blockpool.BigBlockSize, blockpool.ComputeBlockSize(blockpool.BigBlockSize*2+1, 1))
-	assert.Equal(t, int64(1), blockpool.ComputeBlockSize(blockpool.BigBlockSize*2+1, 2))
+	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2+1, 0))
+	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2+1, 1))
+	assert.Equal(t, int64(1), ComputeBlockSize(BigBlockSize*2+1, 2))
 }
 
 type TestSink struct {
-	FailingBlock blockpool.BlockLocation
+	FailingBlock BlockLocation
 }
 
-var _ blockpool.Sink = (*TestSink)(nil)
+var _ Sink = (*TestSink)(nil)
 
-func (ts *TestSink) Clone() blockpool.Sink {
+func (ts *TestSink) Clone() Sink {
 	return ts
 }
 
-func (ts *TestSink) Store(location blockpool.BlockLocation, data []byte) error {
+func (ts *TestSink) Store(location BlockLocation, data []byte) error {
 	time.Sleep(10 * time.Millisecond)
 	if location.FileIndex == ts.FailingBlock.FileIndex && location.BlockIndex == ts.FailingBlock.BlockIndex {
 		return fmt.Errorf("sample fail!")
@@ -73,12 +72,12 @@ func Test_FanOut(t *testing.T) {
 	t.Logf("Testing fail fast...")
 
 	ts := &TestSink{
-		FailingBlock: blockpool.BlockLocation{
+		FailingBlock: BlockLocation{
 			FileIndex:  2,
 			BlockIndex: 2,
 		},
 	}
-	fos, err := blockpool.NewFanOutSink(ts, 8)
+	fos, err := NewFanOutSink(ts, 8)
 	assert.Nil(t, err)
 
 	fos.Start()
@@ -87,12 +86,12 @@ func Test_FanOut(t *testing.T) {
 
 	for i := 0; i < 8; i++ {
 		for j := 0; j < 8; j++ {
-			loc := blockpool.BlockLocation{
+			loc := BlockLocation{
 				FileIndex:  int64(i),
 				BlockIndex: int64(j),
 			}
-			err := fos.Store(loc, []byte{})
-			if err != nil {
+			sErr := fos.Store(loc, []byte{})
+			if sErr != nil {
 				hadError = true
 			}
 		}
@@ -105,7 +104,7 @@ func Test_FanOut(t *testing.T) {
 
 	t.Logf("Testing tail errors...")
 
-	fos, err = blockpool.NewFanOutSink(ts, 8)
+	fos, err = NewFanOutSink(ts, 8)
 	assert.Nil(t, err)
 
 	fos.Start()

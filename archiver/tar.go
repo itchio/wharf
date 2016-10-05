@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/state"
 )
 
 // Does not preserve users, nor permission, except the executable bit
-func ExtractTar(archive string, dir string, consumer *pwr.StateConsumer) (*ExtractResult, error) {
+func ExtractTar(archive string, dir string, consumer *state.Consumer) (*ExtractResult, error) {
 	consumer.Infof("Extracting %s to %s", archive, dir)
 
 	dirCount := 0
