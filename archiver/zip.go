@@ -115,6 +115,8 @@ func CompressZip(archiveWriter io.Writer, dir string, consumer *state.Consumer) 
 			return nil
 		}
 
+		name = filepath.ToSlash(name)
+
 		fh, wErr := zip.FileInfoHeader(info)
 		if wErr != nil {
 			return wErr
