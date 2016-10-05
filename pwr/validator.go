@@ -35,9 +35,15 @@ type ValidatorContext struct {
 func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) error {
 	var woundsConsumer WoundsConsumer
 
+	numWorkers := vctx.NumWorkers
+	if numWorkers == 0 {
+		numWorkers = runtime.NumCPU() + 1
+	}
+
 	vctx.Wounds = make(chan *Wound)
 	errs := make(chan error)
-	done := make(chan bool)
+	done := make(chan bool, numWorkers+1)
+	cancelled := make(chan struct{})
 
 	if vctx.FailFast {
 		if vctx.WoundsPath != "" {
@@ -58,13 +64,24 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	go func() {
 		err := woundsConsumer.Do(signature.Container, vctx.Wounds)
 		if err != nil {
-			errs <- err
-			return
+			select {
+			case <-cancelled:
+				// another error happened, give up
+				return
+			case errs <- err:
+				// great!
+				return
+			}
 		}
 		done <- true
 	}()
 
 	doneBytes := make(chan int64)
+	doneCounting := make(chan struct{})
+	defer func() {
+		close(doneBytes)
+		<-doneCounting
+	}()
 
 	go func() {
 		done := int64(0)
@@ -75,17 +92,14 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 				vctx.Consumer.Progress(float64(done) / float64(signature.Container.Size))
 			}
 		}
-	}()
 
-	numWorkers := vctx.NumWorkers
-	if numWorkers == 0 {
-		numWorkers = runtime.NumCPU() + 1
-	}
+		close(doneCounting)
+	}()
 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, done, errs, doneBytes)
+		go vctx.validate(target, signature, fileIndices, done, errs, doneBytes, cancelled)
 	}
 
 	for fileIndex := range signature.Container.Files {
@@ -104,7 +118,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		}
 	}
 
-	close(doneBytes)
 	close(vctx.Wounds)
 
 	// wait for wounds writer to finish
@@ -118,7 +131,8 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	return nil
 }
 
-func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64, done chan bool, errs chan error, doneBytes chan int64) {
+func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
+	done chan bool, errs chan error, doneBytes chan int64, cancelled chan struct{}) {
 	targetPool, err := pools.New(signature.Container, target)
 	if err != nil {
 		errs <- err
