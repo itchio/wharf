@@ -1,4 +1,4 @@
-package pwr
+package drip
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/itchio/wharf/counter"
 )
 
-func Test_DripWriter(t *testing.T) {
+func Test_Writer(t *testing.T) {
 	dropSize := 16
 
 	numShort := 0
@@ -36,7 +36,7 @@ func Test_DripWriter(t *testing.T) {
 	buf := make([]byte, dropSize)
 	countingWriter := counter.NewWriter(nil)
 
-	dw := &DripWriter{
+	dw := &Writer{
 		Buffer:   buf,
 		Validate: validate,
 		Writer:   countingWriter,

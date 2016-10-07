@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/go-errors/errors"
+	"github.com/itchio/wharf/pwr/drip"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
 )
@@ -91,7 +92,7 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		return nil
 	}
 
-	dw := &DripWriter{
+	dw := &drip.Writer{
 		Writer:   w,
 		Buffer:   make([]byte, BlockSize),
 		Validate: validate,
