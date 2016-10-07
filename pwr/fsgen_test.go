@@ -21,6 +21,8 @@ type testDirEntry struct {
 	mode int
 	size int64
 	seed int64
+	dir  bool
+	dest string
 }
 
 type testDirSettings struct {
@@ -36,6 +38,18 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 
 	for _, entry := range s.entries {
 		path := filepath.Join(dir, filepath.FromSlash(entry.path))
+
+		if entry.dir {
+			mode := 0755
+			if entry.mode != 0 {
+				mode = entry.mode
+			}
+			assert.Nil(t, os.MkdirAll(entry.path, os.FileMode(mode)))
+			continue
+		} else if entry.dest != "" {
+			assert.Nil(t, os.Symlink(entry.dest, path))
+			continue
+		}
 
 		parent := filepath.Dir(path)
 		mkErr := os.MkdirAll(parent, 0755)

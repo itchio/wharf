@@ -236,5 +236,10 @@ func AssertValid(target string, signature *SignatureInfo) error {
 		Consumer: &state.Consumer{},
 	}
 
-	return vctx.Validate(target, signature)
+	err := vctx.Validate(target, signature)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

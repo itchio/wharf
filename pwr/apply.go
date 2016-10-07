@@ -76,6 +76,9 @@ type ApplyContext struct {
 	// internal
 	actualOutputPath string
 	transpositions   map[string][]*Transposition
+
+	// debug
+	debugBrokenRename bool
 }
 
 type signature []wsync.BlockHash
@@ -447,14 +450,18 @@ func (actx *ApplyContext) move(oldAbsolutePath string, newAbsolutePath string) e
 		return errors.Wrap(err, 1)
 	}
 
-	err = os.Rename(oldAbsolutePath, newAbsolutePath)
+	if actx.debugBrokenRename {
+		err = &os.PathError{}
+	} else {
+		err = os.Rename(oldAbsolutePath, newAbsolutePath)
+	}
 	if err != nil {
 		cErr := actx.copy(oldAbsolutePath, newAbsolutePath, MkdirBehavior_Never)
 		if cErr != nil {
 			return cErr
 		}
 
-		cErr = os.Remove(newAbsolutePath)
+		cErr = os.Remove(oldAbsolutePath)
 		if cErr != nil {
 			return cErr
 		}
@@ -752,10 +759,6 @@ func readOps(rc *wire.ReadContext, ops chan wsync.Operation, errc chan error) {
 				// safety measures are cheap and reassuring.
 				readingOps = false
 			default:
-				// if you get this, then you're probably implementing an extension
-				// to the wharf patch format in which case, I'd love to get in touch
-				// with you to know why & discuss adding it to the spec so other
-				// people can share it: amos@itch.io
 				fmt.Printf("unrecognized rop type %d\n", rop.Type)
 				errc <- errors.Wrap(ErrMalformedPatch, 1)
 				return

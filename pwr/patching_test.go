@@ -16,18 +16,20 @@ import (
 )
 
 type patchScenario struct {
-	name            string
-	v1              testDirSettings
-	intermediate    *testDirSettings
-	v2              testDirSettings
-	touchedFiles    int // files that were written to (not renamed) during apply
-	noopFiles       int // files that were left as-is during apply
-	movedFiles      int
-	deletedFiles    int
-	deletedSymlinks int
-	deletedDirs     int
-	leftDirs        int // folders that couldn't be deleted during apply (because of non-container files in them)
-	testVet         bool
+	name             string
+	v1               testDirSettings
+	intermediate     *testDirSettings
+	corruptions      *testDirSettings
+	v2               testDirSettings
+	touchedFiles     int // files that were written to (not renamed) during apply
+	noopFiles        int // files that were left as-is during apply
+	movedFiles       int
+	deletedFiles     int
+	deletedSymlinks  int
+	deletedDirs      int
+	leftDirs         int // folders that couldn't be deleted during apply (because of non-container files in them)
+	extraTests       bool
+	testBrokenRename bool
 }
 
 // This is more of an integration test, it hits a lot of statements
@@ -38,19 +40,24 @@ func Test_PatchCycle(t *testing.T) {
 		deletedFiles: 0,
 		v1: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*11 + 14},
 				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x3},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x22, size: BlockSize*11 + 14},
 			},
 		},
 		v2: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x111},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*17 + 14},
 				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
-		testVet: true,
+		extraTests: true,
 	})
 
 	runPatchingScenario(t, patchScenario{
@@ -144,6 +151,7 @@ func Test_PatchCycle(t *testing.T) {
 				{path: "new/subdir/subdir/file-4", seed: 0x444},
 			},
 		},
+		testBrokenRename: true,
 	})
 
 	runPatchingScenario(t, patchScenario{
@@ -174,6 +182,7 @@ func Test_PatchCycle(t *testing.T) {
 				{path: "old/new/subdir/subdir/file-4", seed: 0x4},
 			},
 		},
+		testBrokenRename: true,
 	})
 
 	runPatchingScenario(t, patchScenario{
@@ -194,6 +203,7 @@ func Test_PatchCycle(t *testing.T) {
 				{path: "dir2/file-1bis", seed: 0x1},
 			},
 		},
+		testBrokenRename: true,
 	})
 
 	runPatchingScenario(t, patchScenario{
@@ -214,8 +224,62 @@ func Test_PatchCycle(t *testing.T) {
 				{path: "dir3/file-1bis", seed: 0x1},
 			},
 		},
+		testBrokenRename: true,
 	})
+
+	if testSymlinks {
+		runPatchingScenario(t, patchScenario{
+			name: "symlinks are added by patch",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file", seed: 0x1},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file", seed: 0x1},
+					{path: "dir1/link", dest: "file"},
+				},
+			},
+		})
+
+		runPatchingScenario(t, patchScenario{
+			name: "symlinks are changed by patch",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file1", seed: 0x1},
+					{path: "dir1/file2", seed: 0x2},
+					{path: "dir1/link", dest: "file1"},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file1", seed: 0x1},
+					{path: "dir1/file2", seed: 0x2},
+					{path: "dir1/link", dest: "file2"},
+				},
+			},
+		})
+
+		runPatchingScenario(t, patchScenario{
+			name:            "symlinks are removed by patch",
+			deletedSymlinks: 1,
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file", seed: 0x1},
+					{path: "dir1/link", dest: "file"},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "dir1/file", seed: 0x1},
+				},
+			},
+		})
+	}
 }
+
+type SetupFunc func(actx *ApplyContext)
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	log := func(format string, args ...interface{}) {
@@ -273,41 +337,102 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 	v1After := filepath.Join(mainDir, "v1After")
 
-	if scenario.testVet {
-		log("Refusing to vet")
+	woundsPath := filepath.Join(mainDir, "wounds.pww")
 
-		assert.Nil(t, os.RemoveAll(v1Before))
-		cpDir(t, v1, v1Before)
+	if scenario.extraTests {
+		log("Making sure before-path folder doesn't validate")
+		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
+		assert.Nil(t, sErr)
+		assert.NotNil(t, AssertValid(v1Before, signature))
 
-		var NotVettingError = errors.New("not vetting this")
+		runExtraTest := func(setup SetupFunc) error {
+			assert.Nil(t, os.RemoveAll(woundsPath))
+			assert.Nil(t, os.RemoveAll(v1Before))
+			cpDir(t, v1, v1Before)
 
-		func() {
 			actx := &ApplyContext{
 				TargetPath: v1Before,
 				OutputPath: v1Before,
 
-				InPlace: true,
-				VetApply: func(actx *ApplyContext) error {
-					return NotVettingError
-				},
-
+				InPlace:  true,
 				Consumer: consumer,
+			}
+			if setup != nil {
+				setup(actx)
 			}
 
 			patchReader := bytes.NewReader(patchBuffer.Bytes())
 
 			aErr := actx.ApplyPatch(patchReader)
-			assert.NotNil(t, aErr)
-			assert.True(t, errors.Is(aErr, NotVettingError))
+			if aErr != nil {
+				return aErr
+			}
 
-			assert.Equal(t, 0, actx.Stats.DeletedFiles, "deleted files (no vet)")
-			assert.Equal(t, 0, actx.Stats.DeletedDirs, "deleted dirs (no vet)")
-			assert.Equal(t, 0, actx.Stats.TouchedFiles, "touched files (no vet)")
-			assert.Equal(t, 0, actx.Stats.NoopFiles, "noop files (no vet)")
+			if actx.Signature == nil {
+				vErr := AssertValid(v1Before, signature)
+				if vErr != nil {
+					return vErr
+				}
+			}
+
+			return nil
+		}
+
+		func() {
+			log("In-place with failing vet")
+			var NotVettingError = errors.New("not vetting this")
+			pErr := runExtraTest(func(actx *ApplyContext) {
+				actx.VetApply = func(actx *ApplyContext) error {
+					return NotVettingError
+				}
+			})
+			assert.NotNil(t, pErr)
+			assert.True(t, errors.Is(pErr, NotVettingError))
+		}()
+
+		func() {
+			log("In-place with signature (failfast, passing)")
+			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+				actx.Signature = signature
+			}))
+		}()
+
+		func() {
+			log("In-place with signature (failfast, failing)")
+			assert.NotNil(t, runExtraTest(func(actx *ApplyContext) {
+				actx.Signature = signature
+				makeTestDir(t, v1Before, *scenario.corruptions)
+			}))
+		}()
+
+		func() {
+			log("In-place with signature (wounds, passing)")
+			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+				actx.Signature = signature
+				actx.WoundsPath = woundsPath
+			}))
+
+			_, sErr := os.Lstat(woundsPath)
+			assert.NotNil(t, sErr)
+			assert.True(t, os.IsNotExist(sErr))
+		}()
+
+		func() {
+			log("In-place with signature (wounds, failing)")
+			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+				actx.Signature = signature
+				actx.WoundsPath = woundsPath
+				makeTestDir(t, v1Before, *scenario.corruptions)
+			}))
+
+			_, sErr := os.Lstat(woundsPath)
+			assert.Nil(t, sErr)
 		}()
 	}
 
 	log("Applying to other directory, with separate check")
+	assert.Nil(t, os.RemoveAll(v1Before))
+	cpDir(t, v1, v1Before)
 
 	func() {
 		actx := &ApplyContext{
@@ -337,46 +462,10 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 	log("Applying in-place")
 
-	assert.Nil(t, os.RemoveAll(v1After))
-	assert.Nil(t, os.RemoveAll(v1Before))
-	cpDir(t, v1, v1Before)
-
-	func() {
-		actx := &ApplyContext{
-			TargetPath: v1Before,
-			OutputPath: v1Before,
-
-			InPlace: true,
-
-			Consumer: consumer,
-		}
-
-		patchReader := bytes.NewReader(patchBuffer.Bytes())
-
-		aErr := actx.ApplyPatch(patchReader)
-		assert.Nil(t, aErr)
-
-		assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place)")
-		assert.Equal(t, scenario.deletedSymlinks, actx.Stats.DeletedSymlinks, "deleted symlinks (in-place)")
-		assert.Equal(t, scenario.deletedDirs+scenario.leftDirs, actx.Stats.DeletedDirs, "deleted dirs (in-place)")
-		assert.Equal(t, scenario.touchedFiles, actx.Stats.TouchedFiles, "touched files (in-place)")
-		assert.Equal(t, scenario.movedFiles, actx.Stats.MovedFiles, "moved files files (in-place)")
-		assert.Equal(t, len(sourceContainer.Files)-scenario.touchedFiles-scenario.movedFiles, actx.Stats.NoopFiles, "noop files (in-place)")
-
-		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
-		assert.Nil(t, sErr)
-
-		assert.Nil(t, AssertValid(v1Before, signature))
-	}()
-
-	if scenario.intermediate != nil {
-		log("Applying in-place with %d intermediate files", len(scenario.intermediate.entries))
-
+	testAll := func(setup SetupFunc) {
 		assert.Nil(t, os.RemoveAll(v1After))
 		assert.Nil(t, os.RemoveAll(v1Before))
 		cpDir(t, v1, v1Before)
-
-		makeTestDir(t, v1Before, *scenario.intermediate)
 
 		func() {
 			actx := &ApplyContext{
@@ -387,23 +476,75 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 				Consumer: consumer,
 			}
+			if setup != nil {
+				setup(actx)
+			}
 
 			patchReader := bytes.NewReader(patchBuffer.Bytes())
 
 			aErr := actx.ApplyPatch(patchReader)
 			assert.Nil(t, aErr)
 
-			assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place w/intermediate)")
-			assert.Equal(t, scenario.deletedDirs, actx.Stats.DeletedDirs, "deleted dirs (in-place w/intermediate)")
-			assert.Equal(t, scenario.deletedSymlinks, actx.Stats.DeletedSymlinks, "deleted symlinks (in-place w/intermediate)")
-			assert.Equal(t, scenario.touchedFiles, actx.Stats.TouchedFiles, "touched files (in-place w/intermediate)")
-			assert.Equal(t, scenario.noopFiles, actx.Stats.NoopFiles, "noop files (in-place w/intermediate)")
-			assert.Equal(t, scenario.leftDirs, actx.Stats.LeftDirs, "left dirs (in-place w/intermediate)")
+			assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place)")
+			assert.Equal(t, scenario.deletedSymlinks, actx.Stats.DeletedSymlinks, "deleted symlinks (in-place)")
+			assert.Equal(t, scenario.deletedDirs+scenario.leftDirs, actx.Stats.DeletedDirs, "deleted dirs (in-place)")
+			assert.Equal(t, scenario.touchedFiles, actx.Stats.TouchedFiles, "touched files (in-place)")
+			assert.Equal(t, scenario.movedFiles, actx.Stats.MovedFiles, "moved files (in-place)")
+			assert.Equal(t, len(sourceContainer.Files)-scenario.touchedFiles-scenario.movedFiles, actx.Stats.NoopFiles, "noop files (in-place)")
 
 			signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
 			assert.Nil(t, sErr)
 
 			assert.Nil(t, AssertValid(v1Before, signature))
 		}()
+
+		if scenario.intermediate != nil {
+			log("Applying in-place with %d intermediate files", len(scenario.intermediate.entries))
+
+			assert.Nil(t, os.RemoveAll(v1After))
+			assert.Nil(t, os.RemoveAll(v1Before))
+			cpDir(t, v1, v1Before)
+
+			makeTestDir(t, v1Before, *scenario.intermediate)
+
+			func() {
+				actx := &ApplyContext{
+					TargetPath: v1Before,
+					OutputPath: v1Before,
+
+					InPlace: true,
+
+					Consumer: consumer,
+				}
+				if setup != nil {
+					setup(actx)
+				}
+
+				patchReader := bytes.NewReader(patchBuffer.Bytes())
+
+				aErr := actx.ApplyPatch(patchReader)
+				assert.Nil(t, aErr)
+
+				assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place w/intermediate)")
+				assert.Equal(t, scenario.deletedDirs, actx.Stats.DeletedDirs, "deleted dirs (in-place w/intermediate)")
+				assert.Equal(t, scenario.deletedSymlinks, actx.Stats.DeletedSymlinks, "deleted symlinks (in-place w/intermediate)")
+				assert.Equal(t, scenario.touchedFiles, actx.Stats.TouchedFiles, "touched files (in-place w/intermediate)")
+				assert.Equal(t, scenario.noopFiles, actx.Stats.NoopFiles, "noop files (in-place w/intermediate)")
+				assert.Equal(t, scenario.leftDirs, actx.Stats.LeftDirs, "left dirs (in-place w/intermediate)")
+
+				signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
+				assert.Nil(t, sErr)
+
+				assert.Nil(t, AssertValid(v1Before, signature))
+			}()
+		}
+	}
+
+	testAll(nil)
+
+	if scenario.testBrokenRename {
+		testAll(func(actx *ApplyContext) {
+			actx.debugBrokenRename = true
+		})
 	}
 }

@@ -70,9 +70,7 @@ message ManifestBlockHash {
 
 // Wounds files format: header, container, then any
 // number of Wounds
-message WoundsHeader {
-
-}
+message WoundsHeader {}
 
 // Describe a corrupted portion of a file, in [start,end)
 message Wound {
