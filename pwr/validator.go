@@ -229,3 +229,12 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 
 	done <- true
 }
+
+func AssertValid(target string, signature *SignatureInfo) error {
+	vctx := &ValidatorContext{
+		FailFast: true,
+		Consumer: &state.Consumer{},
+	}
+
+	return vctx.Validate(target, signature)
+}

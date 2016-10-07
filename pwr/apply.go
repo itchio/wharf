@@ -33,6 +33,13 @@ var (
 // valid. A VetApplyFunc should only read data from actx, not write to it.
 type VetApplyFunc func(actx *ApplyContext) error
 
+type ApplyStats struct {
+	TouchedFiles int
+	NoopFiles    int
+	DeletedFiles int
+	StageSize    int64
+}
+
 // ApplyContext holds the state while applying a patch
 type ApplyContext struct {
 	Consumer *state.Consumer
@@ -53,10 +60,7 @@ type ApplyContext struct {
 
 	Signature *SignatureInfo
 
-	TouchedFiles int
-	NoopFiles    int
-	DeletedFiles int
-	StageSize    int64
+	Stats ApplyStats
 }
 
 type signature []wsync.BlockHash
@@ -155,9 +159,9 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	}
 
 	if actx.InPlace {
-		actx.DeletedFiles = len(deletedFiles)
+		actx.Stats.DeletedFiles = len(deletedFiles)
 
-		actx.StageSize, err = mergeFolders(actualOutputPath, actx.OutputPath)
+		actx.Stats.StageSize, err = mergeFolders(actualOutputPath, actx.OutputPath)
 		if err != nil {
 			return errors.Wrap(err, 1)
 		}
@@ -273,9 +277,9 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		}
 
 		if noop {
-			actx.NoopFiles++
+			actx.Stats.NoopFiles++
 		} else {
-			actx.TouchedFiles++
+			actx.Stats.TouchedFiles++
 			if bytesWritten != f.Size {
 				return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
 			}

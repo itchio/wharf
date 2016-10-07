@@ -5,23 +5,13 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"net/http"
-	_ "net/http/pprof"
-
 	"github.com/alecthomas/assert"
 	"github.com/itchio/wharf/tlc"
 )
-
-func init() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-}
 
 func Test_NewHealer(t *testing.T) {
 	_, err := NewHealer("", "/dev/null")

@@ -3,12 +3,9 @@ package eos
 import (
 	"bytes"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -16,16 +13,6 @@ import (
 
 	"github.com/itchio/httpfile"
 )
-
-func init() {
-	debugPort := os.Getenv("EOS_DEBUG_PORT")
-
-	if debugPort != "" {
-		go func() {
-			log.Println(http.ListenAndServe("localhost:"+debugPort, nil))
-		}()
-	}
-}
 
 func Test_OpenLocalFile(t *testing.T) {
 	f, err := Open("/dev/null")

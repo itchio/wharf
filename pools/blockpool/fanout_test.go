@@ -2,48 +2,12 @@ package blockpool
 
 import (
 	"fmt"
-	"log"
 	"testing"
 	"time"
 
 	"github.com/alecthomas/assert"
 	"github.com/itchio/wharf/tlc"
-
-	"net/http"
-	_ "net/http/pprof"
 )
-
-func init() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-}
-
-func Test_BlockMath(t *testing.T) {
-	// number of blocks
-	assert.Equal(t, int64(0), ComputeNumBlocks(0))
-	assert.Equal(t, int64(1), ComputeNumBlocks(1))
-	assert.Equal(t, int64(1), ComputeNumBlocks(BigBlockSize-1))
-	assert.Equal(t, int64(1), ComputeNumBlocks(BigBlockSize))
-	assert.Equal(t, int64(2), ComputeNumBlocks(BigBlockSize+1))
-	assert.Equal(t, int64(2), ComputeNumBlocks(BigBlockSize*2-1))
-	assert.Equal(t, int64(3), ComputeNumBlocks(BigBlockSize*2+1))
-
-	// block sizes
-	assert.Equal(t, BigBlockSize-1, ComputeBlockSize(BigBlockSize-1, 0))
-
-	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize, 0))
-
-	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize+1, 0))
-	assert.Equal(t, int64(1), ComputeBlockSize(BigBlockSize+1, 1))
-
-	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2-1, 0))
-	assert.Equal(t, BigBlockSize-1, ComputeBlockSize(BigBlockSize*2-1, 1))
-
-	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2+1, 0))
-	assert.Equal(t, BigBlockSize, ComputeBlockSize(BigBlockSize*2+1, 1))
-	assert.Equal(t, int64(1), ComputeBlockSize(BigBlockSize*2+1, 2))
-}
 
 type TestSink struct {
 	FailingBlock BlockLocation
