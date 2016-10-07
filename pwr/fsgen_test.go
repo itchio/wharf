@@ -1,6 +1,7 @@
 package pwr
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,49 +16,63 @@ import (
 
 var testSymlinks bool = (runtime.GOOS != "windows")
 
+type testDirEntry struct {
+	path string
+	mode int
+	size int64
+	seed int64
+}
+
 type testDirSettings struct {
-	fakeDataSize int64
-	seed         int64
+	seed    int64
+	entries []testDirEntry
 }
 
 func makeTestDir(t *testing.T, dir string, s testDirSettings) {
-	r := rand.New(rand.NewSource(s.seed))
+	prng := rand.New(rand.NewSource(s.seed))
 
 	assert.Nil(t, os.MkdirAll(dir, 0755))
+	data := new(bytes.Buffer)
 
-	assert.Nil(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0755))
+	for _, entry := range s.entries {
+		path := filepath.Join(dir, filepath.FromSlash(entry.path))
 
-	fakeData := make([]byte, BlockSize*8)
-	r.Read(fakeData)
-
-	createFile := func(name string) {
-		f, fErr := os.Create(filepath.Join(dir, name))
-		assert.Nil(t, fErr)
-		defer f.Close()
-
-		_, fErr = f.Write(fakeData)
-		assert.Nil(t, fErr)
-	}
-
-	createLink := func(name string, dest string) {
-		if !testSymlinks {
-			return
+		parent := filepath.Dir(path)
+		mkErr := os.MkdirAll(parent, 0755)
+		if mkErr != nil {
+			if !os.IsExist(mkErr) {
+				assert.Nil(t, mkErr)
+			}
 		}
-		assert.Nil(t, os.Symlink(filepath.Join(dir, dest), filepath.Join(dir, name)))
+
+		if entry.seed == 0 {
+			prng.Seed(s.seed)
+		} else {
+			prng.Seed(entry.seed)
+		}
+
+		data.Reset()
+		data.Grow(int(entry.size))
+
+		func() {
+			mode := 0644
+			if entry.mode != 0 {
+				mode = entry.mode
+			}
+
+			size := BlockSize*8 + 64
+			if entry.size != 0 {
+				size = entry.size
+			}
+
+			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, os.FileMode(mode))
+			assert.Nil(t, fErr)
+			defer f.Close()
+
+			_, fErr = io.CopyN(f, prng, size)
+			assert.Nil(t, fErr)
+		}()
 	}
-
-	for i := 0; i < 4; i++ {
-		createFile(fmt.Sprintf("file-%d", i))
-	}
-
-	assert.Nil(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0755))
-
-	for i := 0; i < 2; i++ {
-		createFile(fmt.Sprintf("subdir/file-%d", i))
-	}
-
-	createLink("link1", "subdir/file-1")
-	createLink("link2", "file-3")
 }
 
 func cpFile(t *testing.T, src string, dst string) {

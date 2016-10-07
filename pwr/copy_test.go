@@ -20,8 +20,12 @@ func Test_CopyContainer(t *testing.T) {
 	src := path.Join(mainDir, "src")
 	dst := path.Join(mainDir, "dst")
 	makeTestDir(t, src, testDirSettings{
-		fakeDataSize: 4,
-		seed:         0x91738,
+		seed: 0x91738,
+		entries: []testDirEntry{
+			{path: "subdir/file-1", seed: 0x1},
+			{path: "file-1", seed: 0x2},
+			{path: "file-2", seed: 0x3},
+		},
 	})
 
 	container, err := tlc.WalkAny(src, nil)

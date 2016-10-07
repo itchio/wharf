@@ -34,10 +34,19 @@ var (
 type VetApplyFunc func(actx *ApplyContext) error
 
 type ApplyStats struct {
+	// files that were touched as a result of applying the patch
 	TouchedFiles int
-	NoopFiles    int
+	// files that were not deleted as a result of applying the patch
+	NoopFiles int
+	// files that were deleted as a result of applying the patch
 	DeletedFiles int
-	StageSize    int64
+	// symlinks that were deleted as a result of applying the patch
+	DeletedSymlinks int
+	// directories that were deleted as a result of applying the patch
+	DeletedDirs int
+	// directories that could not be deleted as a result of applying the patch
+	LeftDirs  int
+	StageSize int64
 }
 
 // ApplyContext holds the state while applying a patch
@@ -69,6 +78,19 @@ type signatureResult struct {
 	path string
 	sig  signature
 	err  error
+}
+
+type GhostKind int
+
+const (
+	GhostKind_Dir GhostKind = iota + 0xfaf0
+	GhostKind_File
+	GhostKind_Symlink
+)
+
+type Ghost struct {
+	Kind GhostKind
+	Path string
 }
 
 // ApplyPatch reads a patch, parses it, and generates the new file tree
@@ -135,14 +157,14 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 		}
 	}
 
-	var deletedFiles []string
+	var ghosts []Ghost
 
 	// when not working with a custom output pool
 	if actx.OutputPool == nil {
 		if actx.InPlace {
 			// when working in-place, we have to keep track of which files were deleted
 			// from one version to the other, so that we too may delete them in the end.
-			deletedFiles = detectRemovedFiles(actx.SourceContainer, actx.TargetContainer)
+			ghosts = detectGhosts(actx.SourceContainer, actx.TargetContainer)
 		} else {
 			// when rebuilding in a fresh directory, there's no need to worry about
 			// deleted files, because they won't even exist in the first place.
@@ -159,14 +181,12 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	}
 
 	if actx.InPlace {
-		actx.Stats.DeletedFiles = len(deletedFiles)
-
 		actx.Stats.StageSize, err = mergeFolders(actualOutputPath, actx.OutputPath)
 		if err != nil {
 			return errors.Wrap(err, 1)
 		}
 
-		err = deleteFiles(actualOutputPath, deletedFiles)
+		err = actx.deleteGhosts(actualOutputPath, ghosts)
 		if err != nil {
 			return errors.Wrap(err, 1)
 		}
@@ -322,7 +342,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	return nil
 }
 
-func detectRemovedFiles(sourceContainer *tlc.Container, targetContainer *tlc.Container) []string {
+func detectGhosts(sourceContainer *tlc.Container, targetContainer *tlc.Container) []Ghost {
 	// first make a map of all the file paths in source, for later lookup
 	sourceFileMap := make(map[string]bool)
 	for _, f := range sourceContainer.Files {
@@ -336,23 +356,32 @@ func detectRemovedFiles(sourceContainer *tlc.Container, targetContainer *tlc.Con
 	}
 
 	// then walk through target container paths, if they're not in source, they were deleted
-	var deletedFiles []string
+	var ghosts []Ghost
 	for _, f := range targetContainer.Files {
 		if !sourceFileMap[f.Path] {
-			deletedFiles = append(deletedFiles, f.Path)
+			ghosts = append(ghosts, Ghost{
+				Kind: GhostKind_File,
+				Path: f.Path,
+			})
 		}
 	}
 	for _, s := range targetContainer.Symlinks {
 		if !sourceFileMap[s.Path] {
-			deletedFiles = append(deletedFiles, s.Path)
+			ghosts = append(ghosts, Ghost{
+				Kind: GhostKind_Symlink,
+				Path: s.Path,
+			})
 		}
 	}
 	for _, d := range targetContainer.Dirs {
 		if !sourceFileMap[d.Path] {
-			deletedFiles = append(deletedFiles, d.Path)
+			ghosts = append(ghosts, Ghost{
+				Kind: GhostKind_Dir,
+				Path: d.Path,
+			})
 		}
 	}
-	return deletedFiles
+	return ghosts
 }
 
 func mergeFolders(outPath string, stagePath string) (int64, error) {
@@ -406,7 +435,7 @@ func mergeFolders(outPath string, stagePath string) (int64, error) {
 	return stageContainer.Size, nil
 }
 
-type byDecreasingLength []string
+type byDecreasingLength []Ghost
 
 func (s byDecreasingLength) Len() int {
 	return len(s)
@@ -417,18 +446,31 @@ func (s byDecreasingLength) Swap(i, j int) {
 }
 
 func (s byDecreasingLength) Less(i, j int) bool {
-	return len(s[j]) < len(s[i])
+	return len(s[j].Path) < len(s[i].Path)
 }
 
-func deleteFiles(outPath string, deletedFiles []string) error {
-	sort.Sort(byDecreasingLength(deletedFiles))
+func (actx *ApplyContext) deleteGhosts(outPath string, ghosts []Ghost) error {
+	sort.Sort(byDecreasingLength(ghosts))
 
-	for _, f := range deletedFiles {
-		p := filepath.FromSlash(f)
-		op := filepath.Join(outPath, p)
+	for _, ghost := range ghosts {
+		op := filepath.Join(outPath, filepath.FromSlash(ghost.Path))
+
 		err := os.Remove(op)
-		if err != nil {
-			if !os.IsNotExist(err) {
+		if err == nil || os.IsNotExist(err) {
+			// removed or already removed, good
+			switch ghost.Kind {
+			case GhostKind_Dir:
+				actx.Stats.DeletedDirs++
+			case GhostKind_File:
+				actx.Stats.DeletedFiles++
+			case GhostKind_Symlink:
+				actx.Stats.DeletedSymlinks++
+			}
+		} else {
+			if ghost.Kind == GhostKind_Dir {
+				// sometimes we can't delete directories, it's okay
+				actx.Stats.LeftDirs++
+			} else {
 				return errors.Wrap(err, 1)
 			}
 		}
