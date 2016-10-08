@@ -190,8 +190,10 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	}
 
 	if actx.InPlace {
-		// TODO: what about Symlinks/Dirs?
-		// cf. https://github.com/itchio/butler/issues/80
+		err = actx.ensureDirsAndSymlinks(actx.actualOutputPath)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
 
 		actx.Stats.StageSize, err = actx.mergeFolders(actx.actualOutputPath, actx.OutputPath)
 		if err != nil {
@@ -767,4 +769,53 @@ func readOps(rc *wire.ReadContext, ops chan wsync.Operation, errc chan error) {
 	}
 
 	errc <- nil
+}
+
+func (actx *ApplyContext) ensureDirsAndSymlinks(actualOutputPath string) error {
+	for _, dir := range actx.SourceContainer.Dirs {
+		path := filepath.Join(actualOutputPath, filepath.FromSlash(dir.Path))
+
+		err := os.MkdirAll(path, 0755)
+		if err != nil {
+			// If path is already a directory, MkdirAll does nothing and returns nil.
+			// so if we get a non-nil error, we know it's serious business (permissions, etc.)
+			return err
+		}
+	}
+
+	for _, symlink := range actx.SourceContainer.Symlinks {
+		path := filepath.Join(actualOutputPath, filepath.FromSlash(symlink.Path))
+		dest, err := os.Readlink(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// symlink was missing
+				err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			} else {
+				return err
+			}
+		}
+
+		// symlink is there
+		if dest != filepath.FromSlash(symlink.Dest) {
+			// wrong dest, fixing that
+			err = os.Remove(path)
+			if err != nil {
+				return err
+			}
+
+			err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	return nil
 }

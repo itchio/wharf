@@ -157,21 +157,25 @@ func AggregateWounds(outWounds chan *Wound, maxSize int64) chan *Wound {
 
 	go func() {
 		for wound := range inWounds {
-			// try to aggregate input wounds into fewer, wider wounds
-			if lastWound == nil {
-				lastWound = wound
-			} else {
-				if lastWound.End <= wound.Start && wound.Start >= lastWound.Start {
-					lastWound.End = wound.End
-
-					if lastWound.End-lastWound.Start >= maxSize {
-						outWounds <- lastWound
-						lastWound = nil
-					}
-				} else {
-					outWounds <- lastWound
+			if wound.Kind == WoundKind_FILE {
+				// try to aggregate input file wounds into fewer, wider wounds
+				if lastWound == nil {
 					lastWound = wound
+				} else {
+					if lastWound.End <= wound.Start && wound.Start >= lastWound.Start {
+						lastWound.End = wound.End
+
+						if lastWound.End-lastWound.Start >= maxSize {
+							outWounds <- lastWound
+							lastWound = nil
+						}
+					} else {
+						outWounds <- lastWound
+						lastWound = wound
+					}
 				}
+			} else {
+				outWounds <- wound
 			}
 		}
 
@@ -186,10 +190,21 @@ func AggregateWounds(outWounds chan *Wound, maxSize int64) chan *Wound {
 }
 
 func (w *Wound) PrettyString(container *tlc.Container) string {
-	file := container.Files[w.FileIndex]
-	woundSize := humanize.IBytes(uint64(w.End - w.Start))
-	offset := humanize.IBytes(uint64(w.Start))
-	return fmt.Sprintf("~%s wound %s into %s", woundSize, offset, file.Path)
+	switch w.Kind {
+	case WoundKind_DIR:
+		dir := container.Dirs[w.Index]
+		return fmt.Sprintf("directory wound (%s should exist)", dir.Path)
+	case WoundKind_SYMLINK:
+		symlink := container.Symlinks[w.Index]
+		return fmt.Sprintf("symlink wound (%s should point to %s)", symlink.Path, symlink.Dest)
+	case WoundKind_FILE:
+		file := container.Files[w.Index]
+		woundSize := humanize.IBytes(uint64(w.End - w.Start))
+		offset := humanize.IBytes(uint64(w.Start))
+		return fmt.Sprintf("~%s wound %s into %s", woundSize, offset, file.Path)
+	default:
+		return fmt.Sprintf("unknown wound (%d)", w.Kind)
+	}
 }
 
 func (w *Wound) Size() int64 {

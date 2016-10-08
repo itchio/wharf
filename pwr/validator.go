@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
@@ -42,7 +44,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	}
 
 	vctx.Wounds = make(chan *Wound)
-	errs := make(chan error)
+	errs := make(chan error, numWorkers+1)
 	done := make(chan bool, numWorkers+1)
 	cancelled := make(chan struct{})
 
@@ -77,30 +79,65 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		done <- true
 	}()
 
-	doneBytes := make(chan int64)
-	doneCounting := make(chan struct{})
-	defer func() {
-		close(doneBytes)
-		<-doneCounting
-	}()
+	bytesDone := int64(0)
+	onProgress := func(delta int64) {
+		atomic.AddInt64(&bytesDone, delta)
+		vctx.Consumer.Progress(float64(atomic.LoadInt64(&bytesDone)) / float64(signature.Container.Size))
+	}
 
-	go func() {
-		done := int64(0)
-
-		for chunkSize := range doneBytes {
-			done += chunkSize
-			if vctx.Consumer != nil {
-				vctx.Consumer.Progress(float64(done) / float64(signature.Container.Size))
+	// validate dirs and symlinks first
+	for dirIndex, dir := range signature.Container.Dirs {
+		path := filepath.Join(target, filepath.FromSlash(dir.Path))
+		stats, err := os.Lstat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				vctx.Wounds <- &Wound{
+					Kind:  WoundKind_DIR,
+					Index: int64(dirIndex),
+				}
+				continue
+			} else {
+				return err
 			}
 		}
 
-		close(doneCounting)
-	}()
+		if !stats.IsDir() {
+			vctx.Wounds <- &Wound{
+				Kind:  WoundKind_DIR,
+				Index: int64(dirIndex),
+			}
+			continue
+		}
+	}
+
+	for symlinkIndex, symlink := range signature.Container.Symlinks {
+		path := filepath.Join(target, filepath.FromSlash(symlink.Path))
+		dest, err := os.Readlink(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				vctx.Wounds <- &Wound{
+					Kind:  WoundKind_SYMLINK,
+					Index: int64(symlinkIndex),
+				}
+				continue
+			} else {
+				return err
+			}
+		}
+
+		if dest != filepath.FromSlash(symlink.Dest) {
+			vctx.Wounds <- &Wound{
+				Kind:  WoundKind_SYMLINK,
+				Index: int64(symlinkIndex),
+			}
+			continue
+		}
+	}
 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, done, errs, doneBytes, cancelled)
+		go vctx.validate(target, signature, fileIndices, done, errs, onProgress, cancelled)
 	}
 
 	for fileIndex := range signature.Container.Files {
@@ -132,24 +169,47 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	return nil
 }
 
+type OnProgressFunc func(delta int64)
+
 func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
-	done chan bool, errs chan error, doneBytes chan int64, cancelled chan struct{}) {
+	done chan bool, errs chan error, onProgress OnProgressFunc, cancelled chan struct{}) {
 	targetPool, err := pools.New(signature.Container, target)
 	if err != nil {
 		errs <- err
 		return
 	}
 
+	defer func() {
+		err = targetPool.Close()
+		if err != nil {
+			errs <- errors.Wrap(err, 1)
+			return
+		}
+
+		done <- true
+	}()
+
 	aggregateOut := make(chan *Wound)
 	relayDone := make(chan bool)
 	go func() {
+	relayLoop:
 		for w := range aggregateOut {
-			vctx.Wounds <- w
+			select {
+			case <-cancelled:
+				// cancelled
+				break relayLoop
+			case vctx.Wounds <- w:
+				// sent
+			}
 		}
 		relayDone <- true
 	}()
 
 	wounds := AggregateWounds(aggregateOut, MaxWoundSize)
+	defer func() {
+		close(wounds)
+		<-relayDone
+	}()
 
 	validatingPool := &ValidatingPool{
 		Pool:      nullpool.New(signature.Container),
@@ -159,6 +219,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		Wounds: wounds,
 	}
 
+workLoop:
 	for fileIndex := range fileIndices {
 		file := signature.Container.Files[fileIndex]
 
@@ -166,15 +227,21 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		reader, err = targetPool.GetReader(fileIndex)
 		if err != nil {
 			if os.IsNotExist(err) {
-				doneBytes <- file.Size
-
-				// that's one big wound
-				wounds <- &Wound{
-					FileIndex: fileIndex,
-					Start:     0,
-					End:       file.Size,
+				// whole file is missing
+				wound := &Wound{
+					Kind:  WoundKind_FILE,
+					Index: fileIndex,
+					Start: 0,
+					End:   file.Size,
 				}
-				continue
+				onProgress(file.Size)
+
+				select {
+				case wounds <- wound:
+				case <-cancelled:
+					break workLoop
+				}
+				continue workLoop
 			} else {
 				errs <- err
 				return
@@ -190,8 +257,8 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 
 		lastCount := int64(0)
 		countingWriter := counter.NewWriterCallback(func(count int64) {
-			diff := count - lastCount
-			doneBytes <- diff
+			delta := count - lastCount
+			onProgress(delta)
 			lastCount = count
 		}, writer)
 
@@ -209,25 +276,21 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		}
 
 		if writtenBytes != file.Size {
-			doneBytes <- (file.Size - writtenBytes)
-			wounds <- &Wound{
-				FileIndex: fileIndex,
-				Start:     writtenBytes,
-				End:       file.Size,
+			onProgress(file.Size - writtenBytes)
+			wound := &Wound{
+				Kind:  WoundKind_FILE,
+				Index: fileIndex,
+				Start: writtenBytes,
+				End:   file.Size,
+			}
+
+			select {
+			case wounds <- wound:
+			case <-cancelled:
+				break workLoop
 			}
 		}
 	}
-
-	err = targetPool.Close()
-	if err != nil {
-		errs <- errors.Wrap(err, 1)
-		return
-	}
-
-	close(wounds)
-	<-relayDone
-
-	done <- true
 }
 
 func AssertValid(target string, signature *SignatureInfo) error {

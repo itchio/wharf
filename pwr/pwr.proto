@@ -72,9 +72,16 @@ message ManifestBlockHash {
 // number of Wounds
 message WoundsHeader {}
 
+enum WoundKind {
+  FILE = 0;
+  SYMLINK = 1;
+  DIR = 2;
+}
+
 // Describe a corrupted portion of a file, in [start,end)
 message Wound {
-  int64 fileIndex = 1;
+  int64 index = 1;
   int64 start = 2;
   int64 end = 3;
+  WoundKind kind = 4;
 }

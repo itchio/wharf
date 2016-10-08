@@ -80,9 +80,10 @@ func Test_ArchiveHealer(t *testing.T) {
 
 		for i := 0; i < numFiles; i++ {
 			wounds <- &Wound{
-				FileIndex: int64(i),
-				Start:     0,
-				End:       1,
+				Kind:  WoundKind_FILE,
+				Index: int64(i),
+				Start: 0,
+				End:   1,
 			}
 		}
 
