@@ -13,7 +13,6 @@ import (
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/nullpool"
 	"github.com/itchio/wharf/state"
-	"github.com/itchio/wharf/wsync"
 )
 
 const MaxWoundSize int64 = 4 * 1024 * 1024 // 4MB
@@ -31,8 +30,7 @@ type ValidatorContext struct {
 	TotalCorrupted int64
 
 	// internal
-	TargetPool wsync.Pool
-	Wounds     chan *Wound
+	Wounds chan *Wound
 }
 
 func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) error {
@@ -44,8 +42,8 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	}
 
 	vctx.Wounds = make(chan *Wound)
-	errs := make(chan error, numWorkers+1)
-	done := make(chan bool, numWorkers+1)
+	workerErrs := make(chan error, numWorkers)
+	consumerErrs := make(chan error, 1)
 	cancelled := make(chan struct{})
 
 	if vctx.FailFast {
@@ -65,18 +63,17 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	}
 
 	go func() {
-		err := woundsConsumer.Do(signature.Container, vctx.Wounds)
-		if err != nil {
+		consumerErrs <- woundsConsumer.Do(signature.Container, vctx.Wounds)
+
+		// throw away wounds until closed
+		for {
 			select {
-			case <-cancelled:
-				// another error happened, give up
-				return
-			case errs <- err:
-				// great!
-				return
+			case _, ok := <-vctx.Wounds:
+				if !ok {
+					return
+				}
 			}
 		}
-		done <- true
 	}()
 
 	bytesDone := int64(0)
@@ -137,42 +134,68 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, done, errs, onProgress, cancelled)
+		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
 	}
 
+	var retErr error
+	sending := true
+
 	for fileIndex := range signature.Container.Files {
-		fileIndices <- int64(fileIndex)
+		if !sending {
+			break
+		}
+
+		select {
+		case workerErr := <-workerErrs:
+			workerErrs <- nil
+			retErr = workerErr
+			close(cancelled)
+			sending = false
+
+		case consumerErr := <-consumerErrs:
+			consumerErrs <- nil
+			retErr = consumerErr
+			close(cancelled)
+			sending = false
+
+		case fileIndices <- int64(fileIndex):
+			// just queued another file
+		}
 	}
 
 	close(fileIndices)
 
 	// wait for all workers to finish
 	for i := 0; i < numWorkers; i++ {
-		select {
-		case err := <-errs:
-			return err
-		case <-done:
-			// good!
+		err := <-workerErrs
+		if err != nil {
+			close(cancelled)
+			if retErr == nil {
+				retErr = err
+			}
 		}
 	}
 
 	close(vctx.Wounds)
 
-	// wait for wounds writer to finish
-	select {
-	case err := <-errs:
-		return err
-	case <-done:
-		// good!
+	// wait for wound consumer to finish
+	cErr := <-consumerErrs
+	if cErr != nil {
+		if retErr == nil {
+			retErr = cErr
+		}
 	}
 
-	return nil
+	return retErr
 }
 
-type OnProgressFunc func(delta int64)
+type onProgressFunc func(delta int64)
 
 func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
-	done chan bool, errs chan error, onProgress OnProgressFunc, cancelled chan struct{}) {
+	errs chan error, onProgress onProgressFunc, cancelled chan struct{}) {
+
+	var retErr error
+
 	targetPool, err := pools.New(signature.Container, target)
 	if err != nil {
 		errs <- err
@@ -180,34 +203,29 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 	}
 
 	defer func() {
-		err = targetPool.Close()
+		err := targetPool.Close()
 		if err != nil {
-			errs <- errors.Wrap(err, 1)
+			retErr = errors.Wrap(err, 1)
 			return
 		}
 
-		done <- true
+		errs <- retErr
 	}()
 
 	aggregateOut := make(chan *Wound)
 	relayDone := make(chan bool)
 	go func() {
-	relayLoop:
 		for w := range aggregateOut {
-			select {
-			case <-cancelled:
-				// cancelled
-				break relayLoop
-			case vctx.Wounds <- w:
-				// sent
-			}
+			vctx.Wounds <- w
 		}
 		relayDone <- true
 	}()
 
 	wounds := AggregateWounds(aggregateOut, MaxWoundSize)
 	defer func() {
+		// signal no more wounds are going to be sent
 		close(wounds)
+		// wait for all of them to be relayed
 		<-relayDone
 	}()
 
@@ -219,8 +237,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		Wounds: wounds,
 	}
 
-workLoop:
-	for fileIndex := range fileIndices {
+	doOne := func(fileIndex int64) error {
 		file := signature.Container.Files[fileIndex]
 
 		var reader io.Reader
@@ -239,21 +256,19 @@ workLoop:
 				select {
 				case wounds <- wound:
 				case <-cancelled:
-					break workLoop
 				}
-				continue workLoop
-			} else {
-				errs <- err
-				return
+				return nil
 			}
+			return err
 		}
 
 		var writer io.WriteCloser
 		writer, err = validatingPool.GetWriter(fileIndex)
 		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
+			return err
 		}
+
+		defer writer.Close()
 
 		lastCount := int64(0)
 		countingWriter := counter.NewWriterCallback(func(count int64) {
@@ -265,14 +280,7 @@ workLoop:
 		var writtenBytes int64
 		writtenBytes, err = io.Copy(countingWriter, reader)
 		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
-		}
-
-		err = writer.Close()
-		if err != nil {
-			errs <- errors.Wrap(err, 1)
-			return
+			return err
 		}
 
 		if writtenBytes != file.Size {
@@ -287,8 +295,30 @@ workLoop:
 			select {
 			case wounds <- wound:
 			case <-cancelled:
-				break workLoop
 			}
+		}
+
+		return nil
+	}
+
+	for {
+		select {
+		case fileIndex, ok := <-fileIndices:
+			if !ok {
+				// no more work
+				return
+			}
+
+			err := doOne(fileIndex)
+			if err != nil {
+				if retErr == nil {
+					retErr = err
+				}
+				return
+			}
+		case <-cancelled:
+			// cancelled
+			return
 		}
 	}
 }

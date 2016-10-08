@@ -1,7 +1,9 @@
 package drip
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/alecthomas/assert"
@@ -47,7 +49,7 @@ func Test_Writer(t *testing.T) {
 	write := func(l int) {
 		written, wErr := dw.Write(rbuf[0:l])
 		assert.Equal(t, l, written)
-		assert.Nil(t, wErr)
+		assert.NoError(t, wErr)
 	}
 
 	write(12)
@@ -58,7 +60,94 @@ func Test_Writer(t *testing.T) {
 	write(64)
 	write(5)
 
-	assert.Nil(t, dw.Close())
+	assert.NoError(t, dw.Close())
 	assert.Equal(t, 5, shortSize)
 	assert.Equal(t, int64(12+4+10+6+16+64+5), countingWriter.Count())
+}
+
+type tracingWriter struct {
+	closeCall bool
+	writeErr  error
+	closeErr  error
+}
+
+var _ io.WriteCloser = (*tracingWriter)(nil)
+
+func (tw *tracingWriter) Write(buf []byte) (int, error) {
+	return len(buf), tw.writeErr
+}
+
+func (tw *tracingWriter) Close() error {
+	tw.closeCall = true
+	return tw.closeErr
+}
+
+func Test_WriterClose(t *testing.T) {
+	dropSize := 16
+
+	t.Logf("validation error on close")
+
+	buf := make([]byte, dropSize)
+	var validateError = errors.New("validation error")
+	var underWriteError = errors.New("underlying write error")
+	var underCloseError = errors.New("underlying close error")
+
+	tw := &tracingWriter{}
+	dw := &Writer{
+		Buffer: buf,
+		Validate: func(buf []byte) error {
+			return validateError
+		},
+		Writer: tw,
+	}
+
+	_, wErr := dw.Write([]byte{1, 2, 3, 4})
+	assert.NoError(t, wErr)
+
+	cErr := dw.Close()
+	assert.Error(t, cErr)
+	assert.Equal(t, validateError, cErr)
+	assert.True(t, tw.closeCall)
+
+	t.Logf("underlying write error on close")
+
+	tw = &tracingWriter{
+		writeErr: underWriteError,
+	}
+	dw = &Writer{
+		Buffer: buf,
+		Validate: func(buf []byte) error {
+			return nil
+		},
+		Writer: tw,
+	}
+
+	_, wErr = dw.Write([]byte{1, 2, 3, 4})
+	assert.NoError(t, wErr)
+
+	cErr = dw.Close()
+	assert.Error(t, cErr)
+	assert.Equal(t, underWriteError, cErr)
+	assert.True(t, tw.closeCall)
+
+	t.Logf("underlying close error on close")
+
+	tw = &tracingWriter{
+		closeErr: underCloseError,
+	}
+	dw = &Writer{
+		Buffer: buf,
+		Validate: func(buf []byte) error {
+			return nil
+		},
+		Writer: tw,
+	}
+
+	_, wErr = dw.Write([]byte{1, 2, 3, 4})
+	assert.NoError(t, wErr)
+
+	cErr = dw.Close()
+	assert.Error(t, cErr)
+	assert.Equal(t, underCloseError, cErr)
+	assert.True(t, tw.closeCall)
 }

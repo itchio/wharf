@@ -35,5 +35,7 @@ func Test_CopyContainer(t *testing.T) {
 	outPool := fspool.New(container, dst)
 
 	err = CopyContainer(container, outPool, inPool, &state.Consumer{})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
+
+	assert.NoError(t, inPool.Close())
 }

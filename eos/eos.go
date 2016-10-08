@@ -63,6 +63,10 @@ func Open(name string, opts ...option.Option) (File, error) {
 		opt.Apply(settings)
 	}
 
+	if name == "/dev/null" {
+		return &emptyFile{}, nil
+	}
+
 	u, err := url.Parse(name)
 	if err != nil {
 		return nil, errors.Wrap(err, 1)

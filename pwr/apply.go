@@ -210,13 +210,11 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	return nil
 }
 
-func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *SignatureInfo) error {
+func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *SignatureInfo) (retErr error) {
 	sourceContainer := actx.SourceContainer
 
 	var validatingPool *ValidatingPool
-	errs := make(chan error)
-	done := make(chan bool)
-	numTasks := 0
+	consumerErrs := make(chan error, 1)
 
 	outputPool := actx.OutputPool
 	if outputPool == nil {
@@ -236,17 +234,11 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			actx.WoundsConsumer = &WoundsWriter{
 				WoundsPath: actx.WoundsPath,
 			}
-			numTasks++
 		}
 
 		if actx.WoundsConsumer != nil {
 			go func() {
-				err := actx.WoundsConsumer.Do(signature.Container, validatingPool.Wounds)
-				if err != nil {
-					errs <- err
-					return
-				}
-				done <- true
+				consumerErrs <- actx.WoundsConsumer.Do(signature.Container, validatingPool.Wounds)
 			}()
 		}
 
@@ -284,6 +276,38 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	transpositions := make(map[string][]*Transposition)
 	actx.transpositions = transpositions
 
+	defer func() {
+		var closeErr error
+		closeErr = targetPool.Close()
+		if closeErr != nil {
+			if retErr == nil {
+				retErr = errors.Wrap(closeErr, 1)
+			}
+		}
+
+		closeErr = outputPool.Close()
+		if closeErr != nil {
+			if retErr == nil {
+				retErr = errors.Wrap(closeErr, 1)
+			}
+		}
+
+		if validatingPool != nil {
+			if validatingPool.Wounds != nil {
+				close(validatingPool.Wounds)
+			}
+		}
+
+		if actx.WoundsConsumer != nil {
+			taskErr := <-consumerErrs
+			if taskErr != nil {
+				if retErr == nil {
+					retErr = errors.Wrap(taskErr, 1)
+				}
+			}
+		}
+	}()
+
 	for fileIndex, f := range sourceContainer.Files {
 		actx.Consumer.ProgressLabel(f.Path)
 		actx.Consumer.Debug(f.Path)
@@ -296,12 +320,14 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		sh.Reset()
 		err := patchWire.ReadMessage(sh)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			retErr = errors.Wrap(err, 1)
+			return
 		}
 
 		if sh.FileIndex != int64(fileIndex) {
 			fmt.Printf("expected fileIndex = %d, got fileIndex %d\n", fileIndex, sh.FileIndex)
-			return errors.Wrap(ErrMalformedPatch, 1)
+			retErr = errors.Wrap(ErrMalformedPatch, 1)
+			return
 		}
 
 		ops := make(chan wsync.Operation)
@@ -309,9 +335,10 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 
 		go readOps(patchWire, ops, errc)
 
-		bytesWritten, transposition, err := lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
+		bytesWritten, transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			retErr = errors.Wrap(err, 1)
+			return
 		}
 
 		if transposition != nil {
@@ -319,7 +346,8 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		} else {
 			actx.Stats.TouchedFiles++
 			if bytesWritten != f.Size {
-				return fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
+				retErr = fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
+				return
 			}
 		}
 
@@ -327,41 +355,18 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		// done channel. not sure if there's any upside to either
 		err = <-errc
 		if err != nil {
-			return errors.Wrap(err, 1)
+			retErr = err
+			return
 		}
 	}
 
 	err := actx.applyTranspositions(transpositions)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		retErr = err
+		return
 	}
 
-	err = targetPool.Close()
-	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-
-	err = outputPool.Close()
-	if err != nil {
-		return errors.Wrap(err, 1)
-	}
-
-	if validatingPool != nil {
-		if validatingPool.Wounds != nil {
-			close(validatingPool.Wounds)
-		}
-	}
-
-	for i := 0; i < numTasks; i++ {
-		select {
-		case err = <-errs:
-			return errors.Wrap(err, 1)
-		case <-done:
-			// good!
-		}
-	}
-
-	return nil
+	return
 }
 
 func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Transposition) error {
@@ -637,8 +642,19 @@ type Transposition struct {
 	OutputPath string
 }
 
-func lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool wsync.Pool, outputContainer *tlc.Container, outputPool wsync.WritablePool,
+func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool wsync.Pool, outputContainer *tlc.Container, outputPool wsync.WritablePool,
 	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (written int64, transposition *Transposition, err error) {
+
+	var writer io.WriteCloser
+
+	defer func() {
+		if writer != nil {
+			cErr := writer.Close()
+			if cErr != nil && err == nil {
+				err = cErr
+			}
+		}
+	}()
 
 	var realops chan wsync.Operation
 
@@ -673,37 +689,31 @@ func lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, target
 			} else {
 				realops = make(chan wsync.Operation)
 
-				var writer io.WriteCloser
 				writer, err = outputPool.GetWriter(fileIndex)
 				if err != nil {
-					return 0, nil, errors.Wrap(err, 1)
+					errs <- errors.Wrap(err, 1)
+				} else {
+					writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
+
+					go func() {
+						applyErr := sctx.ApplyPatch(writeCounter, targetPool, realops)
+						if applyErr != nil {
+							errs <- applyErr
+							return
+						}
+
+						written = writeCounter.Count()
+						errs <- nil
+					}()
 				}
-
-				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
-
-				go func() {
-					rErr := sctx.ApplyPatch(writeCounter, targetPool, realops)
-					if rErr != nil {
-						errs <- errors.Wrap(rErr, 1)
-						return
-					}
-
-					rErr = writer.Close()
-					if rErr != nil {
-						errs <- errors.Wrap(rErr, 1)
-						return
-					}
-
-					written = writeCounter.Count()
-					errs <- nil
-				}()
 			}
 		}
 
-		// if not a transposition, relay all errors
+		// if not a transposition, relay errors
 		if transposition == nil {
 			select {
 			case cErr := <-errs:
+				// if we get an error here, ApplyPatch failed so we no longer need to close realops
 				if cErr != nil {
 					return 0, nil, errors.Wrap(cErr, 1)
 				}
@@ -761,7 +771,6 @@ func readOps(rc *wire.ReadContext, ops chan wsync.Operation, errc chan error) {
 				// safety measures are cheap and reassuring.
 				readingOps = false
 			default:
-				fmt.Printf("unrecognized rop type %d\n", rop.Type)
 				errc <- errors.Wrap(ErrMalformedPatch, 1)
 				return
 			}

@@ -288,8 +288,8 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	log("Scenario start")
 
 	mainDir, err := ioutil.TempDir("", "patch-cycle")
-	assert.Nil(t, err)
-	assert.Nil(t, os.MkdirAll(mainDir, 0755))
+	assert.NoError(t, err)
+	assert.NoError(t, os.MkdirAll(mainDir, 0755))
 	defer os.RemoveAll(mainDir)
 
 	v1 := filepath.Join(mainDir, "v1")
@@ -302,7 +302,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	compression.Algorithm = CompressionAlgorithm_NONE
 
 	sourceContainer, err := tlc.WalkAny(v2, nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	consumer := &state.Consumer{}
 	patchBuffer := new(bytes.Buffer)
@@ -310,11 +310,11 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 	func() {
 		targetContainer, dErr := tlc.WalkAny(v1, nil)
-		assert.Nil(t, dErr)
+		assert.NoError(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
 		targetSignature, dErr := ComputeSignature(targetContainer, targetPool, consumer)
-		assert.Nil(t, dErr)
+		assert.NoError(t, dErr)
 
 		pool := fspool.New(sourceContainer, v2)
 
@@ -329,7 +329,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			TargetSignature: targetSignature,
 		}
 
-		assert.Nil(t, dctx.WritePatch(patchBuffer, signatureBuffer))
+		assert.NoError(t, dctx.WritePatch(patchBuffer, signatureBuffer))
 	}()
 
 	v1Before := filepath.Join(mainDir, "v1Before")
@@ -342,12 +342,12 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	if scenario.extraTests {
 		log("Making sure before-path folder doesn't validate")
 		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
-		assert.Nil(t, sErr)
-		assert.NotNil(t, AssertValid(v1Before, signature))
+		assert.NoError(t, sErr)
+		assert.Error(t, AssertValid(v1Before, signature))
 
 		runExtraTest := func(setup SetupFunc) error {
-			assert.Nil(t, os.RemoveAll(woundsPath))
-			assert.Nil(t, os.RemoveAll(v1Before))
+			assert.NoError(t, os.RemoveAll(woundsPath))
+			assert.NoError(t, os.RemoveAll(v1Before))
 			cpDir(t, v1, v1Before)
 
 			actx := &ApplyContext{
@@ -386,20 +386,20 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 					return NotVettingError
 				}
 			})
-			assert.NotNil(t, pErr)
+			assert.Error(t, pErr)
 			assert.True(t, errors.Is(pErr, NotVettingError))
 		}()
 
 		func() {
 			log("In-place with signature (failfast, passing)")
-			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 			}))
 		}()
 
 		func() {
 			log("In-place with signature (failfast, failing)")
-			assert.NotNil(t, runExtraTest(func(actx *ApplyContext) {
+			assert.Error(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				makeTestDir(t, v1Before, *scenario.corruptions)
 			}))
@@ -407,31 +407,31 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 		func() {
 			log("In-place with signature (wounds, passing)")
-			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				actx.WoundsPath = woundsPath
 			}))
 
 			_, sErr := os.Lstat(woundsPath)
-			assert.NotNil(t, sErr)
+			assert.Error(t, sErr)
 			assert.True(t, os.IsNotExist(sErr))
 		}()
 
 		func() {
 			log("In-place with signature (wounds, failing)")
-			assert.Nil(t, runExtraTest(func(actx *ApplyContext) {
+			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				actx.WoundsPath = woundsPath
 				makeTestDir(t, v1Before, *scenario.corruptions)
 			}))
 
 			_, sErr := os.Lstat(woundsPath)
-			assert.Nil(t, sErr)
+			assert.NoError(t, sErr)
 		}()
 	}
 
 	log("Applying to other directory, with separate check")
-	assert.Nil(t, os.RemoveAll(v1Before))
+	assert.NoError(t, os.RemoveAll(v1Before))
 	cpDir(t, v1, v1Before)
 
 	func() {
@@ -445,7 +445,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		patchReader := bytes.NewReader(patchBuffer.Bytes())
 
 		aErr := actx.ApplyPatch(patchReader)
-		assert.Nil(t, aErr)
+		assert.NoError(t, aErr)
 
 		assert.Equal(t, 0, actx.Stats.DeletedFiles, "deleted files (other dir)")
 		assert.Equal(t, 0, actx.Stats.DeletedDirs, "deleted dirs (other dir)")
@@ -455,16 +455,16 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		assert.Equal(t, 0, actx.Stats.NoopFiles, "noop files (other dir)")
 
 		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
-		assert.Nil(t, sErr)
+		assert.NoError(t, sErr)
 
-		assert.Nil(t, AssertValid(v1After, signature))
+		assert.NoError(t, AssertValid(v1After, signature))
 	}()
 
 	log("Applying in-place")
 
 	testAll := func(setup SetupFunc) {
-		assert.Nil(t, os.RemoveAll(v1After))
-		assert.Nil(t, os.RemoveAll(v1Before))
+		assert.NoError(t, os.RemoveAll(v1After))
+		assert.NoError(t, os.RemoveAll(v1Before))
 		cpDir(t, v1, v1Before)
 
 		func() {
@@ -483,7 +483,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			patchReader := bytes.NewReader(patchBuffer.Bytes())
 
 			aErr := actx.ApplyPatch(patchReader)
-			assert.Nil(t, aErr)
+			assert.NoError(t, aErr)
 
 			assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place)")
 			assert.Equal(t, scenario.deletedSymlinks, actx.Stats.DeletedSymlinks, "deleted symlinks (in-place)")
@@ -493,16 +493,16 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			assert.Equal(t, len(sourceContainer.Files)-scenario.touchedFiles-scenario.movedFiles, actx.Stats.NoopFiles, "noop files (in-place)")
 
 			signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
-			assert.Nil(t, sErr)
+			assert.NoError(t, sErr)
 
-			assert.Nil(t, AssertValid(v1Before, signature))
+			assert.NoError(t, AssertValid(v1Before, signature))
 		}()
 
 		if scenario.intermediate != nil {
 			log("Applying in-place with %d intermediate files", len(scenario.intermediate.entries))
 
-			assert.Nil(t, os.RemoveAll(v1After))
-			assert.Nil(t, os.RemoveAll(v1Before))
+			assert.NoError(t, os.RemoveAll(v1After))
+			assert.NoError(t, os.RemoveAll(v1Before))
 			cpDir(t, v1, v1Before)
 
 			makeTestDir(t, v1Before, *scenario.intermediate)
@@ -523,7 +523,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 				patchReader := bytes.NewReader(patchBuffer.Bytes())
 
 				aErr := actx.ApplyPatch(patchReader)
-				assert.Nil(t, aErr)
+				assert.NoError(t, aErr)
 
 				assert.Equal(t, scenario.deletedFiles, actx.Stats.DeletedFiles, "deleted files (in-place w/intermediate)")
 				assert.Equal(t, scenario.deletedDirs, actx.Stats.DeletedDirs, "deleted dirs (in-place w/intermediate)")
@@ -533,9 +533,9 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 				assert.Equal(t, scenario.leftDirs, actx.Stats.LeftDirs, "left dirs (in-place w/intermediate)")
 
 				signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
-				assert.Nil(t, sErr)
+				assert.NoError(t, sErr)
 
-				assert.Nil(t, AssertValid(v1Before, signature))
+				assert.NoError(t, AssertValid(v1Before, signature))
 			}()
 		}
 	}
