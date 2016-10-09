@@ -27,12 +27,12 @@ func Test_Reader_Nil(t *testing.T) {
 	cr := NewReader(nil)
 	buf := make([]byte, 6)
 	n, err := cr.Read(buf)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.Equal(t, n, 6)
 	assert.Equal(t, cr.Count(), int64(6))
 
-	assert.Nil(t, cr.Close())
+	assert.NoError(t, cr.Close())
 }
 
 func Test_Reader_Callback(t *testing.T) {

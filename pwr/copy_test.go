@@ -14,7 +14,7 @@ import (
 
 func Test_CopyContainer(t *testing.T) {
 	mainDir, err := ioutil.TempDir("", "copycontainer")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	defer os.RemoveAll(mainDir)
 
 	src := path.Join(mainDir, "src")
@@ -29,7 +29,7 @@ func Test_CopyContainer(t *testing.T) {
 	})
 
 	container, err := tlc.WalkAny(src, nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	inPool := fspool.New(container, src)
 	outPool := fspool.New(container, dst)

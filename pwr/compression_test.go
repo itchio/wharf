@@ -54,19 +54,19 @@ func Test_Compression(t *testing.T) {
 		Algorithm: CompressionAlgorithm_GZIP,
 		Quality:   3,
 	})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.EqualValues(t, true, fc.called)
 	assert.EqualValues(t, 3, fc.quality)
 
-	assert.Nil(t, cwc.WriteMessage(&SyncHeader{
+	assert.NoError(t, cwc.WriteMessage(&SyncHeader{
 		FileIndex: 672,
 	}))
 
 	rc := wire.NewReadContext(bytes.NewReader(buf.Bytes()))
 
 	sh := &SyncHeader{}
-	assert.Nil(t, rc.ReadMessage(sh))
+	assert.NoError(t, rc.ReadMessage(sh))
 
 	assert.EqualValues(t, 672, sh.FileIndex)
 	assert.NotNil(t, rc.ReadMessage(sh))

@@ -17,7 +17,7 @@ func Test_Writer_Count(t *testing.T) {
 	}
 
 	assert.Equal(t, cw.Count(), int64(36))
-	assert.Nil(t, cw.Close())
+	assert.NoError(t, cw.Close())
 }
 
 func Test_Writer_Nil(t *testing.T) {

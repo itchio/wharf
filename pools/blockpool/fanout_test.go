@@ -42,7 +42,7 @@ func Test_FanOut(t *testing.T) {
 		},
 	}
 	fos, err := NewFanOutSink(ts, 8)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	fos.Start()
 
@@ -64,18 +64,18 @@ func Test_FanOut(t *testing.T) {
 	assert.True(t, hadError)
 
 	err = fos.Close()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	t.Logf("Testing tail errors...")
 
 	fos, err = NewFanOutSink(ts, 8)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	fos.Start()
 
 	// Store shouldn't err, just queue it...
 	err = fos.Store(ts.FailingBlock, []byte{})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// but close should catch the error
 	err = fos.Close()
