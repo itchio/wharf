@@ -38,12 +38,6 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 			info := file.FileInfo()
 			mode := info.Mode()
 
-			fileReader, fErr := file.Open()
-			if fErr != nil {
-				return errors.Wrap(fErr, 1)
-			}
-			defer fileReader.Close()
-
 			if info.IsDir() {
 				err = Mkdir(filename)
 				if err != nil {
@@ -51,6 +45,12 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 				}
 				dirCount++
 			} else if mode&os.ModeSymlink > 0 {
+				fileReader, fErr := file.Open()
+				if fErr != nil {
+					return errors.Wrap(fErr, 1)
+				}
+				defer fileReader.Close()
+
 				linkname, lErr := ioutil.ReadAll(fileReader)
 				lErr = Symlink(string(linkname), filename, settings.Consumer)
 				if lErr != nil {
@@ -66,6 +66,12 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 						return nil
 					}
 				}
+
+				fileReader, fErr := file.Open()
+				if fErr != nil {
+					return errors.Wrap(fErr, 1)
+				}
+				defer fileReader.Close()
 
 				settings.Consumer.Debugf("extract %s", filename)
 				countingReader := counter.NewReaderCallback(func(offset int64) {
