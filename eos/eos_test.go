@@ -13,7 +13,7 @@ import (
 
 	"github.com/alecthomas/assert"
 
-	"github.com/itchio/httpfile"
+	"github.com/itchio/httpkit/httpfile"
 )
 
 func Test_OpenEmptyFile(t *testing.T) {
@@ -77,7 +77,7 @@ func (tfs *testfs) GetURL() (string, error) {
 	return tfs.url, nil
 }
 
-func (tfs *testfs) NeedsRenewal(req *http.Request) bool {
+func (tfs *testfs) NeedsRenewal(res *http.Response, body []byte) bool {
 	return false
 }
 
