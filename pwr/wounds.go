@@ -14,6 +14,7 @@ import (
 type WoundsConsumer interface {
 	Do(*tlc.Container, chan *Wound) error
 	TotalCorrupted() int64
+	HasWounds() bool
 }
 
 ///////////////////////////////
@@ -22,12 +23,14 @@ type WoundsConsumer interface {
 
 type WoundsGuardian struct {
 	totalCorrupted int64
+	hasWounds      bool
 }
 
 var _ WoundsConsumer = (*WoundsGuardian)(nil)
 
 func (wg *WoundsGuardian) Do(container *tlc.Container, wounds chan *Wound) error {
 	for wound := range wounds {
+		wg.hasWounds = true
 		wg.totalCorrupted += wound.Size()
 		return fmt.Errorf(wound.PrettyString(container))
 	}
@@ -39,6 +42,10 @@ func (wg *WoundsGuardian) TotalCorrupted() int64 {
 	return wg.totalCorrupted
 }
 
+func (wg *WoundsGuardian) HasWounds() bool {
+	return wg.hasWounds
+}
+
 ///////////////////////////////
 // Writer
 ///////////////////////////////
@@ -47,6 +54,7 @@ type WoundsWriter struct {
 	WoundsPath string
 
 	totalCorrupted int64
+	hasWounds      bool
 }
 
 var _ WoundsConsumer = (*WoundsWriter)(nil)
@@ -105,6 +113,7 @@ func (ww *WoundsWriter) Do(container *tlc.Container, wounds chan *Wound) error {
 	}
 
 	for wound := range wounds {
+		ww.hasWounds = true
 		err := writeWound(wound)
 		if err != nil {
 			return err
@@ -118,6 +127,10 @@ func (ww *WoundsWriter) TotalCorrupted() int64 {
 	return ww.totalCorrupted
 }
 
+func (ww *WoundsWriter) HasWounds() bool {
+	return ww.hasWounds
+}
+
 ///////////////////////////////
 // Writer
 ///////////////////////////////
@@ -126,6 +139,7 @@ type WoundsPrinter struct {
 	Consumer *state.Consumer
 
 	totalCorrupted int64
+	hasWounds      bool
 }
 
 var _ WoundsConsumer = (*WoundsPrinter)(nil)
@@ -137,6 +151,7 @@ func (wp *WoundsPrinter) Do(container *tlc.Container, wounds chan *Wound) error 
 
 	for wound := range wounds {
 		wp.totalCorrupted += wound.Size()
+		wp.hasWounds = true
 		wp.Consumer.Debugf(wound.PrettyString(container))
 	}
 
@@ -145,6 +160,10 @@ func (wp *WoundsPrinter) Do(container *tlc.Container, wounds chan *Wound) error 
 
 func (wp *WoundsPrinter) TotalCorrupted() int64 {
 	return wp.totalCorrupted
+}
+
+func (wp *WoundsPrinter) HasWounds() bool {
+	return wp.hasWounds
 }
 
 ///////////////////////////////

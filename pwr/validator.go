@@ -30,11 +30,14 @@ type ValidatorContext struct {
 	TotalCorrupted int64
 
 	// internal
-	Wounds chan *Wound
+	Wounds         chan *Wound
+	WoundsConsumer WoundsConsumer
 }
 
 func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) error {
-	var woundsConsumer WoundsConsumer
+	if vctx.Consumer == nil {
+		vctx.Consumer = &state.Consumer{}
+	}
 
 	numWorkers := vctx.NumWorkers
 	if numWorkers == 0 {
@@ -51,19 +54,19 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 			return fmt.Errorf("Validate: FailFast is not compatible with WoundsPath")
 		}
 
-		woundsConsumer = &WoundsGuardian{}
+		vctx.WoundsConsumer = &WoundsGuardian{}
 	} else if vctx.WoundsPath == "" {
-		woundsConsumer = &WoundsPrinter{
+		vctx.WoundsConsumer = &WoundsPrinter{
 			Consumer: vctx.Consumer,
 		}
 	} else {
-		woundsConsumer = &WoundsWriter{
+		vctx.WoundsConsumer = &WoundsWriter{
 			WoundsPath: vctx.WoundsPath,
 		}
 	}
 
 	go func() {
-		consumerErrs <- woundsConsumer.Do(signature.Container, vctx.Wounds)
+		consumerErrs <- vctx.WoundsConsumer.Do(signature.Container, vctx.Wounds)
 
 		// throw away wounds until closed
 		for {

@@ -67,6 +67,7 @@ type ArchiveHealer struct {
 	// internal
 	totalCorrupted int64
 	totalHealed    int64
+	hasWounds      bool
 }
 
 var _ Healer = (*ArchiveHealer)(nil)
@@ -171,6 +172,8 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	}
 
 	for wound := range wounds {
+		ah.hasWounds = true
+
 		err = processWound(wound)
 		if err != nil {
 			close(fileIndices)
@@ -263,6 +266,10 @@ func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.Writabl
 	}
 
 	return healedBytes, err
+}
+
+func (ah *ArchiveHealer) HasWounds() bool {
+	return ah.hasWounds
 }
 
 func (ah *ArchiveHealer) TotalCorrupted() int64 {
