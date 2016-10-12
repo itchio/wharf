@@ -19,6 +19,7 @@ const MaxWoundSize int64 = 4 * 1024 * 1024 // 4MB
 
 type ValidatorContext struct {
 	WoundsPath string
+	HealPath   string
 	NumWorkers int
 
 	Consumer *state.Consumer
@@ -51,17 +52,27 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 
 	if vctx.FailFast {
 		if vctx.WoundsPath != "" {
-			return fmt.Errorf("Validate: FailFast is not compatible with WoundsPath")
+			return fmt.Errorf("ValidatorContext: FailFast is not compatible with WoundsPath")
+		}
+		if vctx.HealPath != "" {
+			return fmt.Errorf("ValidatorContext: FailFast is not compatible with HealPath")
 		}
 
 		vctx.WoundsConsumer = &WoundsGuardian{}
-	} else if vctx.WoundsPath == "" {
-		vctx.WoundsConsumer = &WoundsPrinter{
-			Consumer: vctx.Consumer,
-		}
-	} else {
+	} else if vctx.WoundsPath != "" {
 		vctx.WoundsConsumer = &WoundsWriter{
 			WoundsPath: vctx.WoundsPath,
+		}
+	} else if vctx.HealPath != "" {
+		woundsConsumer, err := NewHealer(vctx.HealPath, target)
+		if err != nil {
+			return err
+		}
+
+		vctx.WoundsConsumer = woundsConsumer
+	} else {
+		vctx.WoundsConsumer = &WoundsPrinter{
+			Consumer: vctx.Consumer,
 		}
 	}
 
