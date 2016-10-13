@@ -30,10 +30,6 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 		totalSize += int64(file.UncompressedSize64)
 	}
 
-	if settings.OnUncompressedSizeKnown != nil {
-		settings.OnUncompressedSizeKnown(totalSize)
-	}
-
 	var doneSize uint64
 	var lastDoneIndex int
 
@@ -44,18 +40,23 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 		resBytes, resErr := ioutil.ReadFile(settings.ResumeFrom)
 		if resErr != nil {
-			settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
+			if !errors.Is(resErr, os.ErrNotExist) {
+				settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
+			}
 			return
 		}
 
 		lastDone64, resErr := strconv.ParseInt(string(resBytes), 10, 64)
 		if resErr != nil {
-			settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
+			settings.Consumer.Warnf("Couldn't parse resume file: %s", resErr.Error())
 			return
 		}
 
 		lastDoneIndex = int(lastDone64)
+		settings.Consumer.Infof("Resuming from file %d", lastDoneIndex)
 	}()
+
+	warnedAboutWrite := false
 
 	writeProgress := func(fileIndex int) {
 		if settings.ResumeFrom == "" {
@@ -66,13 +67,34 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 		wErr := ioutil.WriteFile(settings.ResumeFrom, []byte(payload), 0644)
 		if wErr != nil {
-			settings.Consumer.Warnf("Couldn't save resume file: %s", err.Error())
+			if !warnedAboutWrite {
+				warnedAboutWrite = true
+				settings.Consumer.Warnf("Couldn't save resume file: %s", wErr.Error())
+			}
 			return
 		}
 	}
 
+	defer func() {
+		if settings.ResumeFrom == "" {
+			return
+		}
+
+		rErr := os.Remove(settings.ResumeFrom)
+		if rErr != nil {
+			settings.Consumer.Warnf("Couldn't remove resume file: %s", rErr.Error())
+		}
+	}()
+
+	if settings.OnUncompressedSizeKnown != nil {
+		settings.OnUncompressedSizeKnown(totalSize)
+	}
+
 	for fileIndex, file := range reader.File {
 		if fileIndex <= lastDoneIndex {
+			settings.Consumer.Debugf("Skipping file %d")
+			doneSize += file.UncompressedSize64
+			settings.Consumer.Progress(float64(doneSize) / float64(totalSize))
 			continue
 		}
 
@@ -131,7 +153,6 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 		doneSize += file.UncompressedSize64
 		settings.Consumer.Progress(float64(doneSize) / float64(totalSize))
-
 		writeProgress(fileIndex)
 	}
 
