@@ -2,11 +2,13 @@ package archiver
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
@@ -32,9 +34,48 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 		settings.OnUncompressedSizeKnown(totalSize)
 	}
 
-	doneSize := uint64(0)
+	var doneSize uint64
+	var lastDoneIndex int
 
-	for _, file := range reader.File {
+	func() {
+		if settings.ResumeFrom == "" {
+			return
+		}
+
+		resBytes, resErr := ioutil.ReadFile(settings.ResumeFrom)
+		if resErr != nil {
+			settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
+			return
+		}
+
+		lastDone64, resErr := strconv.ParseInt(string(resBytes), 10, 64)
+		if resErr != nil {
+			settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
+			return
+		}
+
+		lastDoneIndex = int(lastDone64)
+	}()
+
+	writeProgress := func(fileIndex int) {
+		if settings.ResumeFrom == "" {
+			return
+		}
+
+		payload := fmt.Sprintf("%d", fileIndex)
+
+		wErr := ioutil.WriteFile(settings.ResumeFrom, []byte(payload), 0644)
+		if wErr != nil {
+			settings.Consumer.Warnf("Couldn't save resume file: %s", err.Error())
+			return
+		}
+	}
+
+	for fileIndex, file := range reader.File {
+		if fileIndex <= lastDoneIndex {
+			continue
+		}
+
 		err = func() error {
 			rel := file.Name
 			filename := path.Join(dir, filepath.FromSlash(rel))
@@ -64,13 +105,6 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 			} else {
 				regCount++
 
-				if settings.Resume {
-					stats, sErr := os.Lstat(filename)
-					if sErr == nil && stats.Size() == int64(file.UncompressedSize64) {
-						return nil
-					}
-				}
-
 				fileReader, fErr := file.Open()
 				if fErr != nil {
 					return errors.Wrap(fErr, 1)
@@ -97,6 +131,8 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 		doneSize += file.UncompressedSize64
 		settings.Consumer.Progress(float64(doneSize) / float64(totalSize))
+
+		writeProgress(fileIndex)
 	}
 
 	return &ExtractResult{

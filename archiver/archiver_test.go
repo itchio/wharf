@@ -77,14 +77,19 @@ func Test_ZipUnzip(t *testing.T) {
 	_, err = ExtractPath(archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 
+	resumeFilePath := filepath.Join(tmpPath, "resumeinfo")
+
 	t.Logf("Extracting over already-extracted dir")
-	_, err = ExtractPath(archivePath, extractedDir, xSettings)
+	_, err = ExtractPath(archivePath, extractedDir, ExtractSettings{
+		Consumer:   xSettings.Consumer,
+		ResumeFrom: resumeFilePath,
+	})
 	assert.NoError(t, err)
 
 	t.Logf("Extracting over already-extracted dir (with resume)")
 	_, err = ExtractPath(archivePath, extractedDir, ExtractSettings{
-		Consumer: xSettings.Consumer,
-		Resume:   true,
+		Consumer:   xSettings.Consumer,
+		ResumeFrom: resumeFilePath,
 	})
 	assert.NoError(t, err)
 
