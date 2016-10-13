@@ -37,7 +37,6 @@ type ValidatorContext struct {
 	FailFast bool
 
 	// Result
-	TotalCorrupted int64
 
 	// internal
 	Wounds         chan *Wound
@@ -62,6 +61,31 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	consumerErrs := make(chan error, 1)
 	cancelled := make(chan struct{})
 
+	var woundsStateConsumer *state.Consumer
+
+	consumerProgress := int64(0)
+	bytesDone := int64(0)
+
+	updateProgress := func() {
+		currentBytesDone := atomic.LoadInt64(&bytesDone)
+
+		if woundsStateConsumer == nil {
+			progress := float64(currentBytesDone) / float64(signature.Container.Size)
+			vctx.Consumer.Progress(progress)
+		} else {
+			corruptedBytes := vctx.WoundsConsumer.TotalCorrupted()
+			totalBytes := signature.Container.Size + corruptedBytes
+			currentConsumerProgress := float64(atomic.LoadInt64(&consumerProgress)) / 1000.0
+			progress := float64(currentBytesDone) + float64(corruptedBytes)*currentConsumerProgress/float64(totalBytes)
+			vctx.Consumer.Progress(progress)
+		}
+	}
+
+	onProgress := func(delta int64) {
+		atomic.AddInt64(&bytesDone, delta)
+		updateProgress()
+	}
+
 	if vctx.FailFast {
 		if vctx.WoundsPath != "" {
 			return fmt.Errorf("ValidatorContext: FailFast is not compatible with WoundsPath")
@@ -76,12 +100,20 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 			WoundsPath: vctx.WoundsPath,
 		}
 	} else if vctx.HealPath != "" {
-		woundsConsumer, err := NewHealer(vctx.HealPath, target)
+		healer, err := NewHealer(vctx.HealPath, target)
 		if err != nil {
 			return err
 		}
 
-		vctx.WoundsConsumer = woundsConsumer
+		woundsStateConsumer = &state.Consumer{
+			OnProgress: func(progress float64) {
+				atomic.StoreInt64(&consumerProgress, int64(progress*10000.0))
+				updateProgress()
+			},
+		}
+		healer.SetConsumer(woundsStateConsumer)
+
+		vctx.WoundsConsumer = healer
 	} else {
 		vctx.WoundsConsumer = &WoundsPrinter{
 			Consumer: vctx.Consumer,
@@ -101,12 +133,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 			}
 		}
 	}()
-
-	bytesDone := int64(0)
-	onProgress := func(delta int64) {
-		atomic.AddInt64(&bytesDone, delta)
-		vctx.Consumer.Progress(float64(atomic.LoadInt64(&bytesDone)) / float64(signature.Container.Size))
-	}
 
 	// validate dirs and symlinks first
 	for dirIndex, dir := range signature.Container.Dirs {
