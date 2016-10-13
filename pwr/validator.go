@@ -44,6 +44,9 @@ type ValidatorContext struct {
 	WoundsConsumer WoundsConsumer
 }
 
+// Validate checks the directory at target using the container info and hashes
+// contained in signature. FailFast mode returns an error on the first corruption
+// seen, other modes write wounds to a file or for a wounds consumer, like a healer.
 func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) error {
 	if vctx.Consumer == nil {
 		vctx.Consumer = &state.Consumer{}
@@ -346,6 +349,8 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 	}
 }
 
+// AssertValid validates target in FailFast mode - it's a shorthand
+// so that setting up ValidatorContext isn't needed
 func AssertValid(target string, signature *SignatureInfo) error {
 	vctx := &ValidatorContext{
 		FailFast: true,

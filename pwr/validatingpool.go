@@ -31,14 +31,19 @@ type ValidatingPool struct {
 
 var _ wsync.WritablePool = (*ValidatingPool)(nil)
 
+// GetReader is a pass-through to the underlying Pool, it doesn't validate
 func (vp *ValidatingPool) GetReader(fileIndex int64) (io.Reader, error) {
 	return vp.GetReadSeeker(fileIndex)
 }
 
+// GetReadSeeker is a pass-through to the underlying Pool, it doesn't validate
 func (vp *ValidatingPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
 	return vp.Pool.GetReadSeeker(fileIndex)
 }
 
+// GetWriter returns a writer that checks hashes before writing to the underlying
+// pool's writer. It tries really hard to be transparent, but does buffer some data,
+// which means some writing is only done when the returned writer is closed.
 func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 	if vp.hashGroups == nil {
 		err := vp.makeHashGroups()
@@ -66,29 +71,29 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 			if vp.Wounds == nil {
 				err := fmt.Errorf("at %d/%d, expected weak hash %x, got %x", fileIndex, blockIndex, bh.WeakHash, weakHash)
 				return errors.Wrap(err, 1)
-			} else {
-				size := ComputeBlockSize(fileSize, blockIndex)
-				start := blockIndex * BlockSize
-				vp.Wounds <- &Wound{
-					Kind:  WoundKind_FILE,
-					Index: fileIndex,
-					Start: start,
-					End:   start + size,
-				}
+			}
+
+			size := ComputeBlockSize(fileSize, blockIndex)
+			start := blockIndex * BlockSize
+			vp.Wounds <- &Wound{
+				Kind:  WoundKind_FILE,
+				Index: fileIndex,
+				Start: start,
+				End:   start + size,
 			}
 		} else if !bytes.Equal(bh.StrongHash, strongHash) {
 			if vp.Wounds == nil {
 				err := fmt.Errorf("at %d/%d, expected strong hash %x, got %x", fileIndex, blockIndex, bh.StrongHash, strongHash)
 				return errors.Wrap(err, 1)
-			} else {
-				size := ComputeBlockSize(fileSize, blockIndex)
-				start := blockIndex * BlockSize
-				vp.Wounds <- &Wound{
-					Kind:  WoundKind_FILE,
-					Index: fileIndex,
-					Start: start,
-					End:   start + size,
-				}
+			}
+
+			size := ComputeBlockSize(fileSize, blockIndex)
+			start := blockIndex * BlockSize
+			vp.Wounds <- &Wound{
+				Kind:  WoundKind_FILE,
+				Index: fileIndex,
+				Start: start,
+				End:   start + size,
 			}
 		}
 
@@ -137,6 +142,7 @@ func (vp *ValidatingPool) makeHashGroups() error {
 	return nil
 }
 
+// Close closes the underlying pool (and its reader, if any)
 func (vp *ValidatingPool) Close() error {
 	return vp.Pool.Close()
 }

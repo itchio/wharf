@@ -14,7 +14,7 @@ import (
 	"github.com/alecthomas/assert"
 )
 
-var testSymlinks bool = (runtime.GOOS != "windows")
+var testSymlinks = (runtime.GOOS != "windows")
 
 type testDirEntry struct {
 	path string
