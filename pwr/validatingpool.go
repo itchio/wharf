@@ -11,6 +11,8 @@ import (
 	"github.com/itchio/wharf/wsync"
 )
 
+type OnValidChunkFunc func(size int64)
+
 // A ValidatingPool will check files against their hashes, but doesn't
 // check directories or symlinks
 type ValidatingPool struct {
@@ -22,6 +24,8 @@ type ValidatingPool struct {
 	Signature *SignatureInfo
 
 	Wounds chan *Wound
+
+	OnValidChunk OnValidChunkFunc
 
 	// private //
 
@@ -95,6 +99,11 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 				Start: start,
 				End:   start + size,
 			}
+		}
+
+		if vp.OnValidChunk != nil {
+			size := ComputeBlockSize(fileSize, blockIndex)
+			vp.OnValidChunk(size)
 		}
 
 		blockIndex++

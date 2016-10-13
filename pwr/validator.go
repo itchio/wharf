@@ -63,28 +63,21 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 
 	var woundsStateConsumer *state.Consumer
 
-	consumerProgress := int64(0)
 	bytesDone := int64(0)
 
-	updateProgress := func() {
-		currentBytesDone := atomic.LoadInt64(&bytesDone)
-
-		if woundsStateConsumer == nil {
-			progress := float64(currentBytesDone) / float64(signature.Container.Size)
-			vctx.Consumer.Progress(progress)
-		} else {
-			corruptedBytes := vctx.WoundsConsumer.TotalCorrupted()
-			totalBytes := signature.Container.Size + corruptedBytes
-			currentConsumerProgress := float64(atomic.LoadInt64(&consumerProgress)) / 1000.0
-			progress := float64(currentBytesDone) + float64(corruptedBytes)*currentConsumerProgress/float64(totalBytes)
-			vctx.Consumer.Progress(progress)
-		}
-	}
-
 	onProgress := func(delta int64) {
+		if woundsStateConsumer != nil {
+			return
+		}
+
 		atomic.AddInt64(&bytesDone, delta)
-		updateProgress()
+
+		currentBytesDone := atomic.LoadInt64(&bytesDone)
+		progress := float64(currentBytesDone) / float64(signature.Container.Size)
+		vctx.Consumer.Progress(progress)
 	}
+
+	var onValidChunk OnValidChunkFunc
 
 	if vctx.FailFast {
 		if vctx.WoundsPath != "" {
@@ -107,11 +100,11 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 
 		woundsStateConsumer = &state.Consumer{
 			OnProgress: func(progress float64) {
-				atomic.StoreInt64(&consumerProgress, int64(progress*10000.0))
-				updateProgress()
+				vctx.Consumer.Progress(progress)
 			},
 		}
 		healer.SetConsumer(woundsStateConsumer)
+		onValidChunk = healer.OnValidChunk
 
 		vctx.WoundsConsumer = healer
 	} else {
@@ -186,7 +179,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
+		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled, onValidChunk)
 	}
 
 	var retErr error
@@ -244,7 +237,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 type onProgressFunc func(delta int64)
 
 func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
-	errs chan error, onProgress onProgressFunc, cancelled chan struct{}) {
+	errs chan error, onProgress onProgressFunc, cancelled chan struct{}, onValidChunk OnValidChunkFunc) {
 
 	var retErr error
 
@@ -286,7 +279,8 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		Container: signature.Container,
 		Signature: signature,
 
-		Wounds: wounds,
+		Wounds:       wounds,
+		OnValidChunk: onValidChunk,
 	}
 
 	doOne := func(fileIndex int64) error {

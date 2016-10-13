@@ -37,7 +37,10 @@ type ArchiveHealer struct {
 	totalCorrupted int64
 	totalHealing   int64
 	totalHealed    int64
+	totalValid     int64
 	hasWounds      bool
+
+	container *tlc.Container
 }
 
 var _ Healer = (*ArchiveHealer)(nil)
@@ -46,6 +49,8 @@ type chunkHealedFunc func(chunkHealed int64)
 
 // Do starts receiving from the wounds channel and healing
 func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error {
+	ah.container = container
+
 	files := make(map[int64]bool)
 	fileIndices := make(chan int64)
 
@@ -71,20 +76,9 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	done := make(chan bool, ah.NumWorkers)
 	cancelled := make(chan struct{})
 
-	updateProgress := func() {
-		if ah.Consumer == nil {
-			return
-		}
-
-		totalHealing := atomic.LoadInt64(&ah.totalHealing)
-		totalHealed := atomic.LoadInt64(&ah.totalHealed)
-
-		progress := float64(totalHealed) / float64(totalHealing)
-		ah.Consumer.Progress(progress)
-	}
-
 	onChunkHealed := func(healedChunk int64) {
 		atomic.AddInt64(&ah.totalHealed, healedChunk)
+		ah.updateProgress()
 	}
 
 	for i := 0; i < ah.NumWorkers; i++ {
@@ -126,7 +120,7 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 			}
 
 			atomic.AddInt64(&ah.totalHealing, container.Files[wound.Index].Size)
-			updateProgress()
+			ah.updateProgress()
 			files[wound.Index] = true
 
 			select {
@@ -273,4 +267,30 @@ func (ah *ArchiveHealer) SetNumWorkers(numWorkers int) {
 // SetConsumer gives this healer a consumer to report progress to
 func (ah *ArchiveHealer) SetConsumer(consumer *state.Consumer) {
 	ah.Consumer = consumer
+}
+
+// OnValidChunk receives info that a chunk of data has been scanned
+// and was found wounds-free. It's useful for progress reports
+func (ah *ArchiveHealer) OnValidChunk(chunkSize int64) {
+	atomic.AddInt64(&ah.totalValid, chunkSize)
+	ah.updateProgress()
+}
+
+func (ah *ArchiveHealer) updateProgress() {
+	if ah.Consumer == nil {
+		return
+	}
+
+	totalValid := atomic.LoadInt64(&ah.totalValid)
+
+	totalHealing := atomic.LoadInt64(&ah.totalHealing)
+	totalHealing += (ah.container.Size - totalValid)
+	if totalHealing > ah.container.Size {
+		totalHealing = ah.container.Size
+	}
+
+	totalHealed := atomic.LoadInt64(&ah.totalHealed)
+
+	progress := float64(totalHealed) / float64(totalHealing)
+	ah.Consumer.Progress(progress)
 }

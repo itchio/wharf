@@ -16,6 +16,7 @@ type Healer interface {
 
 	SetNumWorkers(int)
 	SetConsumer(*state.Consumer)
+	OnValidChunk(int64)
 	TotalHealed() int64
 }
 
