@@ -11,7 +11,7 @@ import (
 	"github.com/itchio/wharf/wsync"
 )
 
-type OnValidChunkFunc func(size int64)
+type OnFileValidatedFunc func(fileIndex int64)
 
 // A ValidatingPool will check files against their hashes, but doesn't
 // check directories or symlinks
@@ -25,7 +25,7 @@ type ValidatingPool struct {
 
 	Wounds chan *Wound
 
-	OnValidChunk OnValidChunkFunc
+	OnFileValidated OnFileValidatedFunc
 
 	// private //
 
@@ -70,6 +70,8 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		bh := hashGroup[blockIndex]
 
 		weakHash, strongHash := vp.sctx.HashBlock(data)
+		start := blockIndex * BlockSize
+		size := ComputeBlockSize(fileSize, blockIndex)
 
 		if bh.WeakHash != weakHash {
 			if vp.Wounds == nil {
@@ -77,8 +79,6 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 				return errors.Wrap(err, 1)
 			}
 
-			size := ComputeBlockSize(fileSize, blockIndex)
-			start := blockIndex * BlockSize
 			vp.Wounds <- &Wound{
 				Kind:  WoundKind_FILE,
 				Index: fileIndex,
@@ -91,8 +91,6 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 				return errors.Wrap(err, 1)
 			}
 
-			size := ComputeBlockSize(fileSize, blockIndex)
-			start := blockIndex * BlockSize
 			vp.Wounds <- &Wound{
 				Kind:  WoundKind_FILE,
 				Index: fileIndex,
@@ -101,9 +99,11 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 			}
 		}
 
-		if vp.OnValidChunk != nil {
-			size := ComputeBlockSize(fileSize, blockIndex)
-			vp.OnValidChunk(size)
+		vp.Wounds <- &Wound{
+			Kind:  WoundKind_CLOSED_FILE,
+			Index: fileIndex,
+			Start: start,
+			End:   start + size,
 		}
 
 		blockIndex++

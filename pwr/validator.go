@@ -77,8 +77,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		vctx.Consumer.Progress(progress)
 	}
 
-	var onValidChunk OnValidChunkFunc
-
 	if vctx.FailFast {
 		if vctx.WoundsPath != "" {
 			return fmt.Errorf("ValidatorContext: FailFast is not compatible with WoundsPath")
@@ -104,7 +102,6 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 			},
 		}
 		healer.SetConsumer(woundsStateConsumer)
-		onValidChunk = healer.OnValidChunk
 
 		vctx.WoundsConsumer = healer
 	} else {
@@ -179,7 +176,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 	fileIndices := make(chan int64)
 
 	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled, onValidChunk)
+		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
 	}
 
 	var retErr error
@@ -237,7 +234,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 type onProgressFunc func(delta int64)
 
 func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
-	errs chan error, onProgress onProgressFunc, cancelled chan struct{}, onValidChunk OnValidChunkFunc) {
+	errs chan error, onProgress onProgressFunc, cancelled chan struct{}) {
 
 	var retErr error
 
@@ -279,8 +276,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		Container: signature.Container,
 		Signature: signature,
 
-		Wounds:       wounds,
-		OnValidChunk: onValidChunk,
+		Wounds: wounds,
 	}
 
 	doOne := func(fileIndex int64) error {

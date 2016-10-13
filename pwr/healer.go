@@ -14,9 +14,8 @@ import (
 type Healer interface {
 	WoundsConsumer
 
-	SetNumWorkers(int)
-	SetConsumer(*state.Consumer)
-	OnValidChunk(int64)
+	SetNumWorkers(numWorkers int)
+	SetConsumer(consumer *state.Consumer)
 	TotalHealed() int64
 }
 

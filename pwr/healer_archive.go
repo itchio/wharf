@@ -37,7 +37,7 @@ type ArchiveHealer struct {
 	totalCorrupted int64
 	totalHealing   int64
 	totalHealed    int64
-	totalValid     int64
+	totalHealthy   int64
 	hasWounds      bool
 
 	container *tlc.Container
@@ -86,7 +86,10 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	}
 
 	processWound := func(wound *Wound) error {
-		ah.totalCorrupted += wound.Size()
+		if !wound.Healthy() {
+			ah.totalCorrupted += wound.Size()
+			ah.hasWounds = true
+		}
 
 		switch wound.Kind {
 		case WoundKind_DIR:
@@ -130,6 +133,18 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 				// queued for work!
 			}
 
+		case WoundKind_CLOSED_FILE:
+			if files[wound.Index] {
+				// already healing whole file
+			} else {
+				fileSize := container.Files[wound.Index].Size
+
+				// whole file was healthy
+				if wound.End == fileSize {
+					atomic.AddInt64(&ah.totalHealthy, fileSize)
+				}
+			}
+
 		default:
 			return fmt.Errorf("unknown wound kind: %d", wound.Kind)
 		}
@@ -138,8 +153,6 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	}
 
 	for wound := range wounds {
-		ah.hasWounds = true
-
 		err = processWound(wound)
 		if err != nil {
 			close(fileIndices)
@@ -269,28 +282,14 @@ func (ah *ArchiveHealer) SetConsumer(consumer *state.Consumer) {
 	ah.Consumer = consumer
 }
 
-// OnValidChunk receives info that a chunk of data has been scanned
-// and was found wounds-free. It's useful for progress reports
-func (ah *ArchiveHealer) OnValidChunk(chunkSize int64) {
-	atomic.AddInt64(&ah.totalValid, chunkSize)
-	ah.updateProgress()
-}
-
 func (ah *ArchiveHealer) updateProgress() {
 	if ah.Consumer == nil {
 		return
 	}
 
-	totalValid := atomic.LoadInt64(&ah.totalValid)
-
-	totalHealing := atomic.LoadInt64(&ah.totalHealing)
-	totalHealing += (ah.container.Size - totalValid)
-	if totalHealing > ah.container.Size {
-		totalHealing = ah.container.Size
-	}
-
+	totalHealthy := atomic.LoadInt64(&ah.totalHealthy)
 	totalHealed := atomic.LoadInt64(&ah.totalHealed)
 
-	progress := float64(totalHealed) / float64(totalHealing)
+	progress := float64(totalHealthy+totalHealed) / float64(ah.container.Size)
 	ah.Consumer.Progress(progress)
 }

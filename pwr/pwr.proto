@@ -76,6 +76,9 @@ enum WoundKind {
   FILE = 0;
   SYMLINK = 1;
   DIR = 2;
+  
+  // sent when a file portion has been verified as valid
+  CLOSED_FILE = 3;
 }
 
 // Describe a corrupted portion of a file, in [start,end)

@@ -44,6 +44,10 @@ var _ WoundsConsumer = (*WoundsGuardian)(nil)
 // it returns nil (no error)
 func (wg *WoundsGuardian) Do(container *tlc.Container, wounds chan *Wound) error {
 	for wound := range wounds {
+		if wound.Healthy() {
+			continue
+		}
+
 		wg.hasWounds = true
 		wg.totalCorrupted += wound.Size()
 		return fmt.Errorf(wound.PrettyString(container))
@@ -133,6 +137,10 @@ func (ww *WoundsWriter) Do(container *tlc.Container, wounds chan *Wound) error {
 	}
 
 	for wound := range wounds {
+		if wound.Healthy() {
+			continue
+		}
+
 		ww.hasWounds = true
 		err := writeWound(wound)
 		if err != nil {
@@ -174,6 +182,10 @@ func (wp *WoundsPrinter) Do(container *tlc.Container, wounds chan *Wound) error 
 	}
 
 	for wound := range wounds {
+		if wound.Healthy() {
+			continue
+		}
+
 		wp.totalCorrupted += wound.Size()
 		wp.hasWounds = true
 		wp.Consumer.Debugf(wound.PrettyString(container))
@@ -261,4 +273,10 @@ func (w *Wound) PrettyString(container *tlc.Container) string {
 // Size returns the size of the wound, ie. how many bytes are corrupted
 func (w *Wound) Size() int64 {
 	return w.End - w.Start
+}
+
+// Healthy returns true if the wound is not a wound, but simply a progress
+// indicator used when validating files. It should not count towards HasWounds()
+func (w *Wound) Healthy() bool {
+	return w.Kind == WoundKind_CLOSED_FILE
 }
