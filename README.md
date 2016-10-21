@@ -1,6 +1,6 @@
 # wharf
 
-![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/itchio/wharf/blob/master/LICENSE)
 [![build status](https://git.itch.ovh/itchio/wharf/badges/master/build.svg)](https://git.itch.ovh/itchio/wharf/commits/master)
 [![coverage report](https://git.itch.ovh/itchio/wharf/badges/master/coverage.svg)](https://git.itch.ovh/itchio/wharf/commits/master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/itchio/wharf)](https://goreportcard.com/report/github.com/itchio/wharf)

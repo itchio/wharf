@@ -22,3 +22,5 @@ go get -v github.com/wadey/gocovmerge
 
 gocovmerge `ls *.coverprofile` > coverage.txt
 go tool cover -func=coverage.txt
+
+bash <(curl -s https://codecov.io/bash)
