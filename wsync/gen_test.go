@@ -73,47 +73,47 @@ func Test_GenData(t *testing.T) {
 	// This allows testing the package without bundling many test files.
 
 	var pairs = []pair{
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Target:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 5},
 			Description: "Same length, slightly different content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 9824, Alter: 0},
 			Target:      content{Len: 8*512*1024 + 89, Seed: 2345, Alter: 0},
 			Description: "Same length, very different content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Target:      content{Len: 8*256*1024 + 19, Seed: 42, Alter: 0},
 			Description: "Target shorter then source, same content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Target:      content{Len: 8*256*1024 + 19, Seed: 42, Alter: 5},
 			Description: "Target shorter then source, slightly different content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*256*1024 + 19, Seed: 42, Alter: 0},
 			Target:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Description: "Source shorter then target, same content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 5},
 			Target:      content{Len: 8*256*1024 + 19, Seed: 42, Alter: 0},
 			Description: "Source shorter then target, slightly different content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Target:      content{Len: 0, Seed: 42, Alter: 0},
 			Description: "Target empty and source has content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 0, Seed: 42, Alter: 0},
 			Target:      content{Len: 8*512*1024 + 89, Seed: 42, Alter: 0},
 			Description: "Source empty and target has content.",
 		},
-		pair{
+		{
 			Source:      content{Len: 8 * 872, Seed: 9824, Alter: 0},
 			Target:      content{Len: 8 * 235, Seed: 2345, Alter: 0},
 			Description: "Source and target both smaller then a block size.",
