@@ -1,8 +1,6 @@
-package binarydist
+package pwr
 
-import (
-	"errors"
-)
+import "errors"
 
 type seekBuffer struct {
 	buf []byte

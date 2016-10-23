@@ -1,11 +1,11 @@
-package binarydist
+package pwr
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/ioutil"
 
-	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/wire"
 )
 
@@ -181,9 +181,9 @@ func search(I []int, obuf, nbuf []byte, st, en int) (pos, n int) {
 	return search(I, obuf, nbuf, st, x)
 }
 
-// Diff computes the difference between old and new, according to the bsdiff
+// BSDiff computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
-func Diff(old, new io.Reader, patch wire.WriteContext) error {
+func BSDiff(old, new io.Reader, patch wire.WriteContext) error {
 	obuf, err := ioutil.ReadAll(old)
 	if err != nil {
 		return err
@@ -194,22 +194,13 @@ func Diff(old, new io.Reader, patch wire.WriteContext) error {
 		return err
 	}
 
-	err = diff(obuf, nbuf, patch)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func diff(obuf, nbuf []byte, patch wire.WriteContext) error {
 	var lenf int
 	I := qsufsort(obuf)
 	db := make([]byte, len(nbuf))
 	eb := make([]byte, len(nbuf))
 	var dblen, eblen int
 
-	bsdc := &pwr.BsdiffControl{}
+	bsdc := &BsdiffControl{}
 
 	// Compute the differences, writing ctrl as we go
 	var scan, pos, length int
@@ -314,13 +305,13 @@ func diff(obuf, nbuf []byte, patch wire.WriteContext) error {
 	// Write sentinel control message
 	bsdc.Reset()
 	bsdc.Add = -1
-	err := patch.WriteMessage(bsdc)
+	err = patch.WriteMessage(bsdc)
 	if err != nil {
 		return err
 	}
 
 	// Write diff data
-	bsdd := &pwr.BsdiffDiff{
+	bsdd := &BsdiffDiff{
 		Data: db[:dblen],
 	}
 
@@ -330,13 +321,114 @@ func diff(obuf, nbuf []byte, patch wire.WriteContext) error {
 	}
 
 	// Write extra data
-	bsed := &pwr.BsdiffExtra{
+	bsed := &BsdiffExtra{
 		Data: eb[:eblen],
 	}
 
 	err = patch.WriteMessage(bsed)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// ErrCorrupt indicates that a patch is corrupted, most often that it would produce a longer file
+// than specified
+var ErrCorrupt = errors.New("corrupt patch")
+
+// BSPatch applies patch to old, according to the bspatch algorithm,
+// and writes the result to new.
+func BSPatch(old io.Reader, new io.Writer, newSize int64, patch wire.ReadContext) error {
+	var ctrlOps []BsdiffControl
+
+	ctrlOp := &BsdiffControl{}
+
+	for {
+		ctrlOp.Reset()
+		err := patch.ReadMessage(ctrlOp)
+		if err != nil {
+			return err
+		}
+
+		if ctrlOp.Add == -1 {
+			break
+		}
+
+		ctrlOps = append(ctrlOps, BsdiffControl{
+			Add:  ctrlOp.Add,
+			Seek: ctrlOp.Seek,
+			Copy: ctrlOp.Copy,
+		})
+	}
+
+	diffMessage := &BsdiffDiff{}
+	err := patch.ReadMessage(diffMessage)
+	if err != nil {
+		return err
+	}
+	diff := diffMessage.Data
+
+	var diffOffset int64
+
+	extraMessage := &BsdiffExtra{}
+	err = patch.ReadMessage(extraMessage)
+	if err != nil {
+		return err
+	}
+	extra := extraMessage.Data
+
+	var extraOffset int64
+
+	obuf, err := ioutil.ReadAll(old)
+	if err != nil {
+		return err
+	}
+
+	nbuf := make([]byte, newSize)
+
+	var oldpos, newpos int64
+
+	for _, ctrl := range ctrlOps {
+		// Sanity-check
+		if newpos+ctrl.Add > newSize {
+			return ErrCorrupt
+		}
+
+		// Read diff string
+		copy(nbuf[newpos:newpos+ctrl.Add], diff[diffOffset:diffOffset+ctrl.Add])
+		diffOffset += ctrl.Add
+
+		// Add old data to diff string
+		for i := int64(0); i < ctrl.Add; i++ {
+			nbuf[newpos+i] += obuf[oldpos+i]
+		}
+
+		// Adjust pointers
+		newpos += ctrl.Add
+		oldpos += ctrl.Add
+
+		// Sanity-check
+		if newpos+ctrl.Copy > newSize {
+			return ErrCorrupt
+		}
+
+		// Read extra string
+		copy(nbuf[newpos:newpos+ctrl.Copy], extra[extraOffset:extraOffset+ctrl.Copy])
+		extraOffset += ctrl.Copy
+
+		// Adjust pointers
+		newpos += ctrl.Copy
+		oldpos += ctrl.Seek
+	}
+
+	// Write the new file
+	for len(nbuf) > 0 {
+		n, err := new.Write(nbuf)
+		if err != nil {
+			return err
+		}
+		nbuf = nbuf[n:]
 	}
 
 	return nil

@@ -1,3 +1,6 @@
+The bsdiff code is adapted from https://github.com/kr/binarydist,
+its original license follows:
+
 Copyright 2012 Keith Rarick
 
 Permission is hereby granted, free of charge, to any person
