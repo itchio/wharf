@@ -17,6 +17,7 @@ message SyncOp {
   enum Type {
     BLOCK_RANGE = 0;
     DATA = 1;
+    BSDIFF = 2;
     // REMOTE_DATA used to be 2 - shouldn't be in the wild, but better not re-use it?
     HEY_YOU_DID_IT = 2049; // <3 @GranPC & @tomasduda
   }
@@ -88,3 +89,19 @@ message Wound {
   int64 end = 3;
   WoundKind kind = 4;
 }
+
+// bsdiff messages
+message BsdiffControl {
+  int64 add = 1; // for the last dummy BsdiffControl, it's set to -1
+  int64 copy = 2;
+  int64 seek = 3;
+}
+
+message BsdiffDiff {
+  bytes data = 1;
+}
+
+message BsdiffExtra {
+  bytes data = 1;
+}
+
