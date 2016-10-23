@@ -1,79 +1,83 @@
 package binarydist
 
 import (
-	"bytes"
-	"compress/bzip2"
-	"encoding/binary"
 	"errors"
 	"io"
 	"io/ioutil"
+
+	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/wire"
 )
 
+// ErrCorrupt indicates that a patch is corrupted, most often that it would produce a longer file
+// than specified
 var ErrCorrupt = errors.New("corrupt patch")
 
 // Patch applies patch to old, according to the bspatch algorithm,
 // and writes the result to new.
-func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
-	var hdr header
-	err := binary.Read(patch, signMagLittleEndian{}, &hdr)
+func Patch(old io.Reader, new io.Writer, newSize int64, patch wire.ReadContext) error {
+	var ctrlOps []pwr.BsdiffControl
+
+	ctrlOp := &pwr.BsdiffControl{}
+
+	for {
+		ctrlOp.Reset()
+		err := patch.ReadMessage(ctrlOp)
+		if err != nil {
+			return err
+		}
+
+		if ctrlOp.Add == -1 {
+			break
+		}
+
+		ctrlOps = append(ctrlOps, pwr.BsdiffControl{
+			Add:  ctrlOp.Add,
+			Seek: ctrlOp.Seek,
+			Copy: ctrlOp.Copy,
+		})
+	}
+
+	diffMessage := &pwr.BsdiffDiff{}
+	err := patch.ReadMessage(diffMessage)
 	if err != nil {
 		return err
 	}
-	if hdr.Magic != magic {
-		return ErrCorrupt
-	}
-	if hdr.CtrlLen < 0 || hdr.DiffLen < 0 || hdr.NewSize < 0 {
-		return ErrCorrupt
-	}
+	diff := diffMessage.Data
 
-	ctrlbuf := make([]byte, hdr.CtrlLen)
-	_, err = io.ReadFull(patch, ctrlbuf)
+	var diffOffset int64
+
+	extraMessage := &pwr.BsdiffExtra{}
+	err = patch.ReadMessage(extraMessage)
 	if err != nil {
 		return err
 	}
-	cpfbz2 := bzip2.NewReader(bytes.NewReader(ctrlbuf))
+	extra := extraMessage.Data
 
-	diffbuf := make([]byte, hdr.DiffLen)
-	_, err = io.ReadFull(patch, diffbuf)
-	if err != nil {
-		return err
-	}
-	dpfbz2 := bzip2.NewReader(bytes.NewReader(diffbuf))
-
-	// The entire rest of the file is the extra block.
-	epfbz2 := bzip2.NewReader(patch)
+	var extraOffset int64
 
 	obuf, err := ioutil.ReadAll(old)
 	if err != nil {
 		return err
 	}
 
-	nbuf := make([]byte, hdr.NewSize)
+	nbuf := make([]byte, newSize)
 
 	var oldpos, newpos int64
-	for newpos < hdr.NewSize {
-		var ctrl struct{ Add, Copy, Seek int64 }
-		err = binary.Read(cpfbz2, signMagLittleEndian{}, &ctrl)
-		if err != nil {
-			return err
-		}
 
+	for _, ctrl := range ctrlOps {
 		// Sanity-check
-		if newpos+ctrl.Add > hdr.NewSize {
+		if newpos+ctrl.Add > newSize {
 			return ErrCorrupt
 		}
 
 		// Read diff string
-		_, err = io.ReadFull(dpfbz2, nbuf[newpos:newpos+ctrl.Add])
-		if err != nil {
-			return ErrCorrupt
-		}
+		copy(nbuf[newpos:newpos+ctrl.Add], diff[diffOffset:diffOffset+ctrl.Add])
+		diffOffset += ctrl.Add
 
 		// Add old data to diff string
 		for i := int64(0); i < ctrl.Add; i++ {
-			if oldpos+i >= 0 && oldpos+i < int64(len(obuf)) {
-				nbuf[newpos+i] += obuf[oldpos+i]
-			}
+			nbuf[newpos+i] += obuf[oldpos+i]
 		}
 
 		// Adjust pointers
@@ -81,15 +85,13 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 		oldpos += ctrl.Add
 
 		// Sanity-check
-		if newpos+ctrl.Copy > hdr.NewSize {
+		if newpos+ctrl.Copy > newSize {
 			return ErrCorrupt
 		}
 
 		// Read extra string
-		_, err = io.ReadFull(epfbz2, nbuf[newpos:newpos+ctrl.Copy])
-		if err != nil {
-			return ErrCorrupt
-		}
+		copy(nbuf[newpos:newpos+ctrl.Copy], extra[extraOffset:extraOffset+ctrl.Copy])
+		extraOffset += ctrl.Copy
 
 		// Adjust pointers
 		newpos += ctrl.Copy

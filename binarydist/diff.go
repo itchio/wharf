@@ -2,13 +2,16 @@ package binarydist
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"io/ioutil"
+
+	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/wire"
 )
 
 func swap(a []int, i, j int) { a[i], a[j] = a[j], a[i] }
 
+// Ternary-Split Quicksort, cf. http://www.larsson.dogma.net/ssrev-tr.pdf
 func split(I, V []int, start, length, h int) {
 	var i, j, k, x, jj, kk int
 
@@ -90,6 +93,8 @@ func split(I, V []int, start, length, h int) {
 	}
 }
 
+// Faster Suffix Sorting, see: http://www.larsson.dogma.net/ssrev-tr.pdf
+// Output `I` is a sorted suffix array.
 func qsufsort(obuf []byte) []int {
 	var buckets [256]int
 	var i, h int
@@ -150,6 +155,7 @@ func qsufsort(obuf []byte) []int {
 	return I
 }
 
+// Returns the number of bytes common to a and b
 func matchlen(a, b []byte) (i int) {
 	for i < len(a) && i < len(b) && a[i] == b[i] {
 		i++
@@ -164,23 +170,20 @@ func search(I []int, obuf, nbuf []byte, st, en int) (pos, n int) {
 
 		if x > y {
 			return I[st], x
-		} else {
-			return I[en], y
 		}
+		return I[en], y
 	}
 
 	x := st + (en-st)/2
 	if bytes.Compare(obuf[I[x]:], nbuf) < 0 {
 		return search(I, obuf, nbuf, x, en)
-	} else {
-		return search(I, obuf, nbuf, st, x)
 	}
-	panic("unreached")
+	return search(I, obuf, nbuf, st, x)
 }
 
 // Diff computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
-func Diff(old, new io.Reader, patch io.Writer) error {
+func Diff(old, new io.Reader, patch wire.WriteContext) error {
 	obuf, err := ioutil.ReadAll(old)
 	if err != nil {
 		return err
@@ -191,44 +194,24 @@ func Diff(old, new io.Reader, patch io.Writer) error {
 		return err
 	}
 
-	pbuf, err := diffBytes(obuf, nbuf)
+	err = diff(obuf, nbuf, patch)
 	if err != nil {
 		return err
 	}
 
-	_, err = patch.Write(pbuf)
-	return err
+	return nil
 }
 
-func diffBytes(obuf, nbuf []byte) ([]byte, error) {
-	var patch seekBuffer
-	err := diff(obuf, nbuf, &patch)
-	if err != nil {
-		return nil, err
-	}
-	return patch.buf, nil
-}
-
-func diff(obuf, nbuf []byte, patch io.WriteSeeker) error {
+func diff(obuf, nbuf []byte, patch wire.WriteContext) error {
 	var lenf int
 	I := qsufsort(obuf)
 	db := make([]byte, len(nbuf))
 	eb := make([]byte, len(nbuf))
 	var dblen, eblen int
 
-	var hdr header
-	hdr.Magic = magic
-	hdr.NewSize = int64(len(nbuf))
-	err := binary.Write(patch, signMagLittleEndian{}, &hdr)
-	if err != nil {
-		return err
-	}
+	bsdc := &pwr.BsdiffControl{}
 
 	// Compute the differences, writing ctrl as we go
-	pfbz2, err := newBzip2Writer(patch)
-	if err != nil {
-		return err
-	}
 	var scan, pos, length int
 	var lastscan, lastpos, lastoffset int
 	for scan < len(nbuf) {
@@ -313,23 +296,12 @@ func diff(obuf, nbuf []byte, patch io.WriteSeeker) error {
 			dblen += lenf
 			eblen += (scan - lenb) - (lastscan + lenf)
 
-			err = binary.Write(pfbz2, signMagLittleEndian{}, int64(lenf))
-			if err != nil {
-				pfbz2.Close()
-				return err
-			}
+			bsdc.Add = int64(lenf)
+			bsdc.Copy = int64((scan - lenb) - (lastscan + lenf))
+			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 
-			val := (scan - lenb) - (lastscan + lenf)
-			err = binary.Write(pfbz2, signMagLittleEndian{}, int64(val))
+			err := patch.WriteMessage(bsdc)
 			if err != nil {
-				pfbz2.Close()
-				return err
-			}
-
-			val = (pos - lenb) - (lastpos + lenf)
-			err = binary.Write(pfbz2, signMagLittleEndian{}, int64(val))
-			if err != nil {
-				pfbz2.Close()
 				return err
 			}
 
@@ -338,71 +310,34 @@ func diff(obuf, nbuf []byte, patch io.WriteSeeker) error {
 			lastoffset = pos - scan
 		}
 	}
-	err = pfbz2.Close()
+
+	// Write sentinel control message
+	bsdc.Reset()
+	bsdc.Add = -1
+	err := patch.WriteMessage(bsdc)
 	if err != nil {
 		return err
 	}
 
-	// Compute size of compressed ctrl data
-	l64, err := patch.Seek(0, 1)
-	if err != nil {
-		return err
+	// Write diff data
+	bsdd := &pwr.BsdiffDiff{
+		Data: db[:dblen],
 	}
-	hdr.CtrlLen = int64(l64 - 32)
 
-	// Write compressed diff data
-	pfbz2, err = newBzip2Writer(patch)
-	if err != nil {
-		return err
-	}
-	n, err := pfbz2.Write(db[:dblen])
-	if err != nil {
-		pfbz2.Close()
-		return err
-	}
-	if n != dblen {
-		pfbz2.Close()
-		return io.ErrShortWrite
-	}
-	err = pfbz2.Close()
+	err = patch.WriteMessage(bsdd)
 	if err != nil {
 		return err
 	}
 
-	// Compute size of compressed diff data
-	n64, err := patch.Seek(0, 1)
-	if err != nil {
-		return err
+	// Write extra data
+	bsed := &pwr.BsdiffExtra{
+		Data: eb[:eblen],
 	}
-	hdr.DiffLen = n64 - l64
 
-	// Write compressed extra data
-	pfbz2, err = newBzip2Writer(patch)
-	if err != nil {
-		return err
-	}
-	n, err = pfbz2.Write(eb[:eblen])
-	if err != nil {
-		pfbz2.Close()
-		return err
-	}
-	if n != eblen {
-		pfbz2.Close()
-		return io.ErrShortWrite
-	}
-	err = pfbz2.Close()
+	err = patch.WriteMessage(bsed)
 	if err != nil {
 		return err
 	}
 
-	// Seek to the beginning, write the header, and close the file
-	_, err = patch.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-	err = binary.Write(patch, signMagLittleEndian{}, &hdr)
-	if err != nil {
-		return err
-	}
 	return nil
 }

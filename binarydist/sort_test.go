@@ -8,7 +8,6 @@ import (
 
 var sortT = [][]byte{
 	mustRandBytes(1000),
-	mustReadAll(mustOpen("test.old")),
 	[]byte("abcdefabcdef"),
 }
 
