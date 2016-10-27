@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"unsafe"
+	"math"
+	"runtime"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/wire"
 )
+
+// MaxBsdiffSize is the largest size bsdiff will diff (for both old and new file)
+const MaxBsdiffSize = int64(math.MaxInt32 - 1)
 
 // Ternary-Split Quicksort, cf. http://www.larsson.dogma.net/ssrev-tr.pdf
 func split(I, V []int32, start, length, h int32) {
@@ -102,8 +106,6 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 	var i, h int32
 	var obuflen = int32(len(obuf))
 
-	consumer.Infof("Size of int: %d", unsafe.Sizeof(i))
-	consumer.Infof("Allocating %s for I & V", humanize.IBytes(uint64(2*int(unsafe.Sizeof(i))*(len(obuf)+1))))
 	I := make([]int32, obuflen+1)
 	V := make([]int32, obuflen+1)
 
@@ -204,9 +206,16 @@ func search(I []int32, obuf, nbuf []byte, st, en int32) (pos, n int32) {
 // BSDiff computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
 func BSDiff(old, new io.Reader, patch *wire.WriteContext, consumer *state.Consumer) error {
+	var memstats runtime.MemStats
+	runtime.ReadMemStats(&memstats)
+	consumer.Debugf("Allocated bytes at start of bsdiff: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+
 	obuf, err := ioutil.ReadAll(old)
 	if err != nil {
 		return err
+	}
+	if int64(len(obuf)) > MaxBsdiffSize {
+		return fmt.Errorf("bsdiff: old file too large (%s > %s)", humanize.IBytes(uint64(len(obuf))), humanize.IBytes(uint64(MaxBsdiffSize)))
 	}
 	obuflen := int32(len(obuf))
 
@@ -214,10 +223,19 @@ func BSDiff(old, new io.Reader, patch *wire.WriteContext, consumer *state.Consum
 	if err != nil {
 		return err
 	}
+	if int64(len(nbuf)) > MaxBsdiffSize {
+		return fmt.Errorf("bsdiff: new file too large (%s > %s)", humanize.IBytes(uint64(len(nbuf))), humanize.IBytes(uint64(MaxBsdiffSize)))
+	}
 	nbuflen := int32(len(nbuf))
+
+	runtime.ReadMemStats(&memstats)
+	consumer.Debugf("Allocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 
 	var lenf int32
 	I := qsufsort(obuf, consumer)
+
+	runtime.ReadMemStats(&memstats)
+	consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 
 	// FIXME: the streaming format allows us to allocate less than that
 	db := make([]byte, len(nbuf))
@@ -327,6 +345,9 @@ func BSDiff(old, new io.Reader, patch *wire.WriteContext, consumer *state.Consum
 			lastoffset = pos - scan
 		}
 	}
+
+	runtime.ReadMemStats(&memstats)
+	consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 
 	// Write sentinel control message
 	bsdc.Reset()
