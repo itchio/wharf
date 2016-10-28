@@ -164,7 +164,7 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 
 	for h = 1; I[0] != -(obuflen + 1); h += h {
 		done := make(chan bool)
-		tasks := make(chan sortTask)
+		tasks := make(chan sortTask, numWorkers*4)
 
 		if parallel {
 			for i := 0; i < numWorkers; i++ {
@@ -206,7 +206,7 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 				n = V[I[i]] + 1 - i
 				// consumer.Debugf("\n> Splitting %d-%d array", i, i+n)
 
-				if parallel {
+				if parallel && n > 128 {
 					tasks <- sortTask{
 						start:  i,
 						length: n,
