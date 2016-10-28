@@ -16,29 +16,29 @@ func split(I, V, V2 []int32, start, length, h int32, consumer *state.Consumer) {
 
 	var i, j, k, x, jj, kk int32
 
-	// if length < 16 {
-	// 	for k = start; k < start+length; k += j {
-	// 		j = 1
-	// 		x = V[I[k]+h]
-	// 		for i = 1; k+i < start+length; i++ {
-	// 			if V[I[k+i]+h] < x {
-	// 				x = V[I[k+i]+h]
-	// 				j = 0
-	// 			}
-	// 			if V[I[k+i]+h] == x {
-	// 				I[k+i], I[k+j] = I[k+j], I[k+i]
-	// 				j++
-	// 			}
-	// 		}
-	// 		for i = 0; i < j; i++ {
-	// 			V[I[k+i]] = k + j - 1
-	// 		}
-	// 		if j == 1 {
-	// 			I[k] = -1
-	// 		}
-	// 	}
-	// 	return
-	// }
+	if length < 16 {
+		for k = start; k < start+length; k += j {
+			j = 1
+			x = V2[I[k]+h]
+			for i = 1; k+i < start+length; i++ {
+				if V2[I[k+i]+h] < x {
+					x = V2[I[k+i]+h]
+					j = 0
+				}
+				if V2[I[k+i]+h] == x {
+					I[k+i], I[k+j] = I[k+j], I[k+i]
+					j++
+				}
+			}
+			for i = 0; i < j; i++ {
+				V2[I[k+i]] = k + j - 1
+			}
+			if j == 1 {
+				I[k] = -1
+			}
+		}
+		return
+	}
 
 	// fmt.Fprintf(os.Stderr, "start+length/2 = %d, len(I) = %d\n", start+length/2, len(I))
 	// fmt.Fprintf(os.Stderr, "V[%d] (read)\n", I[start+length/2]+h)
@@ -105,6 +105,12 @@ type mark struct {
 	value int32
 }
 
+type sortTask struct {
+	start  int32
+	length int32
+	h      int32
+}
+
 // Faster Suffix Sorting, see: http://www.larsson.dogma.net/ssrev-tr.pdf
 // Output `I` is a sorted suffix array.
 // TODO: implement parallel sorting as a faster alternative for high-RAM environments
@@ -150,6 +156,8 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 	marks := make([]mark, 0)
 
 	for h = 1; I[0] != -(obuflen + 1); h += h {
+		marks = marks[:0]
+
 		consumer.ProgressLabel(fmt.Sprintf("Suffix sorting (%d-order)", h))
 		// consumer.Debugf("\n>> Pass %d", h)
 
