@@ -17,9 +17,9 @@ var ErrCorrupt = errors.New("corrupt patch")
 // See the `wire` package for an example implementation.
 type ReadMessageFunc func(msg interface{}) error
 
-// BSPatch applies patch to old, according to the bspatch algorithm,
+// Patch applies patch to old, according to the bspatch algorithm,
 // and writes the result to new.
-func BSPatch(old io.Reader, new io.Writer, newSize int64, readMessage ReadMessageFunc) error {
+func Patch(old io.Reader, new io.Writer, newSize int64, readMessage ReadMessageFunc) error {
 	// TODO: still debating whether we should take an io.ReadSeeker instead... probably?
 	// the consumer can still do `ReadAll` themselves and pass a bytes.NewBuffer()
 	obuf, err := ioutil.ReadAll(old)
