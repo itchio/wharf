@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/golang/protobuf/proto"
 )
 
 // ErrCorrupt indicates that a patch is corrupted, most often that it would produce a longer file
@@ -15,7 +16,7 @@ var ErrCorrupt = errors.New("corrupt patch")
 
 // ReadMessageFunc should read the passed protobuf and relay any errors.
 // See the `wire` package for an example implementation.
-type ReadMessageFunc func(msg interface{}) error
+type ReadMessageFunc func(msg proto.Message) error
 
 // Patch applies patch to old, according to the bspatch algorithm,
 // and writes the result to new.

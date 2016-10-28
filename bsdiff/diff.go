@@ -8,6 +8,7 @@ import (
 	"runtime"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/golang/protobuf/proto"
 	"github.com/itchio/wharf/state"
 )
 
@@ -34,7 +35,7 @@ type DiffContext struct {
 // WriteMessageFunc should write a given protobuf message and relay any errors
 // No reference to the given message can be kept, as its content may be modified
 // after WriteMessageFunc returns. See the `wire` package for an example implementation.
-type WriteMessageFunc func(msg interface{}) (err error)
+type WriteMessageFunc func(msg proto.Message) (err error)
 
 // Do computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
