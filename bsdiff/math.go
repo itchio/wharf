@@ -261,23 +261,17 @@ func qsufsort(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int32 {
 				// found a combined-sorted group
 				// n accumulates adjacent combined-sorted groups
 				n -= I[i]
-				// skip over it, since it's already sorted
-				i -= I[i]
+
 				// count towards total number of suffixes sorted
 				nTotal -= I[i]
-			} else {
-				// only hand out sorts to other cores if:
-				//   - we're doing a parallel suffix sort,
-				//   - the array to sort is big enough
-				// otherwise, the overhead cancels the performance gains.
-				// this means not all cores will always be maxed out
-				// (especially in later passes), but we'll still complete sooner
-				doParallel := parallel && n > 128
 
+				// skip over it, since it's already sorted
+				i -= I[i]
+			} else {
 				if n != 0 {
 					// before we encountered this group, we had "-n" sorted suffixes
 					// (potentially from different groups), merge them into a single group
-					if doParallel {
+					if parallel {
 						// if working in parallel, only mark after tasks are done, otherwise
 						// it messes with indices the quicksort is relying on
 						marks = append(marks, mark{index: i - n, value: -n})
@@ -291,7 +285,13 @@ func qsufsort(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int32 {
 				// and f is the index of the start of the group (i, here)
 				n = V[I[i]] + 1 - i
 
-				if doParallel {
+				// only hand out sorts to other cores if:
+				//   - we're doing a parallel suffix sort,
+				//   - the array to sort is big enough
+				// otherwise, the overhead cancels the performance gains.
+				// this means not all cores will always be maxed out
+				// (especially in later passes), but we'll still complete sooner
+				if parallel && n > 128 {
 					tasks <- sortTask{
 						start:  i,
 						length: n,
