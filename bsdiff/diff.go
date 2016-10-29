@@ -13,7 +13,10 @@ import (
 	"github.com/itchio/wharf/state"
 )
 
-// MaxFileSize is the largest size bsdiff will diff (for both old and new file)
+// MaxFileSize is the largest size bsdiff will diff (for both old and new file): 2GB - 1 bytes
+// a different codepath could be used for larger files, at the cost of unreasonable memory usage
+// (even in 2016). If a big corporate user is willing to sponsor that part of the code, get in touch!
+// Fair warning though: it won't be covered, our CI workers don't have that much RAM :)
 const MaxFileSize = int64(math.MaxInt32 - 1)
 
 // MaxMessageSize is the maximum amount of bytes that will be stored
@@ -70,6 +73,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		return err
 	}
 	if int64(len(nbuf)) > MaxFileSize {
+		// TODO: provide a different (int64) codepath for >=2GB files
 		return fmt.Errorf("bsdiff: new file too large (%s > %s)", humanize.IBytes(uint64(len(nbuf))), humanize.IBytes(uint64(MaxFileSize)))
 	}
 	nbuflen := int32(len(nbuf))
@@ -206,7 +210,6 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	// Write sentinel control message
 	bsdc.Reset()
 	bsdc.Eof = true
 	err = writeMessage(bsdc)

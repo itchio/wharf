@@ -12,15 +12,21 @@ import (
 var parallel = os.Getenv("PARALLEL_BSDIFF") == "1"
 
 // Ternary-Split Quicksort, cf. http://www.larsson.dogma.net/ssrev-tr.pdf
+// Does: [  < x  ][  = x  ][  > x  ]
+// V is read-only, V2 is written to — this allows parallelism.
 func split(I, V, V2 []int32, start, length, h int32) {
-	// fmt.Fprintf(os.Stderr, "split(%d, %d)\n", start, length)
-
 	var i, j, k, x, jj, kk int32
 
+	// quick codepath for small buckets (don't split any further)
 	if length < 16 {
+		// for all elements
 		for k = start; k < start+length; k += j {
 			j = 1
+			// using the doubling technique from Karp, Miller, and Rosenberg,
+			// V[I[i]+h] is our sorting key. See section 2.1 of
+			// http://www.larsson.dogma.net/ssrev-tr.pdf
 			x = V2[I[k]+h]
+			// compare with all elements after it
 			for i = 1; k+i < start+length; i++ {
 				if V2[I[k+i]+h] < x {
 					x = V2[I[k+i]+h]
@@ -41,62 +47,83 @@ func split(I, V, V2 []int32, start, length, h int32) {
 		return
 	}
 
-	// fmt.Fprintf(os.Stderr, "start+length/2 = %d, len(I) = %d\n", start+length/2, len(I))
-	// fmt.Fprintf(os.Stderr, "V[%d] (read)\n", I[start+length/2]+h)
+	// find pivot
 	x = V[I[start+length/2]+h]
 	jj = 0
 	kk = 0
 	for i = start; i < start+length; i++ {
 		if V[I[i]+h] < x {
+			// size of < bucket
 			jj++
 		}
 		if V[I[i]+h] == x {
+			// size of = bucket
 			kk++
 		}
 	}
+	// last index of < bucket
 	jj += start
+	// last index of = bucket
 	kk += jj
 
 	i = start
 	j = 0
 	k = 0
+	// i goes from start of sorted array to end of < bucket
 	for i < jj {
 		if V[I[i]+h] < x {
+			// ith element belongs in < bucket
 			i++
 		} else if V[I[i]+h] == x {
+			// swap with = bucket
 			I[i], I[jj+j] = I[jj+j], I[i]
+			// j is our current position in the = bucket
 			j++
 		} else {
+			// swap with > bucket
 			I[i], I[kk+k] = I[kk+k], I[i]
+			// k is our current position in the > bucket
 			k++
 		}
 	}
 
+	// at this point, the < bucket contains all < elements
+	// but the = bucket might contain > elements, and vice versa
 	for jj+j < kk {
 		if V[I[jj+j]+h] == x {
+			// (jj+j)th elements really belongs in =
 			j++
 		} else {
+			// swap with > bucket
 			I[jj+j], I[kk+k] = I[kk+k], I[jj+j]
 			k++
 		}
 	}
 
+	// at this point, the < bucket contains
+	// all values < x, unsorted. same goes
+	// for = and > buckets
+
 	if jj > start {
-		// fmt.Fprintf(os.Stderr, "lsplit I[%d-%d]\n", start, jj)
+		// < bucket is not empty, sort it
 		split(I, V, V2, start, jj-start, h)
 	}
 
 	for i = 0; i < kk-jj; i++ {
-		// fmt.Fprintf(os.Stderr, "V[%d] = %d\n", I[jj+i], kk-1)
+		// commit ordering of = bucket
+		// note that `kk - 1` is constant: all = elements have
+		// the same group number, see Definition 3
+		// in http://www.larsson.dogma.net/ssrev-tr.pdf
 		V2[I[jj+i]] = kk - 1
 	}
 	if jj == kk-1 {
-		// fmt.Fprintf(os.Stderr, "I[%d] = %d\n", I[jj], -1)
+		// if = bucket is empty, that means we've
+		// sorted the group (no need for further subsorts)
 		I[jj] = -1
 	}
 
 	if start+length > kk {
-		// fmt.Fprintf(os.Stderr, "rsplit I[%d-%d]\n", kk, start+length)
+		// > bucket is not empty, sort it
 		split(I, V, V2, kk, start+length-kk, h)
 	}
 }
@@ -163,10 +190,12 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 	}
 
 	for h = 1; I[0] != -(obuflen + 1); h += h {
+		// in practice, h < 32, so this is a calculated waste of memory
 		done := make(chan bool)
 		tasks := make(chan sortTask, numWorkers*4)
 
 		if parallel {
+			// in parallel mode, fan-out sorting tasks to a few workers
 			for i := 0; i < numWorkers; i++ {
 				go func() {
 					for task := range tasks {
@@ -180,7 +209,6 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 		marks = marks[:0]
 
 		consumer.ProgressLabel(fmt.Sprintf("Suffix sorting (%d-order)", h))
-		// consumer.Debugf("\n>> Pass %d", h)
 
 		var lastI int32
 		var n int32
@@ -194,8 +222,9 @@ func qsufsort(obuf []byte, consumer *state.Consumer) []int32 {
 			}
 
 			if I[i] < 0 {
-				// consumer.Debugf("Found %d combined-sorted", -I[i])
+				// found a combined-sorted group
 				doneI -= I[i]
+				// n accumulates adjacent combined-sorted groups
 				n -= I[i]
 				i -= I[i]
 			} else {
