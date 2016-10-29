@@ -31,9 +31,18 @@ type DiffContext struct {
 	db []byte // diff bytes
 	eb []byte // extra bytes
 
-	// DebugMem enables printing memory usage statistics at various points in the
+	// SuffixSortConcurrency specifies the number of workers to use for suffix sorting.
+	// Exceeding the number of cores will only slow it down. A 0 value (default) uses
+	// sequential suffix sorting, which uses less RAM and has less overhead (might be faster
+	// in some scenarios)
+	SuffixSortConcurrency int
+
+	// MeasureMem enables printing memory usage statistics at various points in the
 	// diffing process.
-	DebugMem bool
+	MeasureMem bool
+
+	// MeasureParallelOverhead prints some stats on the overhead of parallel suffix sorting
+	MeasureParallelOverhead bool
 }
 
 // WriteMessageFunc should write a given protobuf message and relay any errors
@@ -46,7 +55,7 @@ type WriteMessageFunc func(msg proto.Message) (err error)
 func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var memstats *runtime.MemStats
 
-	if ctx.DebugMem {
+	if ctx.MeasureMem {
 		memstats = &runtime.MemStats{}
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("Allocated bytes at start of bsdiff: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
@@ -78,7 +87,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	}
 	nbuflen := int32(len(nbuf))
 
-	if ctx.DebugMem {
+	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("Allocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
@@ -86,12 +95,12 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	var lenf int32
 	startTime := time.Now()
 
-	I := qsufsort(obuf, consumer)
+	I := qsufsort(obuf, ctx, consumer)
 
 	duration := time.Since(startTime)
 	consumer.Debugf("Suffix sorting done in %s", duration)
 
-	if ctx.DebugMem {
+	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
@@ -205,7 +214,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		}
 	}
 
-	if ctx.DebugMem {
+	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
