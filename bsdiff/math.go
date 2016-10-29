@@ -3,6 +3,7 @@ package bsdiff
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/itchio/wharf/state"
@@ -153,8 +154,11 @@ type sortTask struct {
 // TODO: implement parallel sorting as a faster alternative for high-RAM environments
 // see http://www.zbh.uni-hamburg.de/pubs/pdf/FutAluKur2001.pdf
 func qsufsort(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int32 {
-	parallel := ctx.SuffixSortConcurrency > 0
+	parallel := ctx.SuffixSortConcurrency != 0
 	numWorkers := ctx.SuffixSortConcurrency
+	if numWorkers < 1 {
+		numWorkers += runtime.NumCPU()
+	}
 
 	var buckets [256]int32
 	var i, h int32

@@ -34,7 +34,7 @@ type DiffContext struct {
 	// SuffixSortConcurrency specifies the number of workers to use for suffix sorting.
 	// Exceeding the number of cores will only slow it down. A 0 value (default) uses
 	// sequential suffix sorting, which uses less RAM and has less overhead (might be faster
-	// in some scenarios)
+	// in some scenarios). A negative value means (number of cores - value).
 	SuffixSortConcurrency int
 
 	// MeasureMem enables printing memory usage statistics at various points in the
