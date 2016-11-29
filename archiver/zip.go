@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"github.com/go-errors/errors"
@@ -90,6 +91,8 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 		settings.OnUncompressedSizeKnown(totalSize)
 	}
 
+	windows := runtime.GOOS == "windows"
+
 	for fileIndex, file := range reader.File {
 		if fileIndex <= lastDoneIndex {
 			settings.Consumer.Debugf("Skipping file %d")
@@ -111,7 +114,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 					return errors.Wrap(err, 1)
 				}
 				dirCount++
-			} else if mode&os.ModeSymlink > 0 {
+			} else if mode&os.ModeSymlink > 0 && !windows {
 				fileReader, fErr := file.Open()
 				if fErr != nil {
 					return errors.Wrap(fErr, 1)
