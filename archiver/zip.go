@@ -121,7 +121,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 				linkname, lErr := ioutil.ReadAll(fileReader)
 				lErr = Symlink(string(linkname), filename, settings.Consumer)
 				if lErr != nil {
-					return errors.Wrap(err, 1)
+					return errors.Wrap(lErr, 1)
 				}
 				symlinkCount++
 			} else {
