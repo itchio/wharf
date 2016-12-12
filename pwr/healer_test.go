@@ -1,7 +1,7 @@
 package pwr
 
 import (
-	"archive/zip"
+	"github.com/itchio/arkive/zip"
 	"bytes"
 	"fmt"
 	"io/ioutil"
