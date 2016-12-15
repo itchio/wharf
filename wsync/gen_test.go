@@ -164,7 +164,7 @@ func Test_GenData(t *testing.T) {
 		}()
 
 		result := new(bytes.Buffer)
-		pool := &SinglePool{reader: targetBuffer}
+		pool := &SinglePool{reader: targetBuffer, size: int64(len(p.Target.Data))}
 
 		_, err = targetBuffer.Seek(0, 0)
 		must(t, err)
@@ -186,9 +186,14 @@ func Test_GenData(t *testing.T) {
 
 type SinglePool struct {
 	reader io.ReadSeeker
+	size   int64
 }
 
 var _ Pool = (*SinglePool)(nil)
+
+func (sp *SinglePool) GetSize(fileIndex int64) int64 {
+	return sp.size
+}
 
 func (sp *SinglePool) GetReader(fileIndex int64) (io.Reader, error) {
 	return sp.GetReadSeeker(fileIndex)
