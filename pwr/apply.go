@@ -400,13 +400,6 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 }
 
 func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Transposition) error {
-	totalTranspos := 0
-	for _, v := range transpositions {
-		totalTranspos += len(v)
-	}
-	fmt.Printf("\n===========================\n")
-	fmt.Printf("Applying %d transpositions\n", totalTranspos)
-
 	if len(transpositions) == 0 {
 		return nil
 	}
@@ -517,7 +510,6 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 		}
 	}
 
-	fmt.Printf("%d cleanup-renames to do\n", len(cleanupRenames))
 	for _, rename := range cleanupRenames {
 		oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.TargetPath))
 		newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.OutputPath))
@@ -531,8 +523,6 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 }
 
 func (actx *ApplyContext) move(oldAbsolutePath string, newAbsolutePath string) error {
-	fmt.Printf("mv %s -> %s\n", oldAbsolutePath, newAbsolutePath)
-
 	err := os.Remove(newAbsolutePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -573,8 +563,6 @@ const (
 )
 
 func (actx *ApplyContext) copy(oldAbsolutePath string, newAbsolutePath string, mkdirBehavior mkdirBehavior) error {
-	fmt.Printf("cp %s => %s\n", oldAbsolutePath, newAbsolutePath)
-
 	if mkdirBehavior == mkdirBehaviorIfNeeded {
 		err := os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 		if err != nil {
