@@ -17,12 +17,18 @@ import (
 var testSymlinks = (runtime.GOOS != "windows")
 
 type testDirEntry struct {
-	path string
-	mode int
-	size int64
+	path   string
+	mode   int
+	size   int64
+	seed   int64
+	dir    bool
+	dest   string
+	chunks []testDirChunk
+}
+
+type testDirChunk struct {
 	seed int64
-	dir  bool
-	dest string
+	size int64
 }
 
 type testDirSettings struct {
@@ -79,12 +85,23 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 				size = entry.size
 			}
 
-			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, os.FileMode(mode))
+			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(mode))
 			assert.NoError(t, fErr)
 			defer f.Close()
 
-			_, fErr = io.CopyN(f, prng, size)
-			assert.NoError(t, fErr)
+			if len(entry.chunks) > 0 {
+				for _, chunk := range entry.chunks {
+					prng.Seed(chunk.seed)
+					data.Reset()
+					data.Grow(int(chunk.size))
+
+					_, fErr = io.CopyN(f, prng, chunk.size)
+					assert.NoError(t, fErr)
+				}
+			} else {
+				_, fErr = io.CopyN(f, prng, size)
+				assert.NoError(t, fErr)
+			}
 		}()
 	}
 }

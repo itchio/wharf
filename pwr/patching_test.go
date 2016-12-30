@@ -66,6 +66,41 @@ func Test_PatchCycle(t *testing.T) {
 	})
 
 	runPatchingScenario(t, patchScenario{
+		name:         "change one in the middle",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize*12 + 1},
+					testDirChunk{seed: 0x222, size: BlockSize*12 + 3},
+					testDirChunk{seed: 0x333, size: BlockSize*12 + 4},
+				}},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize*12 + 1},
+					testDirChunk{seed: 0x222, size: BlockSize*12 + 3},
+					testDirChunk{seed: 0x333, size: BlockSize * 12},
+				}},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize*12 + 1},
+					testDirChunk{seed: 0x444, size: BlockSize*12 + 3},
+					testDirChunk{seed: 0x333, size: BlockSize*12 + 4},
+				}},
+			},
+		},
+		healedBytes: (BlockSize*12 + 1) + (BlockSize*12 + 3) + (BlockSize*12 + 4),
+		extraTests:  true,
+	})
+
+	runPatchingScenario(t, patchScenario{
 		name:         "add one, remove one",
 		touchedFiles: 1,
 		deletedFiles: 1,
