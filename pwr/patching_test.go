@@ -10,26 +10,30 @@ import (
 
 	"github.com/alecthomas/assert"
 	"github.com/go-errors/errors"
+	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 )
 
 type patchScenario struct {
-	name             string
-	v1               testDirSettings
-	intermediate     *testDirSettings
-	corruptions      *testDirSettings
-	v2               testDirSettings
-	touchedFiles     int // files that were written to (not renamed) during apply
-	noopFiles        int // files that were left as-is during apply
-	movedFiles       int
-	deletedFiles     int
-	deletedSymlinks  int
-	deletedDirs      int
-	leftDirs         int // folders that couldn't be deleted during apply (because of non-container files in them)
-	extraTests       bool
-	testBrokenRename bool
+	name                  string
+	v1                    testDirSettings
+	intermediate          *testDirSettings
+	corruptions           *testDirSettings
+	healedBytes           int64
+	v2                    testDirSettings
+	touchedFiles          int // files that were written to (not renamed) during apply
+	noopFiles             int // files that were left as-is during apply
+	movedFiles            int
+	deletedFiles          int
+	deletedSymlinks       int
+	deletedDirs           int
+	leftDirs              int  // folders that couldn't be deleted during apply (because of non-container files in them)
+	extraTests            bool // run in-place patching, etc.
+	testBrokenRename      bool // pretend os.Rename() doesn't work (it doesn't, sometimes, across partitions)
+	unchanged             bool // if true, before folder validates, so don't check that
+	ineffectiveCorruption bool // if true, before folder validates, so don't check that
 }
 
 // This is more of an integration test, it hits a lot of statements
@@ -57,7 +61,8 @@ func Test_PatchCycle(t *testing.T) {
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
-		extraTests: true,
+		healedBytes: BlockSize*17 + 14,
+		extraTests:  true,
 	})
 
 	runPatchingScenario(t, patchScenario{
@@ -227,6 +232,132 @@ func Test_PatchCycle(t *testing.T) {
 		testBrokenRename: true,
 	})
 
+	largeAmount := int64(32)
+
+	runPatchingScenario(t, patchScenario{
+		name:         "four large unchanged",
+		touchedFiles: 0,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x33, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x44, size: BlockSize*largeAmount + 17},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x99, size: BlockSize*largeAmount + 17},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x33, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x44, size: BlockSize*largeAmount + 17},
+			},
+		},
+		healedBytes:           0, // we don't heal what we don't patch
+		extraTests:            true,
+		unchanged:             true,
+		ineffectiveCorruption: true,
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name:         "four large, two swap",
+		touchedFiles: 0,
+		deletedFiles: 0,
+		movedFiles:   2,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x33, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x44, size: BlockSize*largeAmount + 17},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x99, size: BlockSize*largeAmount + 17},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x44, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x33, size: BlockSize*largeAmount + 17},
+			},
+		},
+		healedBytes:           0, // we don't heal what we don't patch
+		extraTests:            true,
+		ineffectiveCorruption: true,
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name:         "four large, two swap + duplicate (option A)",
+		touchedFiles: 2,
+		deletedFiles: 0,
+		movedFiles:   2,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x33, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x44, size: BlockSize*largeAmount + 17},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x99, size: BlockSize*largeAmount + 17},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x22, size: BlockSize*largeAmount + 17},
+			},
+		},
+		healedBytes:           0, // we don't heal what we don't patch
+		extraTests:            true,
+		ineffectiveCorruption: true,
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name:         "four large, two swap + duplicate (option B)",
+		touchedFiles: 2,
+		deletedFiles: 0,
+		movedFiles:   2,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x33, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x44, size: BlockSize*largeAmount + 17},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x99, size: BlockSize*largeAmount + 17},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x22, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-2", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-3", seed: 0x11, size: BlockSize*largeAmount + 17},
+				{path: "subdir/file-4", seed: 0x11, size: BlockSize*largeAmount + 17},
+			},
+		},
+		healedBytes:           0, // we don't heal what we don't patch
+		extraTests:            true,
+		ineffectiveCorruption: true,
+	})
+
 	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
 			name: "symlinks are added by patch",
@@ -298,6 +429,20 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	v2 := filepath.Join(mainDir, "v2")
 	makeTestDir(t, v2, scenario.v2)
 
+	healPathBase := filepath.Join(mainDir, "v2.zip")
+
+	func() {
+		fw, err := os.Create(healPathBase)
+		assert.NoError(t, err)
+
+		_, err = archiver.CompressZip(fw, v2, nil)
+		assert.NoError(t, err)
+	}()
+
+	getHealPath := func() string {
+		return fmt.Sprintf("archive,%s", healPathBase)
+	}
+
 	compression := &CompressionSettings{}
 	compression.Algorithm = CompressionAlgorithm_NONE
 
@@ -340,10 +485,13 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	woundsPath := filepath.Join(mainDir, "wounds.pww")
 
 	if scenario.extraTests {
-		log("Making sure before-path folder doesn't validate")
 		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
 		assert.NoError(t, sErr)
-		assert.Error(t, AssertValid(v1Before, signature))
+
+		if !scenario.unchanged {
+			log("Making sure before-path folder doesn't validate")
+			assert.Error(t, AssertValid(v1Before, signature))
+		}
 
 		runExtraTest := func(setup SetupFunc) error {
 			assert.NoError(t, os.RemoveAll(woundsPath))
@@ -379,7 +527,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}
 
 		func() {
-			log("In-place with failing vet")
+			log("In-place with vet rejection")
 			var NotVettingError = errors.New("not vetting this")
 			pErr := runExtraTest(func(actx *ApplyContext) {
 				actx.VetApply = func(actx *ApplyContext) error {
@@ -391,22 +539,28 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
-			log("In-place with signature (failfast, passing)")
+			log("In-place with signature (failfast, no corruptions)")
 			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 			}))
 		}()
 
 		func() {
-			log("In-place with signature (failfast, failing)")
-			assert.Error(t, runExtraTest(func(actx *ApplyContext) {
+			log("In-place with signature (failfast, with corruptions)")
+			testErr := runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				makeTestDir(t, v1Before, *scenario.corruptions)
-			}))
+			})
+
+			if scenario.ineffectiveCorruption {
+				assert.NoError(t, testErr)
+			} else {
+				assert.Error(t, testErr)
+			}
 		}()
 
 		func() {
-			log("In-place with signature (wounds, passing)")
+			log("In-place with signature (wounds, no corruptions)")
 			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				actx.WoundsPath = woundsPath
@@ -418,7 +572,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
-			log("In-place with signature (wounds, failing)")
+			log("In-place with signature (wounds, corruptions)")
 			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				actx.WoundsPath = woundsPath
@@ -426,7 +580,40 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			}))
 
 			_, sErr := os.Lstat(woundsPath)
-			assert.NoError(t, sErr)
+			if scenario.ineffectiveCorruption {
+				assert.Error(t, sErr)
+				assert.True(t, os.IsNotExist(sErr))
+			} else {
+				assert.NoError(t, sErr)
+			}
+		}()
+
+		func() {
+			log("In-place with signature (heal, no corruptions)")
+
+			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
+				actx.Signature = signature
+				actx.HealPath = getHealPath()
+			}))
+		}()
+
+		func() {
+			log("In-place with signature (heal, corruptions)")
+			var ctx *ApplyContext
+
+			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
+				ctx = actx
+				actx.Signature = signature
+				actx.HealPath = getHealPath()
+				makeTestDir(t, v1Before, *scenario.corruptions)
+			}))
+
+			assert.NoError(t, AssertValid(v2, signature))
+
+			healer, ok := ctx.WoundsConsumer.(Healer)
+			assert.True(t, ok)
+
+			assert.EqualValues(t, healer.TotalHealed(), scenario.healedBytes)
 		}()
 	}
 

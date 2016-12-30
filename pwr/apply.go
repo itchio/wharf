@@ -67,6 +67,7 @@ type ApplyContext struct {
 	OutputPool      wsync.WritablePool
 
 	WoundsPath     string
+	HealPath       string
 	WoundsConsumer WoundsConsumer
 
 	VetApply VetApplyFunc
@@ -237,11 +238,23 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		}
 
 		if actx.WoundsPath != "" {
+			if actx.HealPath != "" {
+				return errors.New("apply: HealPath and WoundsPath cannot be specified at the same time")
+			}
+
 			validatingPool.Wounds = make(chan *Wound)
 
 			actx.WoundsConsumer = &WoundsWriter{
 				WoundsPath: actx.WoundsPath,
 			}
+		} else if actx.HealPath != "" {
+			validatingPool.Wounds = make(chan *Wound)
+
+			healer, err := NewHealer(actx.HealPath, actx.OutputPath)
+			if err != nil {
+				return err
+			}
+			actx.WoundsConsumer = healer
 		}
 
 		if actx.WoundsConsumer != nil {
@@ -387,6 +400,13 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 }
 
 func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Transposition) error {
+	totalTranspos := 0
+	for _, v := range transpositions {
+		totalTranspos += len(v)
+	}
+	fmt.Printf("\n===========================\n")
+	fmt.Printf("Applying %d transpositions\n", totalTranspos)
+
 	if len(transpositions) == 0 {
 		return nil
 	}
@@ -395,7 +415,85 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 		return fmt.Errorf("internal error: found transpositions but not applying in-place")
 	}
 
+	applyMultipleTranspositions := func(targetPath string, group []*Transposition) error {
+		// a file got duplicated!
+		var noop *Transposition
+		for _, transpo := range group {
+			if targetPath == transpo.OutputPath {
+				noop = transpo
+				break
+			}
+		}
+
+		for i, transpo := range group {
+			if noop == nil {
+				if i == 0 {
+					// arbitrary pick first transposition as being the rename - do
+					// all the others as copies first
+					continue
+				}
+			} else if transpo == noop {
+				// no need to copy for the noop
+				continue
+			}
+
+			oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(targetPath))
+			newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
+			err := actx.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
+			if err != nil {
+				return err
+			}
+			actx.Stats.TouchedFiles++
+		}
+
+		if noop == nil {
+			// we treated the first transpo as being the rename, gotta do it now
+			transpo := group[0]
+			oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(targetPath))
+			newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
+			err := actx.move(oldAbsolutePath, newAbsolutePath)
+			if err != nil {
+				return err
+			}
+			actx.Stats.MovedFiles++
+		} else {
+			actx.Stats.NoopFiles++
+		}
+
+		return nil
+	}
+
+	cleanupRenames := []*Transposition{}
+	alreadyDone := make(map[string]bool)
+	renameSeed := int64(0)
+
 	for _, group := range transpositions {
+		for _, transpo := range group {
+			if transpo.TargetPath == transpo.OutputPath {
+				// no-ops can't clash
+				continue
+			}
+
+			if _, ok := transpositions[transpo.OutputPath]; ok {
+				// transpo is writing to the source of swapBuddy, this will blow shit up
+				// make it write to a safe path instead, then rename it to the correct path
+				renameSeed++
+				safePath := transpo.OutputPath + fmt.Sprintf(".butler-rename-%d", renameSeed)
+				cleanupRenames = append(cleanupRenames, &Transposition{
+					TargetPath: safePath,
+					OutputPath: transpo.OutputPath,
+				})
+				transpo.OutputPath = safePath
+			}
+		}
+	}
+
+	for groupTargetPath, group := range transpositions {
+		if alreadyDone[groupTargetPath] {
+			continue
+		}
+		alreadyDone[groupTargetPath] = true
+
 		if len(group) == 1 {
 			transpo := group[0]
 			if transpo.TargetPath == transpo.OutputPath {
@@ -412,49 +510,20 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 				actx.Stats.MovedFiles++
 			}
 		} else {
-			// a file got duplicated!
-			var noop *Transposition
-			for _, transpo := range group {
-				if transpo.TargetPath == transpo.OutputPath {
-					noop = transpo
-					break
-				}
+			err := applyMultipleTranspositions(groupTargetPath, group)
+			if err != nil {
+				return err
 			}
+		}
+	}
 
-			for i, transpo := range group {
-				if noop == nil {
-					if i == 0 {
-						// arbitrary pick first transposition as being the rename - do
-						// all the others as copies first
-						continue
-					}
-				} else if transpo == noop {
-					// no need to copy for the noop
-					continue
-				}
-
-				oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.TargetPath))
-				newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
-				err := actx.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
-				if err != nil {
-					return err
-				}
-				actx.Stats.TouchedFiles++
-			}
-
-			if noop == nil {
-				// we treated the first transpo as being the rename, gotta do it now
-				transpo := group[0]
-				oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.TargetPath))
-				newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
-				err := actx.move(oldAbsolutePath, newAbsolutePath)
-				if err != nil {
-					return err
-				}
-				actx.Stats.MovedFiles++
-			} else {
-				actx.Stats.NoopFiles++
-			}
+	fmt.Printf("%d cleanup-renames to do\n", len(cleanupRenames))
+	for _, rename := range cleanupRenames {
+		oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.TargetPath))
+		newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.OutputPath))
+		err := actx.move(oldAbsolutePath, newAbsolutePath)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -462,6 +531,8 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 }
 
 func (actx *ApplyContext) move(oldAbsolutePath string, newAbsolutePath string) error {
+	fmt.Printf("mv %s -> %s\n", oldAbsolutePath, newAbsolutePath)
+
 	err := os.Remove(newAbsolutePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -502,6 +573,8 @@ const (
 )
 
 func (actx *ApplyContext) copy(oldAbsolutePath string, newAbsolutePath string, mkdirBehavior mkdirBehavior) error {
+	fmt.Printf("cp %s => %s\n", oldAbsolutePath, newAbsolutePath)
+
 	if mkdirBehavior == mkdirBehaviorIfNeeded {
 		err := os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 		if err != nil {
