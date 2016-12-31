@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert"
+	"github.com/itchio/wharf/wrand"
 )
 
 var testSymlinks = (runtime.GOOS != "windows")
@@ -37,7 +38,7 @@ type testDirSettings struct {
 }
 
 func makeTestDir(t *testing.T, dir string, s testDirSettings) {
-	prng := rand.New(rand.NewSource(s.seed))
+	prng := wrand.RandReader{rand.New(rand.NewSource(s.seed))}
 
 	assert.NoError(t, os.MkdirAll(dir, 0755))
 	data := new(bytes.Buffer)

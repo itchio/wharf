@@ -14,6 +14,7 @@ import (
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/wharf/wire"
 )
 
 type patchScenario struct {
@@ -34,10 +35,13 @@ type patchScenario struct {
 	testBrokenRename      bool // pretend os.Rename() doesn't work (it doesn't, sometimes, across partitions)
 	unchanged             bool // if true, before folder validates, so don't check that
 	ineffectiveCorruption bool // if true, before folder validates, so don't check that
+	testVet               bool // test that vetting rejections do reject
 }
 
+const largeAmount int64 = 16
+
 // This is more of an integration test, it hits a lot of statements
-func Test_PatchCycle(t *testing.T) {
+func Test_ChangeOne(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "change one",
 		touchedFiles: 1,
@@ -63,8 +67,43 @@ func Test_PatchCycle(t *testing.T) {
 		},
 		healedBytes: BlockSize*17 + 14,
 		extraTests:  true,
+		testVet:     true,
 	})
+}
 
+func Test_OneBecameShort(t *testing.T) {
+	runPatchingScenario(t, patchScenario{
+		name:         "one became short",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize},
+				}},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize - 17},
+				}},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize},
+					testDirChunk{seed: 0x222, size: 17},
+				}},
+			},
+		},
+		healedBytes: BlockSize + 17,
+		extraTests:  true,
+	})
+}
+
+func Test_ChangeOneInMiddle(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "change one in the middle",
 		touchedFiles: 1,
@@ -99,7 +138,9 @@ func Test_PatchCycle(t *testing.T) {
 		healedBytes: (BlockSize*12 + 1) + (BlockSize*12 + 3) + (BlockSize*12 + 4),
 		extraTests:  true,
 	})
+}
 
+func Test_AddOneRemoveOne(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "add one, remove one",
 		touchedFiles: 1,
@@ -117,7 +158,9 @@ func Test_PatchCycle(t *testing.T) {
 			},
 		},
 	})
+}
 
+func Test_RenameOne(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "rename one",
 		touchedFiles: 0,
@@ -137,7 +180,9 @@ func Test_PatchCycle(t *testing.T) {
 			},
 		},
 	})
+}
 
+func Test_DeleteFolderOneGenerated(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "delete folder, one generated",
 		noopFiles:    1,
@@ -162,7 +207,9 @@ func Test_PatchCycle(t *testing.T) {
 			},
 		},
 	})
+}
 
+func Test_Move4Files(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "move 4 files",
 		touchedFiles: 0,
@@ -193,7 +240,9 @@ func Test_PatchCycle(t *testing.T) {
 		},
 		testBrokenRename: true,
 	})
+}
 
+func Test_Move4FilesIntoSubdir(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "move 4 files into a subdirectory",
 		touchedFiles: 0,
@@ -224,7 +273,9 @@ func Test_PatchCycle(t *testing.T) {
 		},
 		testBrokenRename: true,
 	})
+}
 
+func Test_OneFileIsDupedTwice(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "one file is duplicated twice",
 		touchedFiles: 2,
@@ -245,7 +296,9 @@ func Test_PatchCycle(t *testing.T) {
 		},
 		testBrokenRename: true,
 	})
+}
 
+func Test_OneFileRenamedAndDuped(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "one file is renamed + duplicated twice",
 		touchedFiles: 2,
@@ -266,9 +319,9 @@ func Test_PatchCycle(t *testing.T) {
 		},
 		testBrokenRename: true,
 	})
+}
 
-	largeAmount := int64(32)
-
+func Test_FourLargeUnchanged(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "four large unchanged",
 		touchedFiles: 0,
@@ -299,7 +352,9 @@ func Test_PatchCycle(t *testing.T) {
 		unchanged:             true,
 		ineffectiveCorruption: true,
 	})
+}
 
+func Test_FourLargeTwoSwap(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "four large, two swap",
 		touchedFiles: 0,
@@ -330,7 +385,9 @@ func Test_PatchCycle(t *testing.T) {
 		extraTests:            true,
 		ineffectiveCorruption: true,
 	})
+}
 
+func Test_FourLargeTwoSwapAndDupeA(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "four large, two swap + duplicate (option A)",
 		touchedFiles: 2,
@@ -361,7 +418,9 @@ func Test_PatchCycle(t *testing.T) {
 		extraTests:            true,
 		ineffectiveCorruption: true,
 	})
+}
 
+func Test_FourLargeTwoSwapAndDupeB(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "four large, two swap + duplicate (option B)",
 		touchedFiles: 2,
@@ -392,7 +451,9 @@ func Test_PatchCycle(t *testing.T) {
 		extraTests:            true,
 		ineffectiveCorruption: true,
 	})
+}
 
+func Test_SymlinksAddedByPatch(t *testing.T) {
 	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
 			name: "symlinks are added by patch",
@@ -408,7 +469,11 @@ func Test_PatchCycle(t *testing.T) {
 				},
 			},
 		})
+	}
+}
 
+func Test_SymlinksChangedByPatch(t *testing.T) {
+	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
 			name: "symlinks are changed by patch",
 			v1: testDirSettings{
@@ -426,7 +491,11 @@ func Test_PatchCycle(t *testing.T) {
 				},
 			},
 		})
+	}
+}
 
+func Test_SymlinksRemovedByPatch(t *testing.T) {
+	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
 			name:            "symlinks are removed by patch",
 			deletedSymlinks: 1,
@@ -562,6 +631,10 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}
 
 		func() {
+			if !scenario.testVet {
+				return
+			}
+
 			log("In-place with vet rejection")
 			var NotVettingError = errors.New("not vetting this")
 			pErr := runExtraTest(func(actx *ApplyContext) {
@@ -581,17 +654,17 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
+			if scenario.ineffectiveCorruption {
+				return
+			}
+
 			log("In-place with signature (failfast, with corruptions)")
 			testErr := runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				makeTestDir(t, v1Before, *scenario.corruptions)
 			})
 
-			if scenario.ineffectiveCorruption {
-				assert.NoError(t, testErr)
-			} else {
-				assert.Error(t, testErr)
-			}
+			assert.Error(t, testErr)
 		}()
 
 		func() {
@@ -607,6 +680,10 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
+			if scenario.ineffectiveCorruption {
+				return
+			}
+
 			log("In-place with signature (wounds, corruptions)")
 			assert.NoError(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
@@ -615,12 +692,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			}))
 
 			_, sErr := os.Lstat(woundsPath)
-			if scenario.ineffectiveCorruption {
-				assert.Error(t, sErr)
-				assert.True(t, os.IsNotExist(sErr))
-			} else {
-				assert.NoError(t, sErr)
-			}
+			assert.NoError(t, sErr)
 		}()
 
 		func() {
@@ -633,6 +705,10 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
+			if scenario.ineffectiveCorruption {
+				return
+			}
+
 			log("In-place with signature (heal, corruptions)")
 			var ctx *ApplyContext
 
@@ -769,4 +845,56 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			actx.debugBrokenRename = true
 		})
 	}
+}
+
+type CookPatchOperator func(wctx *wire.WriteContext)
+
+func cookPatch(t *testing.T, op CookPatchOperator) *bytes.Buffer {
+	buffer := new(bytes.Buffer)
+	wctx := wire.NewWriteContext(buffer)
+	op(wctx)
+
+	return buffer
+}
+
+func Test_WrongMagicPatch(t *testing.T) {
+	patch := cookPatch(t, func(wctx *wire.WriteContext) {
+		ELFMagic := int32(0x7f454c46)
+		assert.NoError(t, wctx.WriteMagic(ELFMagic))
+	})
+
+	actx := ApplyContext{
+		Consumer: &state.Consumer{},
+	}
+
+	err := actx.ApplyPatch(patch)
+	assert.Error(t, err)
+}
+
+func Test_MissingHeaderPatch(t *testing.T) {
+	patch := cookPatch(t, func(wctx *wire.WriteContext) {
+		assert.NoError(t, wctx.WriteMagic(PatchMagic))
+	})
+
+	actx := ApplyContext{
+		Consumer: &state.Consumer{},
+	}
+
+	err := actx.ApplyPatch(patch)
+	assert.Error(t, err)
+}
+
+func Test_OnlyHeaderPatch(t *testing.T) {
+	patch := cookPatch(t, func(wctx *wire.WriteContext) {
+		assert.NoError(t, wctx.WriteMagic(PatchMagic))
+		patchHeader := &PatchHeader{}
+		assert.NoError(t, wctx.WriteMessage(patchHeader))
+	})
+
+	actx := ApplyContext{
+		Consumer: &state.Consumer{},
+	}
+
+	err := actx.ApplyPatch(patch)
+	assert.Error(t, err)
 }

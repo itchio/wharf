@@ -377,7 +377,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 
 		go readOps(patchWire, ops, errc)
 
-		bytesWritten, transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
+		transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
 		if err != nil {
 			select {
 			case nestedErr := <-errc:
@@ -396,10 +396,6 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			transpositions[transposition.TargetPath] = append(transpositions[transposition.TargetPath], transposition)
 		} else {
 			actx.Stats.TouchedFiles++
-			if bytesWritten != f.Size {
-				retErr = fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
-				return
-			}
 		}
 
 		// using errc to signal the end of processing, rather than having a separate
@@ -742,7 +738,7 @@ type Transposition struct {
 }
 
 func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool wsync.Pool, outputContainer *tlc.Container, outputPool wsync.WritablePool,
-	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (written int64, transposition *Transposition, err error) {
+	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (transposition *Transposition, err error) {
 
 	var writer io.WriteCloser
 
@@ -788,7 +784,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 				writer, err = outputPool.GetWriter(fileIndex)
 				if err != nil {
-					return 0, nil, errors.Wrap(err, 1)
+					return nil, errors.Wrap(err, 1)
 				}
 				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
 
@@ -804,7 +800,6 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 						return
 					}
 
-					written = writeCounter.Count()
 					errs <- nil
 				}()
 			}
@@ -816,7 +811,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 			case cErr := <-errs:
 				// if we get an error here, ApplyPatch failed so we no longer need to close realops
 				if cErr != nil {
-					return 0, nil, errors.Wrap(cErr, 1)
+					return nil, errors.Wrap(cErr, 1)
 				}
 			case realops <- op:
 				// muffin
@@ -836,7 +831,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 	err = <-errs
 	if err != nil {
-		return 0, nil, errors.Wrap(err, 1)
+		return nil, errors.Wrap(err, 1)
 	}
 
 	return
