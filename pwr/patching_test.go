@@ -103,6 +103,40 @@ func Test_OneBecameShort(t *testing.T) {
 	})
 }
 
+func Test_EarlySmallWound(t *testing.T) {
+	runPatchingScenario(t, patchScenario{
+		name:         "early small wound",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize * 16},
+				}},
+			},
+		},
+		corruptions: &testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize},
+					testDirChunk{seed: 0x222, size: 1},
+					testDirChunk{seed: 0x111, size: BlockSize*15 - 1},
+				}},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "short", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: BlockSize * 16},
+					testDirChunk{seed: 0x333, size: BlockSize * 16},
+				}},
+			},
+		},
+		healedBytes: BlockSize * (16 + 16),
+		extraTests:  true,
+	})
+}
+
 func Test_ChangeOneInMiddle(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name:         "change one in the middle",

@@ -270,6 +270,13 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 					}
 				},
 			})
+
+			lockMap := NewLockMap(actx.SourceContainer)
+			healer.SetLockMap(lockMap)
+
+			validatingPool.OnClose = func(fileIndex int64) {
+				close(lockMap[fileIndex])
+			}
 		}
 
 		if actx.WoundsConsumer != nil {
