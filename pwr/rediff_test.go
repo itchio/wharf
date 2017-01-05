@@ -27,7 +27,7 @@ func (zc *zstdCompressor) Apply(writer io.Writer, quality int32) (io.Writer, err
 
 type zstdDecompressor struct{}
 
-func (zc *zstdDecompressor) Apply(reader io.Reader) (io.Reader, error) {
+func (zd *zstdDecompressor) Apply(reader io.Reader) (io.Reader, error) {
 	return zstd.NewReader(reader), nil
 }
 
