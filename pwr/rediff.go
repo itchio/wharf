@@ -3,6 +3,7 @@ package pwr
 import (
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/tlc"
@@ -47,7 +48,13 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		return errors.Wrap(err, 1)
 	}
 
-	err = wctx.WriteMessage(ph)
+	wph := &PatchHeader{
+		Compression: &CompressionSettings{
+			Algorithm: CompressionAlgorithm_ZSTD,
+			Quality:   9,
+		},
+	}
+	err = wctx.WriteMessage(wph)
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
@@ -57,7 +64,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		return errors.Wrap(err, 1)
 	}
 
-	wctx, err = CompressWire(wctx, ph.Compression)
+	wctx, err = CompressWire(wctx, wph.Compression)
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
@@ -86,7 +93,8 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 	opBuffer := []*SyncOp{}
 
-	for fileIndex, f := range sourceContainer.Files {
+	for _, f := range sourceContainer.Files {
+		totalBytes := f.Size
 		bytesReusedPerFileIndex := make(map[int64]int64)
 		opBuffer = opBuffer[:0]
 		readingOps := true
@@ -124,10 +132,15 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		}
 
 		// now that we have a full view of the file, if not worth bsdiffing, just copy operations
+		for numBytes, fileIndex := range bytesReusedPerFileIndex {
+			log.Printf("%d/%d bytes come from file %s", numBytes, totalBytes, targetContainer.Files[fileIndex])
+		}
 	}
 
 	err = wctx.Close()
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
+
+	return nil
 }

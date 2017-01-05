@@ -47,6 +47,7 @@ enum CompressionAlgorithm {
   NONE = 0;
   BROTLI = 1;
   GZIP = 2;
+  ZSTD = 3;
 }
 
 message CompressionSettings {
