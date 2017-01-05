@@ -48,6 +48,10 @@ type RediffContext struct {
 	Compression           *CompressionSettings
 	Consumer              *state.Consumer
 
+	// set on Analyze
+	TargetContainer *tlc.Container
+	SourceContainer *tlc.Container
+
 	// internal
 	DiffMappings DiffMappings
 }
@@ -78,12 +82,14 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
+	rc.TargetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = rctx.ReadMessage(sourceContainer)
 	if err != nil {
 		return errors.Wrap(err, 1)
 	}
+	rc.SourceContainer = sourceContainer
 
 	rop := &SyncOp{}
 
