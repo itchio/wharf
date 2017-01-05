@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert"
+	"github.com/itchio/wharf/pwr/drip"
 	"github.com/itchio/wharf/wrand"
 )
 
@@ -25,6 +26,19 @@ type testDirEntry struct {
 	dir    bool
 	dest   string
 	chunks []testDirChunk
+	bsmods []bsmod
+}
+
+type bsmod struct {
+	// corrupt one byte every `interval`
+	interval int64
+
+	// how much to add to the byte being corrupted
+	delta byte
+
+	// only corrupt `max` times at a time, then skip `skip*interval` bytes
+	max  int
+	skip int
 }
 
 type testDirChunk struct {
@@ -37,8 +51,20 @@ type testDirSettings struct {
 	entries []testDirEntry
 }
 
+type nopCloserWriter struct {
+	writer io.Writer
+}
+
+var _ io.Writer = (*nopCloserWriter)(nil)
+
+func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
+	return ncw.writer.Write(buf)
+}
+
 func makeTestDir(t *testing.T, dir string, s testDirSettings) {
-	prng := wrand.RandReader{rand.New(rand.NewSource(s.seed))}
+	prng := wrand.RandReader{
+		Source: rand.New(rand.NewSource(s.seed)),
+	}
 
 	assert.NoError(t, os.MkdirAll(dir, 0755))
 	data := new(bytes.Buffer)
@@ -99,6 +125,39 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 					_, fErr = io.CopyN(f, prng, chunk.size)
 					assert.NoError(t, fErr)
 				}
+			} else if len(entry.bsmods) > 0 {
+				func() {
+					var writer io.Writer = &nopCloserWriter{f}
+					for _, bsmod := range entry.bsmods {
+						modcount := 0
+						skipcount := 0
+
+						drip := &drip.Writer{
+							Buffer: make([]byte, bsmod.interval),
+							Writer: writer,
+							Validate: func(data []byte) error {
+								if bsmod.max > 0 && modcount >= bsmod.max {
+									skipcount = bsmod.skip
+									modcount = 0
+								}
+
+								if skipcount > 0 {
+									skipcount--
+									return nil
+								}
+
+								data[0] = data[0] + bsmod.delta
+								modcount++
+								return nil
+							},
+						}
+						defer drip.Close()
+						writer = drip
+					}
+
+					_, fErr = io.CopyN(writer, prng, size)
+					assert.NoError(t, fErr)
+				}()
 			} else {
 				_, fErr = io.CopyN(f, prng, size)
 				assert.NoError(t, fErr)

@@ -96,12 +96,26 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 
 	var doneBytes int64
 
+	sh := &SyncHeader{}
+
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+		sh.Reset()
+		err = rctx.ReadMessage(sh)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		if sh.FileIndex != int64(sourceFileIndex) {
+			return errors.Wrap(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex), 1)
+		}
+
 		rc.Consumer.ProgressLabel(sourceFile.Path)
 		rc.Consumer.Progress(float64(doneBytes) / float64(sourceContainer.Size))
 
 		bytesReusedPerFileIndex := make(FileOrigin)
 		readingOps := true
+		var numBlockRange int64
+		var numData int64
 
 		for readingOps {
 			rop.Reset()
@@ -112,6 +126,7 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 
 			switch rop.Type {
 			case SyncOp_BLOCK_RANGE:
+				numBlockRange++
 				alreadyReused := bytesReusedPerFileIndex[rop.FileIndex]
 				lastBlockIndex := rop.BlockIndex + rop.BlockSpan
 				targetFile := targetContainer.Files[rop.FileIndex]
@@ -121,7 +136,7 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 				bytesReusedPerFileIndex[rop.FileIndex] = alreadyReused + otherBlocksSize + lastBlockSize
 
 			case SyncOp_DATA:
-				// muffin
+				numData++
 
 			default:
 				switch rop.Type {
@@ -133,22 +148,36 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 			}
 		}
 
-		var diffMapping *DiffMapping
+		if numBlockRange == 1 && numData == 0 {
+			// transpositions (renames, etc.) don't need bsdiff'ing :)
+		} else {
+			var diffMapping *DiffMapping
 
-		// now that we have a full view of the file, if not worth bsdiffing, just copy operations
-		for targetFileIndex, numBytes := range bytesReusedPerFileIndex {
-			targetFile := targetContainer.Files[targetFileIndex]
-			// first, better, or equal with same name (prefer natural mappings)
-			if diffMapping == nil || numBytes > diffMapping.NumBytes || (numBytes == diffMapping.NumBytes && targetFile.Path == sourceFile.Path) {
-				diffMapping = &DiffMapping{
-					TargetIndex: targetFileIndex,
-					NumBytes:    numBytes,
+			for targetFileIndex, numBytes := range bytesReusedPerFileIndex {
+				targetFile := targetContainer.Files[targetFileIndex]
+				// first, better, or equal target file with same name (prefer natural mappings)
+				if diffMapping == nil || numBytes > diffMapping.NumBytes || (numBytes == diffMapping.NumBytes && targetFile.Path == sourceFile.Path) {
+					diffMapping = &DiffMapping{
+						TargetIndex: targetFileIndex,
+						NumBytes:    numBytes,
+					}
 				}
 			}
-		}
 
-		if diffMapping != nil {
-			rc.DiffMappings[int64(sourceFileIndex)] = diffMapping
+			if diffMapping == nil {
+				// even without any common blocks, bsdiff might still be worth it
+				// if the file is named the same
+				if samePathTargetFileIndex, ok := targetPathsToIndex[sourceFile.Path]; ok {
+					diffMapping = &DiffMapping{
+						TargetIndex: samePathTargetFileIndex,
+						NumBytes:    0,
+					}
+				}
+			}
+
+			if diffMapping != nil {
+				rc.DiffMappings[int64(sourceFileIndex)] = diffMapping
+			}
 		}
 
 		doneBytes += sourceFile.Size
@@ -236,9 +265,25 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		return errors.Wrap(err, 1)
 	}
 
+	sh := &SyncHeader{}
 	rop := &SyncOp{}
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+		sh.Reset()
+		err = rctx.ReadMessage(sh)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		if sh.FileIndex != int64(sourceFileIndex) {
+			return errors.Wrap(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex), 1)
+		}
+
+		err = wctx.WriteMessage(sh)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
 		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
 		readingOps := true
 
@@ -276,8 +321,6 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 				// then bsdiff
 				dc := &bsdiff.DiffContext{
 					SuffixSortConcurrency: rc.SuffixSortConcurrency,
-
-					MeasureMem: true,
 				}
 
 				sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))

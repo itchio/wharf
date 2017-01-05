@@ -32,9 +32,9 @@ func init() {
 	RegisterDecompressor(CompressionAlgorithm_ZSTD, &zstdDecompressor{})
 }
 
-func Test_Rediff(t *testing.T) {
+func Test_RediffWorse(t *testing.T) {
 	runRediffScenario(t, patchScenario{
-		name:         "change one",
+		name:         "rediff gets slightly worse",
 		touchedFiles: 1,
 		deletedFiles: 0,
 		v1: testDirSettings{
@@ -44,21 +44,66 @@ func Test_Rediff(t *testing.T) {
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x22, size: BlockSize*11 + 14},
-			},
-		},
 		v2: testDirSettings{
 			entries: []testDirEntry{
 				{path: "subdir/file-1", seed: 0x1, size: BlockSize*17 + 14},
 				{path: "file-1", seed: 0x2},
+				{path: "dir2/file-2", seed: 0x33},
+			},
+		},
+	})
+}
+
+func Test_RediffBetter(t *testing.T) {
+	runRediffScenario(t, patchScenario{
+		name:         "rediff gets better!",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*11 + 14},
+				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
-		healedBytes: BlockSize*17 + 14,
-		extraTests:  true,
-		testVet:     true,
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*11 + 14, bsmods: []bsmod{
+					bsmod{interval: BlockSize/2 + 3, delta: 0x4},
+					bsmod{interval: BlockSize/3 + 7, delta: 0x18},
+				}},
+				{path: "file-1", seed: 0x2},
+				{path: "dir2/file-2", seed: 0x33},
+			},
+		},
+	})
+}
+
+func Test_RediffStillBetter(t *testing.T) {
+	runRediffScenario(t, patchScenario{
+		name:         "rediff gets better even though rsync wasn't that bad",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*28 + 14},
+				{path: "file-1", seed: 0x2, size: BlockSize * 16},
+				{path: "dir2/file-2", seed: 0x3},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize * 31, bsmods: []bsmod{
+					bsmod{interval: BlockSize/2 + 3, delta: 0x4, max: 4, skip: 20},
+					bsmod{interval: BlockSize/3 + 7, delta: 0x18, max: 6, skip: 20},
+				}},
+				{path: "file-1", chunks: []testDirChunk{
+					testDirChunk{size: BlockSize*8 + 3, seed: 0x99},
+					testDirChunk{size: BlockSize*7 + 12, seed: 0x2},
+				}},
+				{path: "dir2/file-2", seed: 0x33},
+			},
+		},
 	})
 }
 
@@ -85,7 +130,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 	consumer := &state.Consumer{
 		OnMessage: func(level string, message string) {
-			log("[%s] %s", level, message)
+			// log("[%s] %s", level, message)
 		},
 	}
 	patchBuffer := new(bytes.Buffer)
