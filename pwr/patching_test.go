@@ -551,10 +551,7 @@ func Test_SymlinksRemovedByPatch(t *testing.T) {
 type SetupFunc func(actx *ApplyContext)
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
-	log := func(format string, args ...interface{}) {
-		t.Logf("[%s] %s", scenario.name, fmt.Sprintf(format, args...))
-	}
-	log("Scenario start")
+	log := t.Logf
 
 	mainDir, err := ioutil.TempDir("", "patch-cycle")
 	assert.NoError(t, err)
