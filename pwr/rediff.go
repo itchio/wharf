@@ -6,7 +6,6 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
-	"github.com/golang/protobuf/proto"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
@@ -357,18 +356,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
-			writeMessage := func(message proto.Message) error {
-				if bsdc, ok := message.(*bsdiff.Control); ok {
-					rc.Consumer.Infof("Writing message with %d bytes of Add, %d of Copy, Seek %d and Eof %v",
-						len(bsdc.Add), len(bsdc.Copy), bsdc.Seek, bsdc.Eof)
-				} else {
-					rc.Consumer.Infof("Writing non-bsdc message")
-				}
-				err := wctx.WriteMessage(message)
-				return err
-			}
-
-			err = dc.Do(targetFileReader, sourceFileReader, writeMessage, rc.Consumer)
+			err = dc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
 			if err != nil {
 				return errors.Wrap(err, 1)
 			}
