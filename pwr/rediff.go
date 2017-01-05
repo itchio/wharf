@@ -266,6 +266,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	}
 
 	sh := &SyncHeader{}
+	bh := &BsdiffHeader{}
 	rop := &SyncOp{}
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
@@ -279,85 +280,101 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			return errors.Wrap(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex), 1)
 		}
 
-		err = wctx.WriteMessage(sh)
-		if err != nil {
-			return errors.Wrap(err, 1)
-		}
-
 		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
-		readingOps := true
 
 		if diffMapping == nil {
-			fmt.Printf("Copying data...\n")
-			for readingOps {
+			// if no mapping, just copy ops straight up
+			err = wctx.WriteMessage(sh)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			for {
 				rop.Reset()
 				err = rctx.ReadMessage(rop)
 				if err != nil {
 					return errors.Wrap(err, 1)
 				}
 
+				if rop.Type == SyncOp_HEY_YOU_DID_IT {
+					break
+				}
+
 				err = wctx.WriteMessage(rop)
 				if err != nil {
 					return errors.Wrap(err, 1)
 				}
-
-				if rop.Type == SyncOp_HEY_YOU_DID_IT {
-					readingOps = false
-				}
 			}
 		} else {
-			fmt.Printf("Performing bsdiff...\n")
-			for readingOps {
-				// throw away old ops
+			// signal bsdiff start to patcher
+			sh.Reset()
+			sh.FileIndex = int64(sourceFileIndex)
+			sh.Type = SyncHeader_BSDIFF
+			err = wctx.WriteMessage(sh)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			bh.Reset()
+			bh.TargetIndex = diffMapping.TargetIndex
+			err = wctx.WriteMessage(bh)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			// throw away old ops
+			for {
 				err = rctx.ReadMessage(rop)
 				if err != nil {
 					return errors.Wrap(err, 1)
 				}
 
 				if rop.Type == SyncOp_HEY_YOU_DID_IT {
-					readingOps = false
-				}
-
-				// then bsdiff
-				dc := &bsdiff.DiffContext{
-					SuffixSortConcurrency: rc.SuffixSortConcurrency,
-				}
-
-				sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))
-				if err != nil {
-					return errors.Wrap(err, 1)
-				}
-
-				targetFileReader, err := rc.TargetPool.GetReader(diffMapping.TargetIndex)
-				if err != nil {
-					return errors.Wrap(err, 1)
-				}
-
-				rc.Consumer.ProgressLabel(sourceFile.Path)
-
-				writeMessage := func(message proto.Message) error {
-					if bsdc, ok := message.(*bsdiff.Control); ok {
-						rc.Consumer.Infof("Writing message with %d bytes of Add, %d of Copy, Seek %d and Eof %v",
-							len(bsdc.Add), len(bsdc.Copy), bsdc.Seek, bsdc.Eof)
-					} else {
-						rc.Consumer.Infof("Writing non-bsdc message")
-					}
-					err := wctx.WriteMessage(message)
-					return err
-				}
-
-				err = dc.Do(targetFileReader, sourceFileReader, writeMessage, rc.Consumer)
-				if err != nil {
-					return errors.Wrap(err, 1)
-				}
-
-				err = wctx.WriteMessage(&SyncOp{
-					Type: SyncOp_HEY_YOU_DID_IT,
-				})
-				if err != nil {
-					return errors.Wrap(err, 1)
+					break
 				}
 			}
+
+			// then bsdiff
+			dc := &bsdiff.DiffContext{
+				SuffixSortConcurrency: rc.SuffixSortConcurrency,
+			}
+
+			sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			targetFileReader, err := rc.TargetPool.GetReader(diffMapping.TargetIndex)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			rc.Consumer.ProgressLabel(sourceFile.Path)
+
+			writeMessage := func(message proto.Message) error {
+				if bsdc, ok := message.(*bsdiff.Control); ok {
+					rc.Consumer.Infof("Writing message with %d bytes of Add, %d of Copy, Seek %d and Eof %v",
+						len(bsdc.Add), len(bsdc.Copy), bsdc.Seek, bsdc.Eof)
+				} else {
+					rc.Consumer.Infof("Writing non-bsdc message")
+				}
+				err := wctx.WriteMessage(message)
+				return err
+			}
+
+			err = dc.Do(targetFileReader, sourceFileReader, writeMessage, rc.Consumer)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+		}
+
+		// and don't forget to indicate success
+		rop.Reset()
+		rop.Type = SyncOp_HEY_YOU_DID_IT
+
+		err = wctx.WriteMessage(rop)
+		if err != nil {
+			return errors.Wrap(err, 1)
 		}
 	}
 

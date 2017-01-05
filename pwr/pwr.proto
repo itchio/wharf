@@ -10,15 +10,24 @@ message PatchHeader {
 }
 
 message SyncHeader {
+  enum Type {
+    RSYNC = 0;
+    // when set, bsdiffTargetIndex must be set
+    BSDIFF = 1;
+  }
+
+  Type type = 1;
   int64 fileIndex = 16;
+}
+
+message BsdiffHeader {
+  int64 targetIndex = 1;
 }
 
 message SyncOp {
   enum Type {
     BLOCK_RANGE = 0;
     DATA = 1;
-    BSDIFF = 2;
-    // REMOTE_DATA used to be 2 - shouldn't be in the wild, but better not re-use it?
     HEY_YOU_DID_IT = 2049; // <3 @GranPC & @tomasduda
   }
   Type type = 1;
@@ -27,7 +36,6 @@ message SyncOp {
   int64 blockIndex = 3;
   int64 blockSpan = 4;
   bytes data = 5;
-  // remoteSize was 6, remotePath was 7 - maybe don't re-use them
 }
 
 // Signature file format
