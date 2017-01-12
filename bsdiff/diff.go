@@ -73,7 +73,9 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		return err
 	}
 	if int64(len(obuf)) > MaxFileSize {
-		return fmt.Errorf("bsdiff: old file too large (%s > %s)", humanize.IBytes(uint64(len(obuf))), humanize.IBytes(uint64(MaxFileSize)))
+		// if we're running on 32-bit, we already error'd at this point
+		// if not, we can run the (very expensive) bsdiff64 variant
+		return ctx.do64(obuf, memstats, new, writeMessage, consumer)
 	}
 	obuflen := int32(len(obuf))
 
@@ -196,6 +198,157 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 				db[i] = nbuf[lastscan+i] - obuf[lastpos+i]
 			}
 			for i := int32(0); i < (scan-lenb)-(lastscan+lenf); i++ {
+				eb[i] = nbuf[lastscan+lenf+i]
+			}
+
+			bsdc.Add = db[:lenf]
+			bsdc.Copy = eb[:(scan-lenb)-(lastscan+lenf)]
+			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
+
+			err := writeMessage(bsdc)
+			if err != nil {
+				return err
+			}
+
+			lastscan = scan - lenb
+			lastpos = pos - lenb
+			lastoffset = pos - scan
+		}
+	}
+
+	if ctx.MeasureMem {
+		runtime.ReadMemStats(memstats)
+		consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+	}
+
+	bsdc.Reset()
+	bsdc.Eof = true
+	err = writeMessage(bsdc)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Reader, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
+	obuflen := int64(len(obuf))
+
+	nbuf, err := ioutil.ReadAll(new)
+	if err != nil {
+		return err
+	}
+	nbuflen := int64(len(nbuf))
+
+	if ctx.MeasureMem {
+		runtime.ReadMemStats(memstats)
+		consumer.Debugf("Allocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+	}
+
+	var lenf int64
+	startTime := time.Now()
+
+	I := qsufsort64(obuf, ctx, consumer)
+
+	duration := time.Since(startTime)
+	consumer.Debugf("Suffix sorting done in %s", duration)
+
+	if ctx.MeasureMem {
+		runtime.ReadMemStats(memstats)
+		consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+	}
+
+	// FIXME: the streaming format allows us to allocate less than that
+	db := make([]byte, len(nbuf))
+	eb := make([]byte, len(nbuf))
+
+	bsdc := &Control{}
+
+	consumer.ProgressLabel("Scanning...")
+
+	// Compute the differences, writing ctrl as we go
+	var scan, pos, length int64
+	var lastscan, lastpos, lastoffset int64
+	for scan < nbuflen {
+		var oldscore int64
+		scan += length
+
+		progress := float64(scan) / float64(nbuflen)
+		consumer.Progress(progress)
+
+		for scsc := scan; scan < nbuflen; scan++ {
+			pos, length = search64(I, obuf, nbuf[scan:], 0, obuflen)
+
+			for ; scsc < scan+length; scsc++ {
+				if scsc+lastoffset < obuflen &&
+					obuf[scsc+lastoffset] == nbuf[scsc] {
+					oldscore++
+				}
+			}
+
+			if (length == oldscore && length != 0) || length > oldscore+8 {
+				break
+			}
+
+			if scan+lastoffset < obuflen && obuf[scan+lastoffset] == nbuf[scan] {
+				oldscore--
+			}
+		}
+
+		if length != oldscore || scan == nbuflen {
+			var s, Sf int64
+			lenf = 0
+			for i := int64(0); lastscan+i < scan && lastpos+i < obuflen; {
+				if obuf[lastpos+i] == nbuf[lastscan+i] {
+					s++
+				}
+				i++
+				if s*2-i > Sf*2-lenf {
+					Sf = s
+					lenf = i
+				}
+			}
+
+			lenb := int64(0)
+			if scan < nbuflen {
+				var s, Sb int64
+				for i := int64(1); (scan >= lastscan+i) && (pos >= i); i++ {
+					if obuf[pos-i] == nbuf[scan-i] {
+						s++
+					}
+					if s*2-i > Sb*2-lenb {
+						Sb = s
+						lenb = i
+					}
+				}
+			}
+
+			if lastscan+lenf > scan-lenb {
+				overlap := (lastscan + lenf) - (scan - lenb)
+				s := int64(0)
+				Ss := int64(0)
+				lens := int64(0)
+				for i := int64(0); i < overlap; i++ {
+					if nbuf[lastscan+lenf-overlap+i] == obuf[lastpos+lenf-overlap+i] {
+						s++
+					}
+					if nbuf[scan-lenb+i] == obuf[pos-lenb+i] {
+						s--
+					}
+					if s > Ss {
+						Ss = s
+						lens = i + 1
+					}
+				}
+
+				lenf += lens - overlap
+				lenb -= lens
+			}
+
+			for i := int64(0); i < lenf; i++ {
+				db[i] = nbuf[lastscan+i] - obuf[lastpos+i]
+			}
+			for i := int64(0); i < (scan-lenb)-(lastscan+lenf); i++ {
 				eb[i] = nbuf[lastscan+lenf+i]
 			}
 
