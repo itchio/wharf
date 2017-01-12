@@ -16,7 +16,9 @@ func split(I, V, V2 []int32, start, length, h int32) {
 	var i, j, k, x, jj, kk int32
 
 	// selection sort, for small buckets (don't split any further)
-	if length < 16 {
+	// note: this is disabled because it has race conditions when doing parallel suffix sort
+	// additionally, it doesn't seem to make a big performance difference anymore
+	if length < 16 && false {
 		for k = start; k < start+length; k += j {
 			// the subarray [start:k] is already sorted
 			j = 1
@@ -143,7 +145,9 @@ func split64(I, V, V2 []int64, start, length, h int64) {
 	var i, j, k, x, jj, kk int64
 
 	// selection sort, for small buckets (don't split any further)
-	if length < 16 {
+	// note: this is disabled because it has race conditions when doing parallel suffix sort
+	// additionally, it doesn't seem to make a big performance difference anymore
+	if length < 16 && false {
 		for k = start; k < start+length; k += j {
 			// the subarray [start:k] is already sorted
 			j = 1

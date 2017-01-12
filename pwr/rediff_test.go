@@ -6,10 +6,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
-
-	"runtime"
 
 	"github.com/Datadog/zstd"
 	"github.com/alecthomas/assert"
