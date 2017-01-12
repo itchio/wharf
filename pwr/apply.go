@@ -388,7 +388,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 				return
 			}
 
-			targetReader, err := targetPool.GetReader(bh.TargetIndex)
+			targetReader, err := targetPool.GetReadSeeker(bh.TargetIndex)
 			if err != nil {
 				retErr = errors.Wrap(err, 1)
 				return
