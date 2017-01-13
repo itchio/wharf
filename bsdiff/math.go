@@ -332,7 +332,7 @@ func qsufsort(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int32 {
 	}
 	I[0] = -1
 
-	const progressInterval = 64 * 1024
+	const progressInterval = 1024 * 1024
 
 	var V2 []int32
 	var marks []mark
@@ -545,7 +545,7 @@ func qsufsort64(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int64
 	}
 	I[0] = -1
 
-	const progressInterval = 64 * 1024
+	const progressInterval = 1024 * 1024
 
 	var V2 []int64
 	var marks []mark64

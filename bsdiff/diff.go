@@ -113,7 +113,10 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	bsdc := &Control{}
 
-	consumer.ProgressLabel("Scanning...")
+	consumer.ProgressLabel(fmt.Sprintf("Scanning %s...", humanize.IBytes(uint64(nbuflen))))
+
+	var lastProgressUpdate int32 = 0
+	var updateEvery int32 = 64 * 1024 * 1046 // 64MB
 
 	// Compute the differences, writing ctrl as we go
 	var scan, pos, length int32
@@ -122,8 +125,11 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		var oldscore int32
 		scan += length
 
-		progress := float64(scan) / float64(nbuflen)
-		consumer.Progress(progress)
+		if scan-lastProgressUpdate > updateEvery {
+			lastProgressUpdate = scan
+			progress := float64(scan) / float64(nbuflen)
+			consumer.Progress(progress)
+		}
 
 		for scsc := scan; scan < nbuflen; scan++ {
 			pos, length = search(I, obuf, nbuf[scan:], 0, obuflen)
@@ -264,7 +270,10 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 
 	bsdc := &Control{}
 
-	consumer.ProgressLabel("Scanning...")
+	consumer.ProgressLabel(fmt.Sprintf("Scanning %s...", humanize.IBytes(uint64(nbuflen))))
+
+	var lastProgressUpdate int64 = 0
+	var updateEvery int64 = 64 * 1024 * 1046 // 64MB
 
 	// Compute the differences, writing ctrl as we go
 	var scan, pos, length int64
@@ -273,8 +282,11 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 		var oldscore int64
 		scan += length
 
-		progress := float64(scan) / float64(nbuflen)
-		consumer.Progress(progress)
+		if scan-lastProgressUpdate > updateEvery {
+			lastProgressUpdate = scan
+			progress := float64(scan) / float64(nbuflen)
+			consumer.Progress(progress)
+		}
 
 		for scsc := scan; scan < nbuflen; scan++ {
 			pos, length = search64(I, obuf, nbuf[scan:], 0, obuflen)
