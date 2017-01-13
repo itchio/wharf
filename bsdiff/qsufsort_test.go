@@ -125,6 +125,14 @@ func benchSuffixarray(input []byte, b *testing.B) {
 	}
 }
 
+var saz *SuffixArrayZ
+
+func benchSuffixarrayx(input []byte, b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		NewSuffixArrayZ(input)
+	}
+}
+
 func Benchmark_Qsufsort(b *testing.B) {
 	// note: 'paper' is not worth benchmarking because it's too short
 	var datasets = []struct {
@@ -133,6 +141,13 @@ func Benchmark_Qsufsort(b *testing.B) {
 	}{
 		{"dictwords", dictwords},
 		{"dictcalls", dictcalls},
+	}
+
+	for _, dataset := range datasets {
+		testName := fmt.Sprintf("suffixarrayx-%s", dataset.name)
+		b.Run(testName, func(b *testing.B) {
+			benchSuffixarrayx(dataset.data, b)
+		})
 	}
 
 	for _, dataset := range datasets {
