@@ -167,12 +167,12 @@ func init() {
 	var err error
 	dictwords, err = ioutil.ReadFile(filepath.Join(filepath.Dir(filename), "dictwords"))
 	if err != nil {
-		panic(err)
+		fmt.Printf("Could not load dictwords, benchmarks won't be functional (see README.md)\n")
 	}
 
 	dictcalls, err = ioutil.ReadFile(filepath.Join(filepath.Dir(filename), "dictcalls"))
 	if err != nil {
-		panic(err)
+		fmt.Printf("Could not load dictcalls, benchmarks won't be functional (see README.md)\n")
 	}
 }
 
