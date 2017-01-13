@@ -24,6 +24,12 @@ const MaxFileSize = int64(math.MaxInt32 - 1)
 // at a small storage cost
 const MaxMessageSize int64 = 16 * 1024 * 1024
 
+type DiffStats struct {
+	TimeSpentSorting  time.Duration
+	TimeSpentScanning time.Duration
+	BiggestAdd        int64
+}
+
 // DiffContext holds settings for the diff process, along with some
 // internal storage: re-using a diff context is good to avoid GC thrashing
 // (but never do it concurrently!)
@@ -43,6 +49,8 @@ type DiffContext struct {
 
 	// MeasureParallelOverhead prints some stats on the overhead of parallel suffix sorting
 	MeasureParallelOverhead bool
+
+	Stats *DiffStats
 }
 
 // WriteMessageFunc should write a given protobuf message and relay any errors
@@ -99,8 +107,9 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	I := qsufsort(obuf, ctx, consumer)
 
-	duration := time.Since(startTime)
-	consumer.Debugf("Suffix sorting done in %s", duration)
+	if ctx.Stats != nil {
+		ctx.Stats.TimeSpentSorting += time.Since(startTime)
+	}
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
@@ -109,7 +118,6 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	// FIXME: the streaming format allows us to allocate less than that
 	db := make([]byte, len(nbuf))
-	eb := make([]byte, len(nbuf))
 
 	bsdc := &Control{}
 
@@ -117,6 +125,8 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	var lastProgressUpdate int32 = 0
 	var updateEvery int32 = 64 * 1024 * 1046 // 64MB
+
+	startTime = time.Now()
 
 	// Compute the differences, writing ctrl as we go
 	var scan, pos, length int32
@@ -203,12 +213,9 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 			for i := int32(0); i < lenf; i++ {
 				db[i] = nbuf[lastscan+i] - obuf[lastpos+i]
 			}
-			for i := int32(0); i < (scan-lenb)-(lastscan+lenf); i++ {
-				eb[i] = nbuf[lastscan+lenf+i]
-			}
 
 			bsdc.Add = db[:lenf]
-			bsdc.Copy = eb[:(scan-lenb)-(lastscan+lenf)]
+			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
 			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 
 			err := writeMessage(bsdc)
@@ -216,10 +223,18 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 				return err
 			}
 
+			if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(lenf) {
+				ctx.Stats.BiggestAdd = int64(lenf)
+			}
+
 			lastscan = scan - lenb
 			lastpos = pos - lenb
 			lastoffset = pos - scan
 		}
+	}
+
+	if ctx.Stats != nil {
+		ctx.Stats.TimeSpentScanning += time.Since(startTime)
 	}
 
 	if ctx.MeasureMem {
@@ -256,8 +271,10 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 
 	I := qsufsort64(obuf, ctx, consumer)
 
-	duration := time.Since(startTime)
-	consumer.Debugf("Suffix sorting done in %s", duration)
+	sortDuration := time.Since(startTime)
+	if ctx.Stats != nil {
+		ctx.Stats.TimeSpentSorting += sortDuration
+	}
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
@@ -266,7 +283,6 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 
 	// FIXME: the streaming format allows us to allocate less than that
 	db := make([]byte, len(nbuf))
-	eb := make([]byte, len(nbuf))
 
 	bsdc := &Control{}
 
@@ -274,6 +290,8 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 
 	var lastProgressUpdate int64 = 0
 	var updateEvery int64 = 64 * 1024 * 1046 // 64MB
+
+	startTime = time.Now()
 
 	// Compute the differences, writing ctrl as we go
 	var scan, pos, length int64
@@ -360,12 +378,9 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 			for i := int64(0); i < lenf; i++ {
 				db[i] = nbuf[lastscan+i] - obuf[lastpos+i]
 			}
-			for i := int64(0); i < (scan-lenb)-(lastscan+lenf); i++ {
-				eb[i] = nbuf[lastscan+lenf+i]
-			}
 
 			bsdc.Add = db[:lenf]
-			bsdc.Copy = eb[:(scan-lenb)-(lastscan+lenf)]
+			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
 			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 
 			err := writeMessage(bsdc)
@@ -373,10 +388,18 @@ func (ctx *DiffContext) do64(obuf []byte, memstats *runtime.MemStats, new io.Rea
 				return err
 			}
 
+			if ctx.Stats != nil && ctx.Stats.BiggestAdd < lenf {
+				ctx.Stats.BiggestAdd = lenf
+			}
+
 			lastscan = scan - lenb
 			lastpos = pos - lenb
 			lastoffset = pos - scan
 		}
+	}
+
+	if ctx.Stats != nil {
+		ctx.Stats.TimeSpentScanning += time.Since(startTime)
 	}
 
 	if ctx.MeasureMem {
