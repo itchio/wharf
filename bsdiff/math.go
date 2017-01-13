@@ -16,23 +16,21 @@ func split(I, V, V2 []int32, start, length, h int32) {
 	var i, j, k, x, jj, kk int32
 
 	// selection sort, for small buckets (don't split any further)
-	// note: this is disabled because it has race conditions when doing parallel suffix sort
-	// additionally, it doesn't seem to make a big performance difference anymore
-	if length < 16 && false {
+	if length < 16 {
 		for k = start; k < start+length; k += j {
 			// the subarray [start:k] is already sorted
 			j = 1
 			// using the doubling technique from Karp, Miller, and Rosenberg,
 			// V[I[i]+h] is our sorting key. See section 2.1 of
 			// http://www.larsson.dogma.net/ssrev-tr.pdf
-			x = V2[I[k]+h]
+			x = V[I[k]+h]
 			for i = 1; k+i < start+length; i++ {
-				if V2[I[k+i]+h] < x {
+				if V[I[k+i]+h] < x {
 					// found a smaller value, x is the new smallest value
-					x = V2[I[k+i]+h]
+					x = V[I[k+i]+h]
 					j = 0
 				}
-				if V2[I[k+i]+h] == x {
+				if V[I[k+i]+h] == x {
 					// since x is the smallest value we've seen so far, swap
 					// the (k+i)th element next to it
 					I[k+i], I[k+j] = I[k+j], I[k+i]
@@ -145,23 +143,21 @@ func split64(I, V, V2 []int64, start, length, h int64) {
 	var i, j, k, x, jj, kk int64
 
 	// selection sort, for small buckets (don't split any further)
-	// note: this is disabled because it has race conditions when doing parallel suffix sort
-	// additionally, it doesn't seem to make a big performance difference anymore
-	if length < 16 && false {
+	if length < 16 {
 		for k = start; k < start+length; k += j {
 			// the subarray [start:k] is already sorted
 			j = 1
 			// using the doubling technique from Karp, Miller, and Rosenberg,
 			// V[I[i]+h] is our sorting key. See section 2.1 of
 			// http://www.larsson.dogma.net/ssrev-tr.pdf
-			x = V2[I[k]+h]
+			x = V[I[k]+h]
 			for i = 1; k+i < start+length; i++ {
-				if V2[I[k+i]+h] < x {
+				if V[I[k+i]+h] < x {
 					// found a smaller value, x is the new smallest value
-					x = V2[I[k+i]+h]
+					x = V[I[k+i]+h]
 					j = 0
 				}
-				if V2[I[k+i]+h] == x {
+				if V[I[k+i]+h] == x {
 					// since x is the smallest value we've seen so far, swap
 					// the (k+i)th element next to it
 					I[k+i], I[k+j] = I[k+j], I[k+i]

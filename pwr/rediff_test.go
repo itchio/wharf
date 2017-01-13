@@ -42,14 +42,14 @@ func Test_RediffWorse(t *testing.T) {
 		deletedFiles: 0,
 		v1: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*21 + 14},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*2 + 14},
 				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
 		v2: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*27 + 14},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*3 + 14},
 				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x33},
 			},
@@ -64,14 +64,14 @@ func Test_RediffBetter(t *testing.T) {
 		deletedFiles: 0,
 		v1: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*21 + 14},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*3 + 14},
 				{path: "file-1", seed: 0x2},
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
 		v2: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*21 + 14, bsmods: []bsmod{
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*3 + 14, bsmods: []bsmod{
 					bsmod{interval: BlockSize/2 + 3, delta: 0x4},
 					bsmod{interval: BlockSize/3 + 7, delta: 0x18},
 				}},
@@ -89,20 +89,20 @@ func Test_RediffStillBetter(t *testing.T) {
 		deletedFiles: 0,
 		v1: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*58 + 14},
-				{path: "file-1", seed: 0x2, size: BlockSize * 16},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize*5 + 14},
+				{path: "file-1", seed: 0x2, size: BlockSize * 4},
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
 		v2: testDirSettings{
 			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize * 61, bsmods: []bsmod{
-					bsmod{interval: BlockSize/2 + 3, delta: 0x4, max: 4, skip: 20},
-					bsmod{interval: BlockSize/3 + 7, delta: 0x18, max: 6, skip: 20},
+				{path: "subdir/file-1", seed: 0x1, size: BlockSize * 6, bsmods: []bsmod{
+					bsmod{interval: BlockSize/7 + 3, delta: 0x4, max: 4, skip: 20},
+					bsmod{interval: BlockSize/13 + 7, delta: 0x18, max: 6, skip: 20},
 				}},
 				{path: "file-1", chunks: []testDirChunk{
-					testDirChunk{size: BlockSize*8 + 3, seed: 0x99},
-					testDirChunk{size: BlockSize*7 + 12, seed: 0x2},
+					testDirChunk{size: BlockSize*2 + 3, seed: 0x99},
+					testDirChunk{size: BlockSize*1 + 12, seed: 0x2},
 				}},
 				{path: "dir2/file-2", seed: 0x33},
 			},
