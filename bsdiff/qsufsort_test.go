@@ -13,6 +13,7 @@ import (
 
 	"github.com/alecthomas/assert"
 	"github.com/itchio/wharf/state"
+	"github.com/jgallagher/gosaca"
 )
 
 func Test_QsufsortSeq(t *testing.T) {
@@ -127,9 +128,17 @@ func benchSuffixarray(input []byte, b *testing.B) {
 
 var saz *SuffixArrayZ
 
-func benchSuffixarrayx(input []byte, b *testing.B) {
+func benchSuffixarrayz(input []byte, b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		NewSuffixArrayZ(input)
+	}
+}
+
+func benchGosaca(input []byte, b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		ws := &gosaca.WorkSpace{}
+		SA := make([]int, len(input))
+		ws.ComputeSuffixArray(input, SA)
 	}
 }
 
@@ -144,16 +153,23 @@ func Benchmark_Qsufsort(b *testing.B) {
 	}
 
 	for _, dataset := range datasets {
-		testName := fmt.Sprintf("suffixarrayx-%s", dataset.name)
+		testName := fmt.Sprintf("suffixarray-%s", dataset.name)
 		b.Run(testName, func(b *testing.B) {
-			benchSuffixarrayx(dataset.data, b)
+			benchSuffixarray(dataset.data, b)
 		})
 	}
 
 	for _, dataset := range datasets {
-		testName := fmt.Sprintf("suffixarray-%s", dataset.name)
+		testName := fmt.Sprintf("suffixarrayz-%s", dataset.name)
 		b.Run(testName, func(b *testing.B) {
-			benchSuffixarray(dataset.data, b)
+			benchSuffixarrayz(dataset.data, b)
+		})
+	}
+
+	for _, dataset := range datasets {
+		testName := fmt.Sprintf("gosaca-%s", dataset.name)
+		b.Run(testName, func(b *testing.B) {
+			benchGosaca(dataset.data, b)
 		})
 	}
 
