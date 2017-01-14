@@ -275,6 +275,11 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	bh := &BsdiffHeader{}
 	rop := &SyncOp{}
 
+	bdc := &bsdiff.DiffContext{
+		SuffixSortConcurrency: rc.SuffixSortConcurrency,
+		Stats: rc.BsdiffStats,
+	}
+
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
 		err = rctx.ReadMessage(sh)
@@ -341,11 +346,6 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			}
 
 			// then bsdiff
-			dc := &bsdiff.DiffContext{
-				SuffixSortConcurrency: rc.SuffixSortConcurrency,
-				Stats: rc.BsdiffStats,
-			}
-
 			sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))
 			if err != nil {
 				return errors.Wrap(err, 1)
@@ -358,7 +358,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
-			err = dc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
+			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
 			if err != nil {
 				return errors.Wrap(err, 1)
 			}

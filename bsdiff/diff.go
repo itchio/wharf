@@ -12,6 +12,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	"github.com/golang/protobuf/proto"
 	"github.com/itchio/wharf/state"
+	"github.com/jgallagher/gosaca"
 )
 
 // MaxFileSize is the largest size bsdiff will diff (for both old and new file): 2GB - 1 bytes
@@ -36,9 +37,6 @@ type DiffStats struct {
 // internal storage: re-using a diff context is good to avoid GC thrashing
 // (but never do it concurrently!)
 type DiffContext struct {
-	db []byte // diff bytes
-	eb []byte // extra bytes
-
 	// SuffixSortConcurrency specifies the number of workers to use for suffix sorting.
 	// Exceeding the number of cores will only slow it down. A 0 value (default) uses
 	// sequential suffix sorting, which uses less RAM and has less overhead (might be faster
@@ -53,6 +51,8 @@ type DiffContext struct {
 	MeasureParallelOverhead bool
 
 	Stats *DiffStats
+
+	db bytes.Buffer
 }
 
 // WriteMessageFunc should write a given protobuf message and relay any errors
@@ -80,7 +80,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		// if not, we can run the (very expensive) bsdiff64 variant
 		return ctx.do64(obuf, memstats, new, writeMessage, consumer)
 	}
-	obuflen := int32(len(obuf))
+	obuflen := int(len(obuf))
 
 	nbuf, err := ioutil.ReadAll(new)
 	if err != nil {
@@ -90,17 +90,19 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		// TODO: provide a different (int64) codepath for >=2GB files
 		return fmt.Errorf("bsdiff: new file too large (%s > %s)", humanize.IBytes(uint64(len(nbuf))), humanize.IBytes(uint64(MaxFileSize)))
 	}
-	nbuflen := int32(len(nbuf))
+	nbuflen := int(len(nbuf))
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("Allocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	var lenf int32
+	var lenf int
 	startTime := time.Now()
 
-	I := qsufsort(obuf, ctx, consumer)
+	I := make([]int, len(obuf))
+	ws := &gosaca.WorkSpace{}
+	ws.ComputeSuffixArray(obuf, I)
 
 	if ctx.Stats != nil {
 		ctx.Stats.TimeSpentSorting += time.Since(startTime)
@@ -111,22 +113,20 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	var db bytes.Buffer
-
 	bsdc := &Control{}
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s...", humanize.IBytes(uint64(nbuflen))))
 
-	var lastProgressUpdate int32 = 0
-	var updateEvery int32 = 64 * 1024 * 1046 // 64MB
+	var lastProgressUpdate int = 0
+	var updateEvery int = 64 * 1024 * 1046 // 64MB
 
 	startTime = time.Now()
 
 	// Compute the differences, writing ctrl as we go
-	var scan, pos, length int32
-	var lastscan, lastpos, lastoffset int32
+	var scan, pos, length int
+	var lastscan, lastpos, lastoffset int
 	for scan < nbuflen {
-		var oldscore int32
+		var oldscore int
 		scan += length
 
 		if scan-lastProgressUpdate > updateEvery {
@@ -155,9 +155,9 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		}
 
 		if length != oldscore || scan == nbuflen {
-			var s, Sf int32
+			var s, Sf int
 			lenf = 0
-			for i := int32(0); lastscan+i < scan && lastpos+i < obuflen; {
+			for i := int(0); lastscan+i < scan && lastpos+i < obuflen; {
 				if obuf[lastpos+i] == nbuf[lastscan+i] {
 					s++
 				}
@@ -168,10 +168,10 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 				}
 			}
 
-			lenb := int32(0)
+			lenb := 0
 			if scan < nbuflen {
-				var s, Sb int32
-				for i := int32(1); (scan >= lastscan+i) && (pos >= i); i++ {
+				var s, Sb int
+				for i := int(1); (scan >= lastscan+i) && (pos >= i); i++ {
 					if obuf[pos-i] == nbuf[scan-i] {
 						s++
 					}
@@ -184,10 +184,10 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 			if lastscan+lenf > scan-lenb {
 				overlap := (lastscan + lenf) - (scan - lenb)
-				s := int32(0)
-				Ss := int32(0)
-				lens := int32(0)
-				for i := int32(0); i < overlap; i++ {
+				s := int(0)
+				Ss := int(0)
+				lens := int(0)
+				for i := int(0); i < overlap; i++ {
 					if nbuf[lastscan+lenf-overlap+i] == obuf[lastpos+lenf-overlap+i] {
 						s++
 					}
@@ -204,14 +204,14 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 				lenb -= lens
 			}
 
-			db.Reset()
-			db.Grow(int(lenf))
+			ctx.db.Reset()
+			ctx.db.Grow(int(lenf))
 
-			for i := int32(0); i < lenf; i++ {
-				db.WriteByte(nbuf[lastscan+i] - obuf[lastpos+i])
+			for i := int(0); i < lenf; i++ {
+				ctx.db.WriteByte(nbuf[lastscan+i] - obuf[lastpos+i])
 			}
 
-			bsdc.Add = db.Bytes()
+			bsdc.Add = ctx.db.Bytes()
 			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
 			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 

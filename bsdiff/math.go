@@ -719,9 +719,9 @@ func qsufsort64(obuf []byte, ctx *DiffContext, consumer *state.Consumer) []int64
 }
 
 // Returns the number of bytes common to a and b
-func matchlen(a, b []byte) (i int32) {
-	alen := int32(len(a))
-	blen := int32(len(b))
+func matchlen(a, b []byte) (i int) {
+	alen := len(a)
+	blen := len(b)
 	for i < alen && i < blen && a[i] == b[i] {
 		i++
 	}
@@ -739,7 +739,7 @@ func matchlen64(a, b []byte) (i int64) {
 }
 
 // Do a binary search in our (sorted) suffix array to find the closest suffix
-func search(I []int32, obuf, nbuf []byte, st, en int32) (pos, n int32) {
+func search(I []int, obuf, nbuf []byte, st, en int) (pos, n int) {
 	if en-st < 2 {
 		x := matchlen(obuf[I[st]:], nbuf)
 		y := matchlen(obuf[I[en]:], nbuf)
