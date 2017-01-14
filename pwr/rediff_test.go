@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -203,22 +202,22 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 			Consumer:              consumer,
 			Compression:           compression,
-			SuffixSortConcurrency: max(2, runtime.NumCPU()-1),
+			SuffixSortConcurrency: 0,
 		}
 
 		patchReader := bytes.NewReader(patchBuffer.Bytes())
 
-		log("Optimizing in parallel (concurrency=%d)...", rc.SuffixSortConcurrency)
+		log("Optimizing...")
 		aErr := rc.AnalyzePatch(patchReader)
 		assert.NoError(t, aErr)
 
 		patchReader.Seek(0, os.SEEK_SET)
 		optimizedPatchBuffer := new(bytes.Buffer)
 
-		beforeParallel := time.Now()
+		beforeOptimize := time.Now()
 		oErr := rc.OptimizePatch(patchReader, optimizedPatchBuffer)
 		assert.NoError(t, oErr)
-		parallelTime := time.Since(beforeParallel)
+		log("Optimized patch in %s", time.Since(beforeOptimize))
 
 		before := patchBuffer.Len()
 		after := optimizedPatchBuffer.Len()
@@ -229,27 +228,6 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		} else {
 			log("Patch is %.2f%% larger (%s > %s)", diff, humanize.IBytes(uint64(after)), humanize.IBytes(uint64(before)))
 		}
-
-		patchReader.Seek(0, os.SEEK_SET)
-		sequentialOptimizedPatchBuffer := new(bytes.Buffer)
-
-		log("Optimizing sequentially...")
-		beforeSequential := time.Now()
-		rc.SuffixSortConcurrency = 0
-		oErr = rc.OptimizePatch(patchReader, sequentialOptimizedPatchBuffer)
-		assert.NoError(t, oErr)
-		sequentialTime := time.Since(beforeSequential)
-
-		assert.EqualValues(t, optimizedPatchBuffer.Bytes(), sequentialOptimizedPatchBuffer.Bytes())
-
-		diff = (parallelTime.Seconds() - sequentialTime.Seconds()) / sequentialTime.Seconds() * 100
-		if diff < 0 {
-			log("Parallel was %.2f%% faster (%s < %s)", -diff, parallelTime, sequentialTime)
-		} else {
-			log("Parallel was %.2f%% slower (%s > %s)", diff, parallelTime, sequentialTime)
-		}
-
-		log("Parallel and sequential gave byte-equivalent results!")
 
 		assert.NoError(t, os.RemoveAll(v1Before))
 		cpDir(t, v1, v1Before)
