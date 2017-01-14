@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"runtime"
 	"time"
@@ -53,6 +52,10 @@ type DiffContext struct {
 	Stats *DiffStats
 
 	db bytes.Buffer
+	ws *gosaca.WorkSpace
+
+	obuf bytes.Buffer
+	nbuf bytes.Buffer
 }
 
 // WriteMessageFunc should write a given protobuf message and relay any errors
@@ -64,6 +67,7 @@ type WriteMessageFunc func(msg proto.Message) (err error)
 // algorithm, and writes the result to patch.
 func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var memstats *runtime.MemStats
+	var err error
 
 	if ctx.MeasureMem {
 		memstats = &runtime.MemStats{}
@@ -71,18 +75,23 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		consumer.Debugf("Allocated bytes at start of bsdiff: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	obuf, err := ioutil.ReadAll(old)
+	ctx.obuf.Reset()
+	_, err = io.Copy(&ctx.obuf, old)
 	if err != nil {
 		return err
 	}
 
-	obuflen := len(obuf)
+	obuf := ctx.obuf.Bytes()
+	obuflen := ctx.obuf.Len()
 
-	nbuf, err := ioutil.ReadAll(new)
+	ctx.nbuf.Reset()
+	_, err = io.Copy(&ctx.nbuf, new)
 	if err != nil {
 		return err
 	}
-	nbuflen := len(nbuf)
+
+	nbuf := ctx.nbuf.Bytes()
+	nbuflen := ctx.nbuf.Len()
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
@@ -92,9 +101,14 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	var lenf int
 	startTime := time.Now()
 
-	I := make([]int, len(obuf)+1)
-	ws := &gosaca.WorkSpace{}
-	ws.ComputeSuffixArray(obuf, I[:len(obuf)])
+	I := make([]int, obuflen+1)
+	if ctx.ws == nil {
+		ctx.ws = &gosaca.WorkSpace{}
+	}
+
+	if obuflen > 0 {
+		ctx.ws.ComputeSuffixArray(obuf, I[:obuflen])
+	}
 
 	if ctx.Stats != nil {
 		ctx.Stats.TimeSpentSorting += time.Since(startTime)
