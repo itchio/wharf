@@ -32,27 +32,10 @@ func Test_QsufsortPar8(t *testing.T) {
 	testQsufsort(t, 8)
 }
 
-func Test_Qsufsort64Seq(t *testing.T) {
-	testQsufsort64(t, 0)
-}
-
-func Test_Qsufsort64Par2(t *testing.T) {
-	testQsufsort64(t, 2)
-}
-
-func Test_Qsufsort64Par4(t *testing.T) {
-	testQsufsort64(t, 4)
-}
-
-func Test_Qsufsort64Par8(t *testing.T) {
-	testQsufsort64(t, 8)
-}
-
 var dictwords []byte
 var dictcalls []byte
 
-var result32 []int32
-var result64 []int64
+var result []int
 
 func testQsufsort(t *testing.T, concurrency int) {
 	input := paper
@@ -75,47 +58,15 @@ func testQsufsort(t *testing.T, concurrency int) {
 	}
 }
 
-func testQsufsort64(t *testing.T, concurrency int) {
-	input := paper
-
-	ctx := &DiffContext{
-		SuffixSortConcurrency: concurrency,
-	}
-	consumer := &state.Consumer{}
-
-	I := qsufsort64(input, ctx, consumer)
-
-	for i := range I {
-		if i == 0 {
-			continue
-		}
-
-		prev := input[I[i-1]:]
-		next := input[I[i]:]
-		assert.EqualValues(t, -1, bytes.Compare(prev, next))
-	}
-}
-
 func benchQsuf(input []byte, concurrency int, b *testing.B) {
 	ctx := &DiffContext{SuffixSortConcurrency: concurrency}
 	consumer := &state.Consumer{}
 
-	var r []int32
+	var r []int
 	for n := 0; n < b.N; n++ {
 		r = qsufsort(input, ctx, consumer)
 	}
-	result32 = r
-}
-
-func benchQsuf64(input []byte, concurrency int, b *testing.B) {
-	ctx := &DiffContext{SuffixSortConcurrency: concurrency}
-	consumer := &state.Consumer{}
-
-	var r []int64
-	for n := 0; n < b.N; n++ {
-		r = qsufsort64(input, ctx, consumer)
-	}
-	result64 = r
+	result = r
 }
 
 var sa *suffixarray.Index
@@ -136,9 +87,49 @@ func benchSuffixarrayz(input []byte, b *testing.B) {
 
 func benchGosaca(input []byte, b *testing.B) {
 	for n := 0; n < b.N; n++ {
+		if len(input) == 0 {
+			return
+		}
+
 		ws := &gosaca.WorkSpace{}
 		SA := make([]int, len(input))
 		ws.ComputeSuffixArray(input, SA)
+	}
+}
+
+func benchGosacaPar(input []byte, b *testing.B, numWorkers int) {
+	for n := 0; n < b.N; n++ {
+		if len(input) == 0 {
+			return
+		}
+
+		done := make(chan bool)
+
+		boundaries := make([]int, numWorkers+1)
+		boundary := 0
+
+		for i := 0; i < numWorkers; i++ {
+			boundaries[i] = boundary
+			boundary += len(input) / numWorkers
+		}
+		boundaries[numWorkers] = len(input)
+
+		SA := make([]int, len(input)+1)
+
+		for i := 0; i < numWorkers; i++ {
+			st := boundaries[i]
+			en := boundaries[i+1]
+
+			go func() {
+				ws := &gosaca.WorkSpace{}
+				ws.ComputeSuffixArray(input[st:en], SA[st:en])
+				done <- true
+			}()
+		}
+
+		for i := 0; i < numWorkers; i++ {
+			<-done
+		}
 	}
 }
 
@@ -153,40 +144,23 @@ func Benchmark_Qsufsort(b *testing.B) {
 	}
 
 	for _, dataset := range datasets {
-		testName := fmt.Sprintf("suffixarray-%s", dataset.name)
-		b.Run(testName, func(b *testing.B) {
-			benchSuffixarray(dataset.data, b)
-		})
-	}
-
-	for _, dataset := range datasets {
-		testName := fmt.Sprintf("suffixarrayz-%s", dataset.name)
-		b.Run(testName, func(b *testing.B) {
-			benchSuffixarrayz(dataset.data, b)
-		})
-	}
-
-	for _, dataset := range datasets {
-		testName := fmt.Sprintf("gosaca-%s", dataset.name)
-		b.Run(testName, func(b *testing.B) {
-			benchGosaca(dataset.data, b)
-		})
-	}
-
-	for _, dataset := range datasets {
-		for _, concurrency := range []int{0, 2, 3, 4, 5, 6, 7, 8} {
-			testName := fmt.Sprintf("qsufsort32-%s-j%d", dataset.name, concurrency)
+		for _, concurrency := range []int{1, 2, 4, 8} {
+			testName := fmt.Sprintf("gosaca-%d-parts-%s", concurrency, dataset.name)
 			b.Run(testName, func(b *testing.B) {
-				benchQsuf(dataset.data, concurrency, b)
+				if concurrency == 1 {
+					benchGosaca(dataset.data, b)
+				} else {
+					benchGosacaPar(dataset.data, b, concurrency)
+				}
 			})
 		}
 	}
 
 	for _, dataset := range datasets {
-		for _, concurrency := range []int{0, 2, 3, 4, 5, 6, 7, 8} {
-			testName := fmt.Sprintf("qsufsort64-%s-j%d", dataset.name, concurrency)
+		for _, concurrency := range []int{0, 2, 8} {
+			testName := fmt.Sprintf("qsufsort-%s-j%d", dataset.name, concurrency)
 			b.Run(testName, func(b *testing.B) {
-				benchQsuf64(dataset.data, concurrency, b)
+				benchQsuf(dataset.data, concurrency, b)
 			})
 		}
 	}
