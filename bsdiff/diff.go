@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"runtime"
 	"time"
 
@@ -231,7 +230,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
 			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 
-			fmt.Fprintf(os.Stderr, "[s] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
+			// fmt.Fprintf(os.Stderr, "[s] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
 
 			err := writeMessage(bsdc)
 			if err != nil {
@@ -276,10 +275,11 @@ type chunk struct {
 	offset      int
 }
 
+type SendChunkFunc func(c chunk)
+
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var err error
 
-	var lenf int
 	startTime := time.Now()
 
 	psa := NewPSA(ctx.Partitions, obuf)
@@ -302,9 +302,9 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	startTime = time.Now()
 
-	var chunks []chunk
+	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, sendChunk SendChunkFunc) {
+		var lenf int
 
-	analyzeBlock := func(nbuflen int, nbuf []byte, offset int) {
 		// Compute the differences, writing ctrl as we go
 		var scan, pos, length int
 		var lastscan, lastpos, lastoffset int
@@ -398,11 +398,8 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 				}
 
 				if c.addLength > 0 || (c.copyEnd != c.copyStart) {
-					chunks = append(chunks, c)
-				}
-
-				if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(lenf) {
-					ctx.Stats.BiggestAdd = int64(lenf)
+					// if not a no-op, send
+					sendChunk(c)
 				}
 
 				lastscan = scan - lenb
@@ -411,21 +408,35 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 			}
 
 		}
-		fmt.Fprintf(os.Stderr, "At the end of analyzeBlock, scan = %d, nbuflen = %d\n", scan, nbuflen)
+		// fmt.Fprintf(os.Stderr, "At the end of analyzeBlock, scan = %d, nbuflen = %d\n", scan, nbuflen)
 	}
 
-	blockSize := nbuflen / ctx.Partitions
-	boundary := 0
+	numBlocks := ctx.Partitions
+	blockSize := nbuflen / numBlocks
+	done := make(chan bool)
 
-	for boundary < nbuflen {
-		realBlockSize := blockSize
-		if boundary+blockSize > nbuflen {
-			realBlockSize = nbuflen - boundary
-		}
+	blockChunks := make([][]chunk, numBlocks)
 
-		// fmt.Fprintf(os.Stderr, "Analyzing %d bytes at %d (out of %d)\n", realBlockSize, boundary, nbuflen)
-		analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary)
-		boundary += blockSize
+	for i := 0; i < numBlocks; i++ {
+		go func(i int) {
+			boundary := blockSize * i
+			realBlockSize := blockSize
+			if i == numBlocks-1 {
+				realBlockSize = nbuflen - boundary
+			}
+
+			// fmt.Fprintf(os.Stderr, "realBlockSize = %d\n", realBlockSize)
+
+			analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, func(c chunk) {
+				blockChunks[i] = append(blockChunks[i], c)
+			})
+			done <- true
+		}(i)
+	}
+
+	// wait for all blocks to be done
+	for i := 0; i < numBlocks; i++ {
+		<-done
 	}
 
 	if ctx.Stats != nil {
@@ -436,18 +447,29 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	// fmt.Fprintf(os.Stderr, "number of chunks: %d\n", len(chunks))
 
+	var chunks []chunk
+	for _, bChunks := range blockChunks {
+		chunks = append(chunks, bChunks...)
+	}
+
 	for i, chunk := range chunks {
 		ctx.db.Reset()
 		ctx.db.Grow(chunk.addLength)
 
+		addNewStart := chunk.addNewStart + chunk.offset
+
 		for i := 0; i < chunk.addLength; i++ {
-			ctx.db.WriteByte(nbuf[chunk.addNewStart+chunk.offset+i] - obuf[chunk.addOldStart+i])
+			ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
 		}
 
 		bsdc.Add = ctx.db.Bytes()
 		bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
 
-		fmt.Fprintf(os.Stderr, "[c] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
+		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
+			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
+		}
+
+		// fmt.Fprintf(os.Stderr, "[c] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
 
 		if i < len(chunks)-1 {
 			nextChunk := chunks[i+1]
@@ -455,7 +477,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		} else {
 			bsdc.Seek = 0
 		}
-		fmt.Fprintf(os.Stderr, "seek = %d\n", bsdc.Seek)
+		// fmt.Fprintf(os.Stderr, "seek = %d\n", bsdc.Seek)
 
 		err := writeMessage(bsdc)
 		if err != nil {
