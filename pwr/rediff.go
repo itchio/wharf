@@ -44,6 +44,7 @@ type RediffContext struct {
 
 	// optional
 	SuffixSortConcurrency int
+	Partitions            int
 	Compression           *CompressionSettings
 	Consumer              *state.Consumer
 	BsdiffStats           *bsdiff.DiffStats
@@ -277,7 +278,8 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 	bdc := &bsdiff.DiffContext{
 		SuffixSortConcurrency: rc.SuffixSortConcurrency,
-		Stats: rc.BsdiffStats,
+		Partitions:            rc.Partitions,
+		Stats:                 rc.BsdiffStats,
 	}
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {

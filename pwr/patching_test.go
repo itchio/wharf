@@ -36,6 +36,7 @@ type patchScenario struct {
 	unchanged             bool // if true, before folder validates, so don't check that
 	ineffectiveCorruption bool // if true, before folder validates, so don't check that
 	testVet               bool // test that vetting rejections do reject
+	partitions            int
 }
 
 const largeAmount int64 = 16

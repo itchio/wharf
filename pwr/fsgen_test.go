@@ -27,6 +27,7 @@ type testDirEntry struct {
 	dest   string
 	chunks []testDirChunk
 	bsmods []bsmod
+	data   []byte
 }
 
 type bsmod struct {
@@ -116,7 +117,10 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 			assert.NoError(t, fErr)
 			defer f.Close()
 
-			if len(entry.chunks) > 0 {
+			if entry.data != nil {
+				_, fErr = f.Write(entry.data)
+				assert.NoError(t, fErr)
+			} else if len(entry.chunks) > 0 {
 				for _, chunk := range entry.chunks {
 					prng.Seed(chunk.seed)
 					data.Reset()

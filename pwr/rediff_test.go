@@ -12,6 +12,7 @@ import (
 	"github.com/Datadog/zstd"
 	"github.com/alecthomas/assert"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
@@ -32,6 +33,55 @@ func (zd *zstdDecompressor) Apply(reader io.Reader) (io.Reader, error) {
 func init() {
 	RegisterCompressor(CompressionAlgorithm_ZSTD, &zstdCompressor{})
 	RegisterDecompressor(CompressionAlgorithm_ZSTD, &zstdDecompressor{})
+}
+
+func Test_RediffOneSeq(t *testing.T) {
+	runRediffScenario(t, patchScenario{
+		name:         "rediff when one byte gets changed",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", data: []byte{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
+				}},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", data: []byte{
+					0x00,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
+				}},
+			},
+		},
+	})
+}
+
+func Test_RediffOneInt(t *testing.T) {
+	runRediffScenario(t, patchScenario{
+		name:         "rediff when one byte gets changed",
+		touchedFiles: 1,
+		deletedFiles: 0,
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", data: []byte{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
+				}},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", data: []byte{
+					0x00,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
+				}},
+			},
+		},
+		partitions: 2,
+	})
 }
 
 func Test_RediffWorse(t *testing.T) {
@@ -57,28 +107,31 @@ func Test_RediffWorse(t *testing.T) {
 }
 
 func Test_RediffBetter(t *testing.T) {
-	runRediffScenario(t, patchScenario{
-		name:         "rediff gets better!",
-		touchedFiles: 1,
-		deletedFiles: 0,
-		v1: testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*3 + 14},
-				{path: "file-1", seed: 0x2},
-				{path: "dir2/file-2", seed: 0x3},
+	for _, partitions := range []int{0, 2, 3, 4} {
+		runRediffScenario(t, patchScenario{
+			name:         "rediff gets better!",
+			touchedFiles: 1,
+			deletedFiles: 0,
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x1, size: BlockSize*10 + 14},
+					{path: "file-1", seed: 0x2},
+					{path: "dir2/file-2", seed: 0x3},
+				},
 			},
-		},
-		v2: testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x1, size: BlockSize*3 + 14, bsmods: []bsmod{
-					bsmod{interval: BlockSize/2 + 3, delta: 0x4},
-					bsmod{interval: BlockSize/3 + 7, delta: 0x18},
-				}},
-				{path: "file-1", seed: 0x2},
-				{path: "dir2/file-2", seed: 0x33},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x1, size: BlockSize*10 + 14, bsmods: []bsmod{
+						bsmod{interval: BlockSize/2 + 3, delta: 0x4},
+						bsmod{interval: BlockSize/3 + 7, delta: 0x18},
+					}},
+					{path: "file-1", seed: 0x2},
+					{path: "dir2/file-2", seed: 0x33},
+				},
 			},
-		},
-	})
+			partitions: partitions,
+		})
+	}
 }
 
 func Test_RediffStillBetter(t *testing.T) {
@@ -196,6 +249,8 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		targetContainer, dErr := tlc.WalkAny(v1, nil)
 		assert.NoError(t, dErr)
 
+		bsdiffStats := &bsdiff.DiffStats{}
+
 		rc := &RediffContext{
 			TargetPool: fspool.New(targetContainer, v1),
 			SourcePool: fspool.New(sourceContainer, v2),
@@ -203,6 +258,9 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			Consumer:              consumer,
 			Compression:           compression,
 			SuffixSortConcurrency: 0,
+			Partitions:            scenario.partitions,
+
+			BsdiffStats: bsdiffStats,
 		}
 
 		patchReader := bytes.NewReader(patchBuffer.Bytes())
@@ -217,7 +275,10 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		beforeOptimize := time.Now()
 		oErr := rc.OptimizePatch(patchReader, optimizedPatchBuffer)
 		assert.NoError(t, oErr)
-		log("Optimized patch in %s", time.Since(beforeOptimize))
+		log("Optimized patch in %s (spent %s sorting, %s scanning)",
+			time.Since(beforeOptimize),
+			bsdiffStats.TimeSpentSorting,
+			bsdiffStats.TimeSpentScanning)
 
 		before := patchBuffer.Len()
 		after := optimizedPatchBuffer.Len()
