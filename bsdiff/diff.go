@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"runtime"
 	"time"
 
@@ -29,6 +30,7 @@ const MaxMessageSize int64 = 16 * 1024 * 1024
 type DiffStats struct {
 	TimeSpentSorting  time.Duration
 	TimeSpentScanning time.Duration
+	TimeSpentWriting  time.Duration
 	BiggestAdd        int64
 }
 
@@ -229,6 +231,8 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
 			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
 
+			fmt.Fprintf(os.Stderr, "[s] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
+
 			err := writeMessage(bsdc)
 			if err != nil {
 				return err
@@ -263,6 +267,15 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	return nil
 }
 
+type chunk struct {
+	addOldStart int
+	addNewStart int
+	addLength   int
+	copyStart   int
+	copyEnd     int
+	offset      int
+}
+
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var err error
 
@@ -289,161 +302,169 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	startTime = time.Now()
 
-	// Compute the differences, writing ctrl as we go
-	var scan, pos, length int
-	var lastscan, lastpos, lastoffset int
+	var chunks []chunk
 
-	for scan < nbuflen {
-		// fmt.Printf("\n")
-		// fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n")
-		// fmt.Printf(">>>> main loop: lastscan %d, scan %d, lastpos %d, pos %d, lastoffset %d, length %d\n", lastscan, scan, lastpos, pos, lastoffset, length)
-		// fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n")
-		// fmt.Printf("\n")
+	analyzeBlock := func(nbuflen int, nbuf []byte, offset int) {
+		// Compute the differences, writing ctrl as we go
+		var scan, pos, length int
+		var lastscan, lastpos, lastoffset int
 
-		var oldscore int
-		scan += length
+		for scan < nbuflen {
+			var oldscore int
+			scan += length
 
-		if scan-lastProgressUpdate > updateEvery {
-			lastProgressUpdate = scan
-			progress := float64(scan) / float64(nbuflen)
-			consumer.Progress(progress)
-		}
+			if scan-lastProgressUpdate > updateEvery {
+				lastProgressUpdate = scan
+				progress := float64(scan) / float64(nbuflen)
+				consumer.Progress(progress)
+			}
 
-		for scsc := scan; scan < nbuflen; scan++ {
-			pos, length = psa.search(nbuf[scan:])
+			for scsc := scan; scan < nbuflen; scan++ {
+				pos, length = psa.search(nbuf[scan:])
 
-			// fmt.Printf("\n@ scanning from %d, found %d common bytes at %d\n", scan, length, pos)
+				for ; scsc < scan+length; scsc++ {
+					if scsc+lastoffset < obuflen &&
+						obuf[scsc+lastoffset] == nbuf[scsc] {
+						oldscore++
+					}
+				}
 
-			// scan+length is the end of the common sequence we just found
-			// if length > 0 {
-			// fmt.Printf("@ found common seq of length %d, scoring %d bytes now\n", length, scan+length-scsc)
-			// }
+				if (length == oldscore && length != 0) || length > oldscore+8 {
+					break
+				}
 
-			for ; scsc < scan+length; scsc++ {
-				if scsc+lastoffset < obuflen &&
-					obuf[scsc+lastoffset] == nbuf[scsc] {
-					oldscore++
+				if scan+lastoffset < obuflen && obuf[scan+lastoffset] == nbuf[scan] {
+					oldscore--
 				}
 			}
 
-			// fmt.Printf("@ current candidate seq has %d/%d matching bytes\n", oldscore, scan-lastscan+length)
-
-			if (length == oldscore && length != 0) || length > oldscore+8 {
-				// if length == oldscore && length != 0 {
-				// 	fmt.Printf("@ perfect non-empty common sequence of %d bytes!\n", length)
-				// }
-				// if length > oldscore+8 {
-				// 	fmt.Printf("@ new common sequence is 8 bytes better than previous one\n")
-				// }
-				break
-			}
-
-			if scan+lastoffset < obuflen && obuf[scan+lastoffset] == nbuf[scan] {
-				oldscore--
-			}
-		}
-
-		// if length != oldscore {
-		// 	fmt.Printf("@ score %d != length %d, need to compute extensions\n", oldscore, length)
-		// } else if scan == nbuflen {
-		// 	fmt.Printf("@ scanned nbuf entirely, it doesn't get any better\n")
-		// } else {
-		// 	fmt.Printf("@ score is length & not scanned entire nbuf, scanning some more\n")
-		// }
-
-		if length != oldscore || scan == nbuflen {
-			// fmt.Printf("@ considered sequence is [%d...%d]\n", lastscan, scan)
-			// fmt.Printf("@ in obuf:               [%d...%d]\n", lastpos, pos)
-
-			var s, Sf int
-			lenf = 0
-			for i := int(0); lastscan+i < scan && lastpos+i < obuflen; {
-				if obuf[lastpos+i] == nbuf[lastscan+i] {
-					// fmt.Printf("@ matched 1 forward (at %d)\n", lastscan+i)
-					s++
-				}
-				i++
-				if s*2-i > Sf*2-lenf {
-					// fmt.Printf("@ now extending %d forward\n", s)
-					Sf = s
-					lenf = i
-				}
-			}
-
-			lenb := 0
-			if scan < nbuflen {
-				var s, Sb int
-				for i := int(1); (scan >= lastscan+i) && (pos >= i); i++ {
-					if obuf[pos-i] == nbuf[scan-i] {
-						// fmt.Printf("@ matched 1 backward (at %d)\n", scan-i)
+			if length != oldscore || scan == nbuflen {
+				var s, Sf int
+				lenf = 0
+				for i := int(0); lastscan+i < scan && lastpos+i < obuflen; {
+					if obuf[lastpos+i] == nbuf[lastscan+i] {
 						s++
 					}
-					if s*2-i > Sb*2-lenb {
-						// fmt.Printf("@ now extending %d backward\n", s)
-						Sb = s
-						lenb = i
-					}
-				}
-			}
-			// fmt.Printf("@ original: [%d...%d]\n", lastscan, scan)
-			// fmt.Printf("@ forw-ext: [%d...%d]\n", lastscan, lastscan+lenf)
-			// fmt.Printf("@ back-ext: [%d...%d]\n", scan-lenb, scan)
-
-			if lastscan+lenf > scan-lenb {
-				overlap := (lastscan + lenf) - (scan - lenb)
-				// fmt.Printf("@ forward and backwards overlap by %d bytes\n", overlap)
-				s := int(0)
-				Ss := int(0)
-				lens := int(0)
-				for i := int(0); i < overlap; i++ {
-					if nbuf[lastscan+lenf-overlap+i] == obuf[lastpos+lenf-overlap+i] {
-						s++
-					}
-					if nbuf[scan-lenb+i] == obuf[pos-lenb+i] {
-						s--
-					}
-					if s > Ss {
-						Ss = s
-						lens = i + 1
+					i++
+					if s*2-i > Sf*2-lenf {
+						Sf = s
+						lenf = i
 					}
 				}
 
-				lenf += lens - overlap
-				lenb -= lens
+				lenb := 0
+				if scan < nbuflen {
+					var s, Sb int
+					for i := int(1); (scan >= lastscan+i) && (pos >= i); i++ {
+						if obuf[pos-i] == nbuf[scan-i] {
+							s++
+						}
+						if s*2-i > Sb*2-lenb {
+							Sb = s
+							lenb = i
+						}
+					}
+				}
+
+				if lastscan+lenf > scan-lenb {
+					overlap := (lastscan + lenf) - (scan - lenb)
+					s := int(0)
+					Ss := int(0)
+					lens := int(0)
+					for i := int(0); i < overlap; i++ {
+						if nbuf[lastscan+lenf-overlap+i] == obuf[lastpos+lenf-overlap+i] {
+							s++
+						}
+						if nbuf[scan-lenb+i] == obuf[pos-lenb+i] {
+							s--
+						}
+						if s > Ss {
+							Ss = s
+							lens = i + 1
+						}
+					}
+
+					lenf += lens - overlap
+					lenb -= lens
+				}
+
+				c := chunk{
+					addOldStart: lastpos,
+					addNewStart: lastscan,
+					addLength:   lenf,
+					copyStart:   lastscan + lenf,
+					copyEnd:     scan - lenb,
+					offset:      offset,
+				}
+
+				if c.addLength > 0 || (c.copyEnd != c.copyStart) {
+					chunks = append(chunks, c)
+				}
+
+				if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(lenf) {
+					ctx.Stats.BiggestAdd = int64(lenf)
+				}
+
+				lastscan = scan - lenb
+				lastpos = pos - lenb
+				lastoffset = pos - scan
 			}
 
-			ctx.db.Reset()
-			ctx.db.Grow(int(lenf))
-
-			for i := int(0); i < lenf; i++ {
-				ctx.db.WriteByte(nbuf[lastscan+i] - obuf[lastpos+i])
-			}
-
-			// fmt.Printf("@ storing %d bytes of add: %#v\n", lenf, ctx.db.Bytes())
-			// fmt.Printf("@ storing %d bytes of copy\n", (scan-lenb)-(lastscan+lenf))
-			// fmt.Printf("@ seek: %d\n", (pos-lenb)-(lastpos+lenf))
-
-			bsdc.Add = ctx.db.Bytes()
-			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
-			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
-
-			err := writeMessage(bsdc)
-			if err != nil {
-				return err
-			}
-
-			if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(lenf) {
-				ctx.Stats.BiggestAdd = int64(lenf)
-			}
-
-			lastscan = scan - lenb
-			lastpos = pos - lenb
-			lastoffset = pos - scan
 		}
+		fmt.Fprintf(os.Stderr, "At the end of analyzeBlock, scan = %d, nbuflen = %d\n", scan, nbuflen)
+	}
+
+	blockSize := nbuflen / ctx.Partitions
+	boundary := 0
+
+	for boundary < nbuflen {
+		realBlockSize := blockSize
+		if boundary+blockSize > nbuflen {
+			realBlockSize = nbuflen - boundary
+		}
+
+		// fmt.Fprintf(os.Stderr, "Analyzing %d bytes at %d (out of %d)\n", realBlockSize, boundary, nbuflen)
+		analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary)
+		boundary += blockSize
 	}
 
 	if ctx.Stats != nil {
 		ctx.Stats.TimeSpentScanning += time.Since(startTime)
+	}
+
+	startTime = time.Now()
+
+	// fmt.Fprintf(os.Stderr, "number of chunks: %d\n", len(chunks))
+
+	for i, chunk := range chunks {
+		ctx.db.Reset()
+		ctx.db.Grow(chunk.addLength)
+
+		for i := 0; i < chunk.addLength; i++ {
+			ctx.db.WriteByte(nbuf[chunk.addNewStart+chunk.offset+i] - obuf[chunk.addOldStart+i])
+		}
+
+		bsdc.Add = ctx.db.Bytes()
+		bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
+
+		fmt.Fprintf(os.Stderr, "[c] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
+
+		if i < len(chunks)-1 {
+			nextChunk := chunks[i+1]
+			bsdc.Seek = int64(nextChunk.addOldStart - (chunk.addOldStart + chunk.addLength))
+		} else {
+			bsdc.Seek = 0
+		}
+		fmt.Fprintf(os.Stderr, "seek = %d\n", bsdc.Seek)
+
+		err := writeMessage(bsdc)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ctx.Stats != nil {
+		ctx.Stats.TimeSpentWriting = time.Since(startTime)
 	}
 
 	if ctx.MeasureMem {
