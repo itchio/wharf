@@ -35,8 +35,10 @@ func NewPSA(p int, buf []byte) *PSA {
 		go func(i int) {
 			st := boundaries[i]
 			en := boundaries[i+1]
-			ws := &gosaca.WorkSpace{}
-			ws.ComputeSuffixArray(buf[st:en], I[st:en])
+			if en-st > 1 {
+				ws := &gosaca.WorkSpace{}
+				ws.ComputeSuffixArray(buf[st:en], I[st:en])
+			}
 			sortDone <- true
 		}(i)
 	}
