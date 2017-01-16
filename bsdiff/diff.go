@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
@@ -277,12 +278,33 @@ type chunk struct {
 
 type SendChunkFunc func(c chunk)
 
+type blockWork struct {
+	index   int
+	channel chan []chunk
+}
+
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var err error
 
+	if ctx.Stats != nil {
+		realWriteMessage := writeMessage
+
+		writeMessage = func(msg proto.Message) error {
+			startTime := time.Now()
+			err := realWriteMessage(msg)
+			ctx.Stats.TimeSpentWriting += time.Since(startTime)
+			return err
+		}
+	}
+
+	partitions := ctx.Partitions
+	if partitions >= len(obuf)-1 {
+		partitions = 1
+	}
+
 	startTime := time.Now()
 
-	psa := NewPSA(ctx.Partitions, obuf)
+	psa := NewPSA(partitions, obuf)
 
 	if ctx.Stats != nil {
 		ctx.Stats.TimeSpentSorting += time.Since(startTime)
@@ -300,9 +322,10 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	var lastProgressUpdate int
 	var updateEvery = 64 * 1024 * 1046 // 64MB
 
-	startTime = time.Now()
+	var timeSpentScanning int64
 
 	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, sendChunk SendChunkFunc) {
+		startTime = time.Now()
 		var lenf int
 
 		// Compute the differences, writing ctrl as we go
@@ -406,87 +429,120 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 				lastpos = pos - lenb
 				lastoffset = pos - scan
 			}
-
 		}
-		// fmt.Fprintf(os.Stderr, "At the end of analyzeBlock, scan = %d, nbuflen = %d\n", scan, nbuflen)
+
+		if ctx.Stats != nil {
+			duration := time.Since(startTime)
+			atomic.AddInt64(&timeSpentScanning, int64(duration))
+		}
 	}
 
-	numBlocks := ctx.Partitions
-	blockSize := nbuflen / numBlocks
-	done := make(chan bool)
+	blockSize := 4 * 1024 * 1024
+	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
-	blockChunks := make([][]chunk, numBlocks)
+	if numBlocks < partitions {
+		blockSize = nbuflen / partitions
+		numBlocks = (nbuflen + blockSize - 1) / blockSize
+	}
 
+	// fmt.Fprintf(os.Stderr, "Divvying %s in %d block(s) of %s (with %d workers)\n",
+	// 	humanize.IBytes(uint64(nbuflen)),
+	// 	numBlocks,
+	// 	humanize.IBytes(uint64(blockSize)),
+	// 	partitions,
+	// )
+
+	blockWorks := make(chan blockWork, partitions*4)
+	blockChunks := make([]chan []chunk, numBlocks)
+
+	// initialize all channels
 	for i := 0; i < numBlocks; i++ {
-		go func(i int) {
-			boundary := blockSize * i
-			realBlockSize := blockSize
-			if i == numBlocks-1 {
-				realBlockSize = nbuflen - boundary
+		blockChunks[i] = make(chan []chunk)
+	}
+
+	for i := 0; i < partitions; i++ {
+		go func() {
+			for work := range blockWorks {
+				i := work.index
+				var chunks []chunk
+
+				boundary := blockSize * i
+				realBlockSize := blockSize
+				if i == numBlocks-1 {
+					realBlockSize = nbuflen - boundary
+				}
+				// fmt.Fprintf(os.Stderr, "Analyzing %s block at %d\n", humanize.IBytes(uint64(realBlockSize)), i)
+
+				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, func(c chunk) {
+					chunks = append(chunks, c)
+				})
+
+				work.channel <- chunks
+			}
+		}()
+	}
+
+	go func() {
+		for i := 0; i < numBlocks; i++ {
+			blockWorks <- blockWork{
+				index:   i,
+				channel: blockChunks[i],
+			}
+		}
+		close(blockWorks)
+		// fmt.Fprintf(os.Stderr, "Sent all blockworks\n")
+	}()
+
+	var prevChunk chunk
+	first := true
+
+	for _, bChunks := range blockChunks {
+		chunks := <-bChunks
+
+		for _, chunk := range chunks {
+			if first {
+				first = false
+			} else {
+				bsdc.Seek = int64(chunk.addOldStart - (prevChunk.addOldStart + prevChunk.addLength))
+
+				// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
+
+				err := writeMessage(bsdc)
+				if err != nil {
+					return err
+				}
 			}
 
-			// fmt.Fprintf(os.Stderr, "realBlockSize = %d\n", realBlockSize)
+			ctx.db.Reset()
+			ctx.db.Grow(chunk.addLength)
 
-			analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, func(c chunk) {
-				blockChunks[i] = append(blockChunks[i], c)
-			})
-			done <- true
-		}(i)
+			addNewStart := chunk.addNewStart + chunk.offset
+
+			for i := 0; i < chunk.addLength; i++ {
+				ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
+			}
+
+			bsdc.Add = ctx.db.Bytes()
+			bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
+
+			if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
+				ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
+			}
+
+			prevChunk = chunk
+		}
 	}
 
-	// wait for all blocks to be done
-	for i := 0; i < numBlocks; i++ {
-		<-done
+	// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
+
+	bsdc.Seek = 0
+	err = writeMessage(bsdc)
+	if err != nil {
+		return err
 	}
 
 	if ctx.Stats != nil {
-		ctx.Stats.TimeSpentScanning += time.Since(startTime)
-	}
-
-	startTime = time.Now()
-
-	// fmt.Fprintf(os.Stderr, "number of chunks: %d\n", len(chunks))
-
-	var chunks []chunk
-	for _, bChunks := range blockChunks {
-		chunks = append(chunks, bChunks...)
-	}
-
-	for i, chunk := range chunks {
-		ctx.db.Reset()
-		ctx.db.Grow(chunk.addLength)
-
-		addNewStart := chunk.addNewStart + chunk.offset
-
-		for i := 0; i < chunk.addLength; i++ {
-			ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
-		}
-
-		bsdc.Add = ctx.db.Bytes()
-		bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
-
-		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
-			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
-		}
-
-		// fmt.Fprintf(os.Stderr, "[c] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
-
-		if i < len(chunks)-1 {
-			nextChunk := chunks[i+1]
-			bsdc.Seek = int64(nextChunk.addOldStart - (chunk.addOldStart + chunk.addLength))
-		} else {
-			bsdc.Seek = 0
-		}
-		// fmt.Fprintf(os.Stderr, "seek = %d\n", bsdc.Seek)
-
-		err := writeMessage(bsdc)
-		if err != nil {
-			return err
-		}
-	}
-
-	if ctx.Stats != nil {
-		ctx.Stats.TimeSpentWriting = time.Since(startTime)
+		ctx.Stats.TimeSpentScanning += time.Duration(timeSpentScanning)
 	}
 
 	if ctx.MeasureMem {

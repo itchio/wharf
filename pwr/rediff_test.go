@@ -134,6 +134,35 @@ func Test_RediffBetter(t *testing.T) {
 	}
 }
 
+func Test_RediffEdgeCases(t *testing.T) {
+	for _, partitions := range []int{0, 2, 4, 8} {
+		runRediffScenario(t, patchScenario{
+			name:         "rediff gets better!",
+			touchedFiles: 1,
+			deletedFiles: 0,
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1, size: 0},
+					{path: "file2", seed: 0x2},
+					{path: "file3", seed: 0x3, size: 1},
+					{path: "file4", seed: 0x5, size: 8},
+					{path: "file5", seed: 0x7, size: 9},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1},
+					{path: "file2", seed: 0x2, size: 0},
+					{path: "file3", seed: 0x4, size: 1},
+					{path: "file5", seed: 0x6, size: 8},
+					{path: "file6", seed: 0x8, size: 9},
+				},
+			},
+			partitions: partitions,
+		})
+	}
+}
+
 func Test_RediffStillBetter(t *testing.T) {
 	runRediffScenario(t, patchScenario{
 		name:         "rediff gets better even though rsync wasn't that bad",
