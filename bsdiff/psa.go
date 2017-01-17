@@ -31,16 +31,18 @@ func NewPSA(p int, buf []byte) *PSA {
 	sortDone := make(chan bool)
 	I := make([]int, len(buf))
 
+	// fmt.Fprintf(os.Stderr, "Constructing suffix array for %d bytes, %d partitions\n", len(buf), p)
+
 	for i := 0; i < p; i++ {
-		go func(i int) {
-			st := boundaries[i]
-			en := boundaries[i+1]
-			if en-st > 1 {
-				ws := &gosaca.WorkSpace{}
-				ws.ComputeSuffixArray(buf[st:en], I[st:en])
-			}
+		st := boundaries[i]
+		en := boundaries[i+1]
+		// fmt.Fprintf(os.Stderr, "[%d...%d]\n", st, en)
+
+		go func(st int, en int) {
+			ws := &gosaca.WorkSpace{}
+			ws.ComputeSuffixArray(buf[st:en], I[st:en])
 			sortDone <- true
-		}(i)
+		}(st, en)
 	}
 
 	for i := 0; i < p; i++ {

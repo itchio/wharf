@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -90,6 +91,10 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	obuf := ctx.obuf.Bytes()
 	obuflen := ctx.obuf.Len()
 
+	if obuflen == 0 {
+		fmt.Fprintf(os.Stderr, "Uh oh we got an oldbuf of 0 bytes :(\n")
+	}
+
 	ctx.nbuf.Reset()
 	_, err = io.Copy(&ctx.nbuf, new)
 	if err != nil {
@@ -107,6 +112,9 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	if ctx.Partitions > 0 {
 		return ctx.doPartitioned(obuf, obuflen, nbuf, nbuflen, memstats, writeMessage, consumer)
 	}
+
+	consumer.ProgressLabel(fmt.Sprintf("Sorting %s...", humanize.IBytes(uint64(obuflen))))
+	consumer.Progress(0.0)
 
 	var lenf int
 	startTime := time.Now()
@@ -302,6 +310,9 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		partitions = 1
 	}
 
+	consumer.ProgressLabel(fmt.Sprintf("Sorting %s...", humanize.IBytes(uint64(obuflen))))
+	consumer.Progress(0.0)
+
 	startTime := time.Now()
 
 	psa := NewPSA(partitions, obuf)
@@ -317,10 +328,8 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	bsdc := &Control{}
 
-	consumer.ProgressLabel(fmt.Sprintf("Scanning %s...", humanize.IBytes(uint64(nbuflen))))
-
-	var lastProgressUpdate int
-	var updateEvery = 64 * 1024 * 1046 // 64MB
+	consumer.ProgressLabel(fmt.Sprintf("Preparing to scan %s...", humanize.IBytes(uint64(nbuflen))))
+	consumer.Progress(0.0)
 
 	var timeSpentScanning int64
 
@@ -335,12 +344,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		for scan < nbuflen {
 			var oldscore int
 			scan += length
-
-			if scan-lastProgressUpdate > updateEvery {
-				lastProgressUpdate = scan
-				progress := float64(scan) / float64(nbuflen)
-				consumer.Progress(progress)
-			}
 
 			for scsc := scan; scan < nbuflen; scan++ {
 				pos, length = psa.search(nbuf[scan:])
@@ -437,7 +440,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		}
 	}
 
-	blockSize := 4 * 1024 * 1024
+	blockSize := 256 * 1024
 	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
 	if numBlocks < partitions {
@@ -496,7 +499,11 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	var prevChunk chunk
 	first := true
 
-	for _, bChunks := range blockChunks {
+	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
+
+	for blockIndex, bChunks := range blockChunks {
+		consumer.Progress(float64(blockIndex) / float64(numBlocks))
+
 		chunks := <-bChunks
 
 		for _, chunk := range chunks {

@@ -3,6 +3,7 @@ package pwr
 import (
 	"fmt"
 	"io"
+	"os"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
@@ -175,9 +176,14 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 				// even without any common blocks, bsdiff might still be worth it
 				// if the file is named the same
 				if samePathTargetFileIndex, ok := targetPathsToIndex[sourceFile.Path]; ok {
-					diffMapping = &DiffMapping{
-						TargetIndex: samePathTargetFileIndex,
-						NumBytes:    0,
+					targetFile := targetContainer.Files[samePathTargetFileIndex]
+
+					// don't take into account files that were 0 bytes (it happens). bsdiff won't like that.
+					if targetFile.Size > 0 {
+						diffMapping = &DiffMapping{
+							TargetIndex: samePathTargetFileIndex,
+							NumBytes:    0,
+						}
 					}
 				}
 			}
@@ -347,6 +353,16 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 				}
 			}
 
+			err = rc.SourcePool.Close()
+			if err != nil {
+				return errors.Wrap(err, 0)
+			}
+
+			err = rc.TargetPool.Close()
+			if err != nil {
+				return errors.Wrap(err, 0)
+			}
+
 			// then bsdiff
 			sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))
 			if err != nil {
@@ -359,6 +375,26 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			}
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
+
+			{
+				fmt.Fprintf(os.Stderr, "\n")
+				sourceFile := rc.SourceContainer.Files[sourceFileIndex]
+				targetFile := rc.TargetContainer.Files[diffMapping.TargetIndex]
+				fmt.Fprintf(os.Stderr, "bsdiffing %s (at %d, %d bytes), against %s (at %d, %d bytes)\n",
+					targetFile.Path, diffMapping.TargetIndex, targetFile.Size,
+					sourceFile.Path, sourceFileIndex, sourceFile.Size,
+				)
+
+				if osfile, ok := targetFileReader.(*os.File); ok {
+					stats, err := osfile.Stat()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Could not stat target file: %s\n", err.Error())
+					} else {
+						fmt.Fprintf(os.Stderr, "We have %d/%d of target file available\n", stats.Size(), targetFile.Size)
+					}
+				}
+				fmt.Fprintf(os.Stderr, "\n")
+			}
 
 			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
 			if err != nil {
