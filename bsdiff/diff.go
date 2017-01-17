@@ -422,8 +422,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		chunks <- chunk{eoc: true}
 	}
 
-	// blockSize := 256 * 1024
-	blockSize := 4 * 1024
+	blockSize := 256 * 1024
 	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
 	if numBlocks < partitions {
