@@ -108,6 +108,7 @@ func Test_RediffWorse(t *testing.T) {
 
 func Test_RediffBetter(t *testing.T) {
 	for _, partitions := range []int{0, 2, 4, 8} {
+		// for _, partitions := range []int{8} {
 		runRediffScenario(t, patchScenario{
 			name:         "rediff gets better!",
 			touchedFiles: 1,
@@ -228,6 +229,11 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		targetSignature, dErr := ComputeSignature(targetContainer, targetPool, consumer)
 		assert.NoError(t, dErr)
 
+		log("Diffing %s -> %s",
+			humanize.IBytes(uint64(targetContainer.Size)),
+			humanize.IBytes(uint64(sourceContainer.Size)),
+		)
+
 		pool := fspool.New(sourceContainer, v2)
 
 		dctx := &DiffContext{
@@ -271,7 +277,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
 		assert.NoError(t, sErr)
 		assert.NoError(t, AssertValid(v1After, signature))
-		log("Original patch applies cleanly.")
+		log("Original applies cleanly")
 	}()
 
 	func() {
@@ -290,6 +296,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			Partitions:            scenario.partitions,
 
 			BsdiffStats: bsdiffStats,
+			MeasureMem:  true,
 		}
 
 		patchReader := bytes.NewReader(patchBuffer.Bytes())

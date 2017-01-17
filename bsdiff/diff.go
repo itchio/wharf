@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"runtime"
 	"time"
 
@@ -77,7 +78,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	if ctx.MeasureMem {
 		memstats = &runtime.MemStats{}
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes at start of bsdiff: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes at start of bsdiff: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	ctx.obuf.Reset()
@@ -100,7 +101,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after ReadAll: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	if ctx.Partitions > 0 {
@@ -128,7 +129,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	bsdc := &Control{}
@@ -256,7 +257,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	bsdc.Reset()
@@ -276,13 +277,15 @@ type chunk struct {
 	copyStart   int
 	copyEnd     int
 	offset      int
+	eoc         bool
 }
 
 type SendChunkFunc func(c chunk)
 
-type blockWork struct {
-	index   int
-	channel chan []chunk
+type blockWorkerState struct {
+	consumed chan bool
+	work     chan int
+	chunks   chan chunk
 }
 
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
@@ -306,7 +309,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	bsdc := &Control{}
@@ -316,7 +319,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	startTime = time.Now()
 
-	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, sendChunk SendChunkFunc) {
+	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, chunks chan chunk) {
 		var lenf int
 
 		// Compute the differences, writing ctrl as we go
@@ -407,7 +410,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 				if c.addLength > 0 || (c.copyEnd != c.copyStart) {
 					// if not a no-op, send
-					sendChunk(c)
+					chunks <- c
 				}
 
 				lastscan = scan - lenb
@@ -415,9 +418,12 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 				lastoffset = pos - scan
 			}
 		}
+
+		chunks <- chunk{eoc: true}
 	}
 
-	blockSize := 256 * 1024
+	// blockSize := 256 * 1024
+	blockSize := 4 * 1024
 	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
 	if numBlocks < partitions {
@@ -432,58 +438,72 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	// 	partitions,
 	// )
 
-	blockWorks := make(chan blockWork, partitions*4)
-	blockChunks := make([]chan []chunk, numBlocks)
+	// blockChunks := make([]chan []chunk, numBlocks)
+	blockWorkersState := make([]blockWorkerState, partitions)
 
 	// initialize all channels
-	for i := 0; i < numBlocks; i++ {
-		blockChunks[i] = make(chan []chunk)
+	for i := 0; i < partitions; i++ {
+		blockWorkersState[i].work = make(chan int, 1)
+		blockWorkersState[i].chunks = make(chan chunk, 4)
+		blockWorkersState[i].consumed = make(chan bool, 1)
+		blockWorkersState[i].consumed <- true
 	}
 
 	for i := 0; i < partitions; i++ {
-		go func() {
-			for work := range blockWorks {
-				i := work.index
-				var chunks []chunk
-
-				boundary := blockSize * i
+		go func(workerState blockWorkerState, workerIndex int) {
+			for blockIndex := range workerState.work {
+				// fmt.Fprintf(os.Stderr, "\nWorker %d should analyze block %d", workerIndex, blockIndex)
+				boundary := blockSize * blockIndex
 				realBlockSize := blockSize
-				if i == numBlocks-1 {
+				if blockIndex == numBlocks-1 {
 					realBlockSize = nbuflen - boundary
 				}
 				// fmt.Fprintf(os.Stderr, "Analyzing %s block at %d\n", humanize.IBytes(uint64(realBlockSize)), i)
 
-				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, func(c chunk) {
-					chunks = append(chunks, c)
-				})
-
-				work.channel <- chunks
+				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, workerState.chunks)
+				// fmt.Fprintf(os.Stderr, "\nWorker %d done analyzing block %d", workerIndex, blockIndex)
 			}
-		}()
+		}(blockWorkersState[i], i)
 	}
 
 	go func() {
+		workerIndex := 0
+
 		for i := 0; i < numBlocks; i++ {
-			blockWorks <- blockWork{
-				index:   i,
-				channel: blockChunks[i],
-			}
+			<-blockWorkersState[workerIndex].consumed
+			blockWorkersState[workerIndex].work <- i
+			workerIndex = (workerIndex + 1) % partitions
 		}
-		close(blockWorks)
+
+		for workerIndex := 0; workerIndex < partitions; workerIndex++ {
+			close(blockWorkersState[workerIndex].work)
+		}
 		// fmt.Fprintf(os.Stderr, "Sent all blockworks\n")
 	}()
+
+	if ctx.MeasureMem {
+		runtime.ReadMemStats(memstats)
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan-prepare: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+	}
 
 	var prevChunk chunk
 	first := true
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
+	fmt.Fprintf(os.Stderr, "\nScanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize)))
 
-	for blockIndex, bChunks := range blockChunks {
+	workerIndex := 0
+	for blockIndex := 0; blockIndex < numBlocks; blockIndex++ {
+		// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
 		consumer.Progress(float64(blockIndex) / float64(numBlocks))
+		state := blockWorkersState[workerIndex]
 
-		chunks := <-bChunks
+		for chunk := range state.chunks {
+			// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
+			if chunk.eoc {
+				break
+			}
 
-		for _, chunk := range chunks {
 			if first {
 				first = false
 			} else {
@@ -515,6 +535,9 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 			prevChunk = chunk
 		}
+
+		state.consumed <- true
+		workerIndex = (workerIndex + 1) % partitions
 	}
 
 	// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
@@ -531,7 +554,8 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
-		consumer.Debugf("Allocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		consumer.Debugf("\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
+		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
 	bsdc.Reset()

@@ -55,6 +55,7 @@ type RediffContext struct {
 
 	// internal
 	DiffMappings DiffMappings
+	MeasureMem   bool
 }
 
 func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
@@ -285,6 +286,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		SuffixSortConcurrency: rc.SuffixSortConcurrency,
 		Partitions:            rc.Partitions,
 		Stats:                 rc.BsdiffStats,
+		MeasureMem:            rc.MeasureMem,
 	}
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
