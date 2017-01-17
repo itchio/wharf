@@ -3,7 +3,6 @@ package pwr
 import (
 	"fmt"
 	"io"
-	"os"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
@@ -375,26 +374,6 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			}
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
-
-			{
-				fmt.Fprintf(os.Stderr, "\n")
-				sourceFile := rc.SourceContainer.Files[sourceFileIndex]
-				targetFile := rc.TargetContainer.Files[diffMapping.TargetIndex]
-				fmt.Fprintf(os.Stderr, "bsdiffing %s (at %d, %d bytes), against %s (at %d, %d bytes)\n",
-					targetFile.Path, diffMapping.TargetIndex, targetFile.Size,
-					sourceFile.Path, sourceFileIndex, sourceFile.Size,
-				)
-
-				if osfile, ok := targetFileReader.(*os.File); ok {
-					stats, err := osfile.Stat()
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Could not stat target file: %s\n", err.Error())
-					} else {
-						fmt.Fprintf(os.Stderr, "We have %d/%d of target file available\n", stats.Size(), targetFile.Size)
-					}
-				}
-				fmt.Fprintf(os.Stderr, "\n")
-			}
 
 			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
 			if err != nil {

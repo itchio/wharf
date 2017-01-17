@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -90,10 +89,6 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	obuf := ctx.obuf.Bytes()
 	obuflen := ctx.obuf.Len()
-
-	if obuflen == 0 {
-		fmt.Fprintf(os.Stderr, "Uh oh we got an oldbuf of 0 bytes :(\n")
-	}
 
 	ctx.nbuf.Reset()
 	_, err = io.Copy(&ctx.nbuf, new)
