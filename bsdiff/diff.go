@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"runtime"
-	"sync/atomic"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
@@ -289,17 +288,6 @@ type blockWork struct {
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
 	var err error
 
-	if ctx.Stats != nil {
-		realWriteMessage := writeMessage
-
-		writeMessage = func(msg proto.Message) error {
-			startTime := time.Now()
-			err := realWriteMessage(msg)
-			ctx.Stats.TimeSpentWriting += time.Since(startTime)
-			return err
-		}
-	}
-
 	partitions := ctx.Partitions
 	if partitions >= len(obuf)-1 {
 		partitions = 1
@@ -326,10 +314,9 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	consumer.ProgressLabel(fmt.Sprintf("Preparing to scan %s...", humanize.IBytes(uint64(nbuflen))))
 	consumer.Progress(0.0)
 
-	var timeSpentScanning int64
+	startTime = time.Now()
 
 	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, sendChunk SendChunkFunc) {
-		startTime = time.Now()
 		var lenf int
 
 		// Compute the differences, writing ctrl as we go
@@ -427,11 +414,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 				lastpos = pos - lenb
 				lastoffset = pos - scan
 			}
-		}
-
-		if ctx.Stats != nil {
-			duration := time.Since(startTime)
-			atomic.AddInt64(&timeSpentScanning, int64(duration))
 		}
 	}
 
@@ -544,7 +526,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	}
 
 	if ctx.Stats != nil {
-		ctx.Stats.TimeSpentScanning += time.Duration(timeSpentScanning)
+		ctx.Stats.TimeSpentScanning += time.Since(startTime)
 	}
 
 	if ctx.MeasureMem {
