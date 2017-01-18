@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sync/atomic"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
@@ -20,8 +19,6 @@ type chunk struct {
 	offset      int
 	eoc         bool
 }
-
-type SendChunkFunc func(c chunk)
 
 type blockWorkerState struct {
 	consumed chan bool
@@ -80,11 +77,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	consumer.Progress(0.0)
 
 	startTime = time.Now()
-
-	var waitConsumeTime int64
-	var waitEnqueueTime int64
-	var idleWorkerTime int64
-	var sendingWorkerTime int64
 
 	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, chunks chan chunk) {
 		var lenf int
@@ -177,9 +169,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 				if c.addLength > 0 || (c.copyEnd != c.copyStart) {
 					// if not a no-op, send
-					beforeSend := time.Now()
 					chunks <- c
-					atomic.AddInt64(&sendingWorkerTime, int64(time.Since(beforeSend)))
 				}
 
 				lastscan = scan - lenb
@@ -188,9 +178,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 			}
 		}
 
-		beforeSend := time.Now()
 		chunks <- chunk{eoc: true}
-		atomic.AddInt64(&sendingWorkerTime, int64(time.Since(beforeSend)))
 	}
 
 	blockSize := 128 * 1024
@@ -225,10 +213,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	for i := 0; i < numWorkers; i++ {
 		go func(workerState blockWorkerState, workerIndex int) {
-			lastWorkTime := time.Now()
 			for blockIndex := range workerState.work {
-				atomic.AddInt64(&idleWorkerTime, int64(time.Since(lastWorkTime)))
-
 				// fmt.Fprintf(os.Stderr, "\nWorker %d should analyze block %d", workerIndex, blockIndex)
 				boundary := blockSize * blockIndex
 				realBlockSize := blockSize
@@ -239,8 +224,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, workerState.chunks)
 				// fmt.Fprintf(os.Stderr, "\nWorker %d done analyzing block %d", workerIndex, blockIndex)
-
-				lastWorkTime = time.Now()
 			}
 		}(blockWorkersState[i], i)
 	}
@@ -249,13 +232,8 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		workerIndex := 0
 
 		for i := 0; i < numBlocks; i++ {
-			beforeConsume := time.Now()
 			<-blockWorkersState[workerIndex].consumed
-			atomic.AddInt64(&waitConsumeTime, int64(time.Since(beforeConsume)))
-
-			beforeEnqueue := time.Now()
 			blockWorkersState[workerIndex].work <- i
-			atomic.AddInt64(&waitEnqueueTime, int64(time.Since(beforeEnqueue)))
 
 			workerIndex = (workerIndex + 1) % numWorkers
 		}
@@ -359,13 +337,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		consumer.Debugf("\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
-
-	fmt.Fprintf(os.Stderr, "\nStats: waitConsume %s, waitEnqueue %s, idleWorker %s, sendingWorker %s\n",
-		time.Duration(atomic.LoadInt64(&waitConsumeTime)),
-		time.Duration(atomic.LoadInt64(&waitEnqueueTime)),
-		time.Duration(atomic.LoadInt64(&idleWorkerTime)),
-		time.Duration(atomic.LoadInt64(&sendingWorkerTime)),
-	)
 
 	bsdc.Reset()
 	bsdc.Eof = true
