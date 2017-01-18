@@ -17,7 +17,7 @@ type BucketGroup struct {
 	bucketNumbers []int
 }
 
-func NewPSA(p int, buf []byte) *PSA {
+func NewPSA(p int, buf []byte, I []int) *PSA {
 	boundaries := make([]int, p+1)
 	boundary := 0
 	partitionSize := len(buf) / p
@@ -29,7 +29,6 @@ func NewPSA(p int, buf []byte) *PSA {
 	boundaries[p] = len(buf)
 
 	sortDone := make(chan bool)
-	I := make([]int, len(buf))
 
 	// fmt.Fprintf(os.Stderr, "Constructing suffix array for %d bytes, %d partitions\n", len(buf), p)
 
