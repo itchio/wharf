@@ -189,7 +189,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		numBlocks = (nbuflen + blockSize - 1) / blockSize
 	}
 
-	numWorkers := partitions * 16
+	numWorkers := partitions * 12
 	if numWorkers > numBlocks {
 		numWorkers = numBlocks
 	}
