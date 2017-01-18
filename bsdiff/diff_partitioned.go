@@ -193,7 +193,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		atomic.AddInt64(&sendingWorkerTime, int64(time.Since(beforeSend)))
 	}
 
-	blockSize := 1024 * 1024
+	blockSize := 128 * 1024
 	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
 	if numBlocks < partitions {
@@ -201,7 +201,10 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		numBlocks = (nbuflen + blockSize - 1) / blockSize
 	}
 
-	numWorkers := partitions * 8
+	numWorkers := partitions * 16
+	if numWorkers > numBlocks {
+		numWorkers = numBlocks
+	}
 
 	// fmt.Fprintf(os.Stderr, "Divvying %s in %d block(s) of %s (with %d workers)\n",
 	// 	humanize.IBytes(uint64(nbuflen)),
@@ -273,52 +276,70 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
 
-	workerIndex := 0
-	for blockIndex := 0; blockIndex < numBlocks; blockIndex++ {
-		// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
-		consumer.Progress(float64(blockIndex) / float64(numBlocks))
-		state := blockWorkersState[workerIndex]
+	allChunks := make(chan chunk, 1024)
 
-		for chunk := range state.chunks {
-			// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
-			if chunk.eoc {
-				break
-			}
+	go func() {
+		workerIndex := 0
+		for blockIndex := 0; blockIndex < numBlocks; blockIndex++ {
+			consumer.Progress(float64(blockIndex) / float64(numBlocks))
 
-			if first {
-				first = false
-			} else {
-				bsdc.Seek = int64(chunk.addOldStart - (prevChunk.addOldStart + prevChunk.addLength))
+			// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
+			consumer.Progress(float64(blockIndex) / float64(numBlocks))
+			state := blockWorkersState[workerIndex]
 
-				// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
-
-				err := writeMessage(bsdc)
-				if err != nil {
-					return err
+			for chunk := range state.chunks {
+				// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
+				if chunk.eoc {
+					break
 				}
+
+				allChunks <- chunk
 			}
 
-			ctx.db.Reset()
-			ctx.db.Grow(chunk.addLength)
-
-			addNewStart := chunk.addNewStart + chunk.offset
-
-			for i := 0; i < chunk.addLength; i++ {
-				ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
-			}
-
-			bsdc.Add = ctx.db.Bytes()
-			bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
-
-			if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
-				ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
-			}
-
-			prevChunk = chunk
+			state.consumed <- true
+			workerIndex = (workerIndex + 1) % numWorkers
 		}
 
-		state.consumed <- true
-		workerIndex = (workerIndex + 1) % numWorkers
+		close(allChunks)
+	}()
+
+	for chunk := range allChunks {
+		// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
+		// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
+		if chunk.eoc {
+			break
+		}
+
+		if first {
+			first = false
+		} else {
+			bsdc.Seek = int64(chunk.addOldStart - (prevChunk.addOldStart + prevChunk.addLength))
+
+			// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
+
+			err := writeMessage(bsdc)
+			if err != nil {
+				return err
+			}
+		}
+
+		ctx.db.Reset()
+		ctx.db.Grow(chunk.addLength)
+
+		addNewStart := chunk.addNewStart + chunk.offset
+
+		for i := 0; i < chunk.addLength; i++ {
+			ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
+		}
+
+		bsdc.Add = ctx.db.Bytes()
+		bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
+
+		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
+			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
+		}
+
+		prevChunk = chunk
 	}
 
 	// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
