@@ -437,7 +437,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	// 	partitions,
 	// )
 
-	// blockChunks := make([]chan []chunk, numBlocks)
 	blockWorkersState := make([]blockWorkerState, partitions)
 
 	// initialize all channels
@@ -489,7 +488,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	first := true
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
-	fmt.Fprintf(os.Stderr, "\nScanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize)))
 
 	workerIndex := 0
 	for blockIndex := 0; blockIndex < numBlocks; blockIndex++ {
