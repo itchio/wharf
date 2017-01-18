@@ -361,10 +361,10 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	}
 
 	fmt.Fprintf(os.Stderr, "\nStats: waitConsume %s, waitEnqueue %s, idleWorker %s, sendingWorker %s\n",
-		time.Duration(waitConsumeTime),
-		time.Duration(waitEnqueueTime),
-		time.Duration(idleWorkerTime),
-		time.Duration(sendingWorkerTime),
+		time.Duration(atomic.LoadInt64(&waitConsumeTime)),
+		time.Duration(atomic.LoadInt64(&waitEnqueueTime)),
+		time.Duration(atomic.LoadInt64(&idleWorkerTime)),
+		time.Duration(atomic.LoadInt64(&sendingWorkerTime)),
 	)
 
 	bsdc.Reset()

@@ -296,7 +296,6 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			Partitions:            scenario.partitions,
 
 			BsdiffStats: bsdiffStats,
-			MeasureMem:  true,
 		}
 
 		patchReader := bytes.NewReader(patchBuffer.Bytes())
