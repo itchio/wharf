@@ -193,7 +193,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		atomic.AddInt64(&sendingWorkerTime, int64(time.Since(beforeSend)))
 	}
 
-	blockSize := 256 * 1024
+	blockSize := 1024 * 1024
 	numBlocks := (nbuflen + blockSize - 1) / blockSize
 
 	if numBlocks < partitions {
