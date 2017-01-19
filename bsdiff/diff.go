@@ -15,6 +15,19 @@ import (
 	"github.com/jgallagher/gosaca"
 )
 
+type Match struct {
+	addOldStart int
+	addNewStart int
+	addLength   int
+	copyEnd     int
+	offset      int
+	eoc         bool
+}
+
+func (m Match) copyStart() int {
+	return m.addNewStart + m.addLength
+}
+
 // MaxFileSize is the largest size bsdiff will diff (for both old and new file): 2GB - 1 bytes
 // a different codepath could be used for larger files, at the cost of unreasonable memory usage
 // (even in 2016). If a big corporate user is willing to sponsor that part of the code, get in touch!

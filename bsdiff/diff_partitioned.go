@@ -10,20 +10,10 @@ import (
 	"github.com/itchio/wharf/state"
 )
 
-type chunk struct {
-	addOldStart int
-	addNewStart int
-	addLength   int
-	copyStart   int
-	copyEnd     int
-	offset      int
-	eoc         bool
-}
-
 type blockWorkerState struct {
 	consumed chan bool
 	work     chan int
-	chunks   chan chunk
+	matches  chan Match
 }
 
 func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
@@ -78,7 +68,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 
 	startTime = time.Now()
 
-	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, chunks chan chunk) {
+	analyzeBlock := func(nbuflen int, nbuf []byte, offset int, matches chan Match) {
 		var lenf int
 
 		// Compute the differences, writing ctrl as we go
@@ -158,18 +148,17 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 					lenb -= lens
 				}
 
-				c := chunk{
+				m := Match{
 					addOldStart: lastpos,
-					addNewStart: lastscan,
+					addNewStart: lastscan + offset,
 					addLength:   lenf,
-					copyStart:   lastscan + lenf,
-					copyEnd:     scan - lenb,
+					copyEnd:     scan - lenb + offset,
 					offset:      offset,
 				}
 
-				if c.addLength > 0 || (c.copyEnd != c.copyStart) {
+				if m.addLength > 0 || (m.copyEnd != m.copyStart()) {
 					// if not a no-op, send
-					chunks <- c
+					matches <- m
 				}
 
 				lastscan = scan - lenb
@@ -178,7 +167,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 			}
 		}
 
-		chunks <- chunk{eoc: true}
+		matches <- Match{eoc: true}
 	}
 
 	blockSize := 128 * 1024
@@ -206,7 +195,7 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	// initialize all channels
 	for i := 0; i < numWorkers; i++ {
 		blockWorkersState[i].work = make(chan int, 1)
-		blockWorkersState[i].chunks = make(chan chunk, 256)
+		blockWorkersState[i].matches = make(chan Match, 256)
 		blockWorkersState[i].consumed = make(chan bool, 1)
 		blockWorkersState[i].consumed <- true
 	}
@@ -214,16 +203,13 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	for i := 0; i < numWorkers; i++ {
 		go func(workerState blockWorkerState, workerIndex int) {
 			for blockIndex := range workerState.work {
-				// fmt.Fprintf(os.Stderr, "\nWorker %d should analyze block %d", workerIndex, blockIndex)
 				boundary := blockSize * blockIndex
 				realBlockSize := blockSize
 				if blockIndex == numBlocks-1 {
 					realBlockSize = nbuflen - boundary
 				}
-				// fmt.Fprintf(os.Stderr, "Analyzing %s block at %d\n", humanize.IBytes(uint64(realBlockSize)), i)
 
-				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, workerState.chunks)
-				// fmt.Fprintf(os.Stderr, "\nWorker %d done analyzing block %d", workerIndex, blockIndex)
+				analyzeBlock(realBlockSize, nbuf[boundary:boundary+realBlockSize], boundary, workerState.matches)
 			}
 		}(blockWorkersState[i], i)
 	}
@@ -249,12 +235,12 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan-prepare: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	var prevChunk chunk
+	var prevMatch Match
 	first := true
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
 
-	allChunks := make(chan chunk, 1024)
+	allMatches := make(chan Match, 1024)
 
 	go func() {
 		workerIndex := 0
@@ -265,33 +251,31 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 			consumer.Progress(float64(blockIndex) / float64(numBlocks))
 			state := blockWorkersState[workerIndex]
 
-			for chunk := range state.chunks {
+			for match := range state.matches {
 				// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
-				if chunk.eoc {
+				if match.eoc {
 					break
 				}
 
-				allChunks <- chunk
+				allMatches <- match
 			}
 
 			state.consumed <- true
 			workerIndex = (workerIndex + 1) % numWorkers
 		}
 
-		close(allChunks)
+		close(allMatches)
 	}()
 
-	for chunk := range allChunks {
-		// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
-		// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
-		if chunk.eoc {
+	for match := range allMatches {
+		if match.eoc {
 			break
 		}
 
 		if first {
 			first = false
 		} else {
-			bsdc.Seek = int64(chunk.addOldStart - (prevChunk.addOldStart + prevChunk.addLength))
+			bsdc.Seek = int64(match.addOldStart - (prevMatch.addOldStart + prevMatch.addLength))
 
 			// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
 
@@ -302,25 +286,21 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		}
 
 		ctx.db.Reset()
-		ctx.db.Grow(chunk.addLength)
+		ctx.db.Grow(match.addLength)
 
-		addNewStart := chunk.addNewStart + chunk.offset
-
-		for i := 0; i < chunk.addLength; i++ {
-			ctx.db.WriteByte(nbuf[addNewStart+i] - obuf[chunk.addOldStart+i])
+		for i := 0; i < match.addLength; i++ {
+			ctx.db.WriteByte(nbuf[match.addNewStart+i] - obuf[match.addOldStart+i])
 		}
 
 		bsdc.Add = ctx.db.Bytes()
-		bsdc.Copy = nbuf[chunk.offset+chunk.copyStart : chunk.offset+chunk.copyEnd]
+		bsdc.Copy = nbuf[match.copyStart():match.copyEnd]
 
 		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
 			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
 		}
 
-		prevChunk = chunk
+		prevMatch = match
 	}
-
-	// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
 
 	bsdc.Seek = 0
 	err = writeMessage(bsdc)
