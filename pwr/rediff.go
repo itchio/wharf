@@ -1,9 +1,12 @@
 package pwr
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"sync"
 	"time"
 
 	"path/filepath"
@@ -28,6 +31,14 @@ type DiffMappings map[int64]*DiffMapping
 type DiffMapping struct {
 	TargetIndex int64
 	NumBytes    int64
+}
+
+type WriteMatchesFunc func(matches []bsdiff.Match)
+
+type RediffTask struct {
+	sourceFileIndex int64
+	obuf            []byte
+	nbuf            []byte
 }
 
 func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer tlc.Container) string {
@@ -80,6 +91,7 @@ type RediffContext struct {
 	// internal
 	DiffMappings DiffMappings
 	MeasureMem   bool
+	NumWorkers   int
 }
 
 func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
@@ -89,31 +101,31 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 
 	err = rctx.ExpectMagic(PatchMagic)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	ph := &PatchHeader{}
 	err = rctx.ReadMessage(ph)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	rctx, err = DecompressWire(rctx, ph.Compression)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	targetContainer := &tlc.Container{}
 	err = rctx.ReadMessage(targetContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 	rc.TargetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = rctx.ReadMessage(sourceContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 	rc.SourceContainer = sourceContainer
 
@@ -134,7 +146,7 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 		sh.Reset()
 		err = rctx.ReadMessage(sh)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
 		if sh.FileIndex != int64(sourceFileIndex) {
@@ -153,7 +165,7 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 			rop.Reset()
 			err = rctx.ReadMessage(rop)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			switch rop.Type {
@@ -243,18 +255,18 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 	err = wctx.WriteMagic(PatchMagic)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	err = rctx.ExpectMagic(PatchMagic)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	ph := &PatchHeader{}
 	err = rctx.ReadMessage(ph)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	compression := rc.Compression
@@ -267,57 +279,72 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	}
 	err = wctx.WriteMessage(wph)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	rctx, err = DecompressWire(rctx, ph.Compression)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	wctx, err = CompressWire(wctx, wph.Compression)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	targetContainer := &tlc.Container{}
 	err = rctx.ReadMessage(targetContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	err = wctx.WriteMessage(targetContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	sourceContainer := &tlc.Container{}
 	err = rctx.ReadMessage(sourceContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	err = wctx.WriteMessage(sourceContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	sh := &SyncHeader{}
 	bh := &BsdiffHeader{}
 	rop := &SyncOp{}
 
-	bdc := &bsdiff.DiffContext{
-		SuffixSortConcurrency: rc.SuffixSortConcurrency,
-		Partitions:            rc.Partitions,
-		Stats:                 rc.BsdiffStats,
-		MeasureMem:            rc.MeasureMem,
+	numWorkers := rc.NumWorkers
+	if numWorkers == 0 {
+		numWorkers = 1
 	}
+
+	rc.Consumer.Infof("Using %d workers", numWorkers)
+
+	contexts := make([]*bsdiff.DiffContext, numWorkers)
 
 	if rc.Timeline != nil {
 		rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
-			ID:      0,
-			Content: "Worker 0",
+			ID:      -1,
+			Content: "Orchestrator",
 		})
+
+		for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+			contexts[workerIndex] = &bsdiff.DiffContext{
+				SuffixSortConcurrency: rc.SuffixSortConcurrency,
+				Partitions:            rc.Partitions,
+				Stats:                 rc.BsdiffStats,
+				MeasureMem:            rc.MeasureMem,
+			}
+			rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
+				ID:      workerIndex,
+				Content: fmt.Sprintf("Worker %d", workerIndex),
+			})
+		}
 	}
 
 	initialStart := time.Now()
@@ -335,70 +362,111 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	}
 
 	allMatches := make(map[int64][]bsdiff.Match)
+	var allMatchesLock sync.Mutex
+	tasks := make(chan RediffTask, numWorkers)
+	workerErrs := make(chan error, numWorkers)
 
-	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+		go func(workerIndex int) {
+			bdc := contexts[workerIndex]
+
+			for task := range tasks {
+				var matches []bsdiff.Match
+				startTime := time.Now()
+
+				err := bdc.Do(bytes.NewReader(task.obuf), bytes.NewReader(task.nbuf), func(m bsdiff.Match) {
+					matches = append(matches, m)
+				}, rc.Consumer)
+
+				endTime := time.Now()
+
+				if rc.Timeline != nil {
+					sourceFile := sourceContainer.Files[task.sourceFileIndex]
+
+					heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
+					rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
+						Content: filepath.Base(sourceFile.Path),
+						Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
+						Title:   fmt.Sprintf("%s %s", humanize.IBytes(uint64(sourceFile.Size)), sourceFile.Path),
+						Start:   startTime.Sub(initialStart).Seconds(),
+						End:     endTime.Sub(initialStart).Seconds(),
+						Group:   workerIndex,
+					})
+				}
+
+				if err != nil {
+					workerErrs <- err
+					return
+				}
+
+				allMatchesLock.Lock()
+				allMatches[int64(task.sourceFileIndex)] = matches
+				allMatchesLock.Unlock()
+			}
+			workerErrs <- nil
+		}(workerIndex)
+	}
+
+	for sourceFileIndex := range sourceContainer.Files {
 		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
 
 		if diffMapping == nil {
 			continue
 		}
 
-		// then bsdiff
 		sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
 		targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
 		_, err = sourceFileReader.Seek(0, os.SEEK_SET)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
 		_, err = targetFileReader.Seek(0, os.SEEK_SET)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
-		rc.Consumer.ProgressLabel(sourceFile.Path)
-
-		var matches []bsdiff.Match
-
-		startTime := time.Now()
-
-		err = bdc.Do(targetFileReader, sourceFileReader, func(m bsdiff.Match) {
-			matches = append(matches, m)
-		}, rc.Consumer)
+		obuf, err := ioutil.ReadAll(targetFileReader)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
-		endTime := time.Now()
-
-		if rc.Timeline != nil {
-			heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
-			rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
-				Content: filepath.Base(sourceFile.Path),
-				Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
-				Title:   fmt.Sprintf("%s %s", humanize.IBytes(uint64(sourceFile.Size)), sourceFile.Path),
-				Start:   startTime.Sub(initialStart).Seconds(),
-				End:     endTime.Sub(initialStart).Seconds(),
-				Group:   0,
-			})
+		nbuf, err := ioutil.ReadAll(sourceFileReader)
+		if err != nil {
+			return errors.Wrap(err, 0)
 		}
 
-		allMatches[int64(sourceFileIndex)] = matches
+		tasks <- RediffTask{
+			obuf:            obuf,
+			nbuf:            nbuf,
+			sourceFileIndex: int64(sourceFileIndex),
+		}
 	}
+
+	close(tasks)
+
+	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+		err = <-workerErrs
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+	}
+
+	serializeStartTime := time.Now()
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
 		err = rctx.ReadMessage(sh)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
 
 		if sh.FileIndex != int64(sourceFileIndex) {
@@ -411,14 +479,14 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			// if no mapping, just copy ops straight up
 			err = wctx.WriteMessage(sh)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			for {
 				rop.Reset()
 				err = rctx.ReadMessage(rop)
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.Wrap(err, 0)
 				}
 
 				if rop.Type == SyncOp_HEY_YOU_DID_IT {
@@ -427,7 +495,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 				err = wctx.WriteMessage(rop)
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.Wrap(err, 0)
 				}
 			}
 		} else {
@@ -437,21 +505,21 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			sh.Type = SyncHeader_BSDIFF
 			err = wctx.WriteMessage(sh)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			bh.Reset()
 			bh.TargetIndex = diffMapping.TargetIndex
 			err = wctx.WriteMessage(bh)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			// throw away old ops
 			for {
 				err = rctx.ReadMessage(rop)
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.Wrap(err, 0)
 				}
 
 				if rop.Type == SyncOp_HEY_YOU_DID_IT {
@@ -462,31 +530,33 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			// then bsdiff
 			sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			_, err = sourceFileReader.Seek(0, os.SEEK_SET)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			_, err = targetFileReader.Seek(0, os.SEEK_SET)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
 			matches := allMatches[int64(sourceFileIndex)]
 
+			bdc := contexts[0]
+
 			err = bdc.WriteMessages(targetFileReader, sourceFileReader, matches, wctx.WriteMessage)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.Wrap(err, 0)
 			}
 		}
 
@@ -496,13 +566,25 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 		err = wctx.WriteMessage(rop)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.Wrap(err, 0)
 		}
+	}
+
+	serializeEndTime := time.Now()
+
+	if rc.Timeline != nil {
+		rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
+			Content: "Serializing all",
+			Style:   "background-color: black",
+			Start:   serializeStartTime.Sub(initialStart).Seconds(),
+			End:     serializeEndTime.Sub(initialStart).Seconds(),
+			Group:   -1,
+		})
 	}
 
 	err = wctx.Close()
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.Wrap(err, 0)
 	}
 
 	return nil
