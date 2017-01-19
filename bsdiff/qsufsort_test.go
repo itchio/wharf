@@ -3,7 +3,6 @@ package bsdiff
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -55,39 +54,6 @@ func testQsufsort(t *testing.T, concurrency int) {
 
 		prev := input[I[i-1]:]
 		next := input[I[i]:]
-		assert.EqualValues(t, -1, bytes.Compare(prev, next))
-	}
-}
-
-func Test_DC3(t *testing.T) {
-	input := paper
-	n := len(input)
-
-	for i := 0; i < 3; i++ {
-		input = append(input, 0)
-	}
-
-	T := make([]int, len(input))
-	for i := 0; i < len(input); i++ {
-		T[i] = int(input[i])
-	}
-
-	SA := make([]int, len(input))
-
-	suffixArray(T, SA, n, 255)
-
-	fmt.Fprintf(os.Stderr, "testing %d suffixes\n", n)
-
-	for i := range SA {
-		if i == 0 {
-			continue
-		}
-
-		prev := input[SA[i-1]:]
-		next := input[SA[i]:]
-		fmt.Fprintf(os.Stderr, "i = %d\n", i)
-		fmt.Fprintf(os.Stderr, "prev = '%x', '%s'\n", prev[:20], prev[:20])
-		fmt.Fprintf(os.Stderr, "next = '%x', '%s'\n", next[:20], next[:20])
 		assert.EqualValues(t, -1, bytes.Compare(prev, next))
 	}
 }
