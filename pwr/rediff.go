@@ -3,6 +3,7 @@ package pwr
 import (
 	"fmt"
 	"io"
+	"os"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
@@ -354,30 +355,49 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 				}
 			}
 
-			err = rc.SourcePool.Close()
-			if err != nil {
-				return errors.Wrap(err, 0)
-			}
-
-			err = rc.TargetPool.Close()
-			if err != nil {
-				return errors.Wrap(err, 0)
-			}
-
 			// then bsdiff
-			sourceFileReader, err := rc.SourcePool.GetReader(int64(sourceFileIndex))
+			sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
 			if err != nil {
 				return errors.Wrap(err, 1)
 			}
 
-			targetFileReader, err := rc.TargetPool.GetReader(diffMapping.TargetIndex)
+			targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			_, err = sourceFileReader.Seek(0, os.SEEK_SET)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			_, err = targetFileReader.Seek(0, os.SEEK_SET)
 			if err != nil {
 				return errors.Wrap(err, 1)
 			}
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
-			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
+			var matches []bsdiff.Match
+
+			err = bdc.Do(targetFileReader, sourceFileReader, func(m bsdiff.Match) {
+				matches = append(matches, m)
+			}, rc.Consumer)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			_, err = sourceFileReader.Seek(0, os.SEEK_SET)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			_, err = targetFileReader.Seek(0, os.SEEK_SET)
+			if err != nil {
+				return errors.Wrap(err, 1)
+			}
+
+			err = bdc.WriteMessages(targetFileReader, sourceFileReader, matches, wctx.WriteMessage)
 			if err != nil {
 				return errors.Wrap(err, 1)
 			}

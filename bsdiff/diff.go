@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"runtime"
@@ -20,9 +21,10 @@ type Match struct {
 	addNewStart int
 	addLength   int
 	copyEnd     int
-	offset      int
 	eoc         bool
 }
+
+type WriteMatchFunc func(m Match)
 
 func (m Match) copyStart() int {
 	return m.addNewStart + m.addLength
@@ -84,9 +86,70 @@ type DiffStats struct {
 // after WriteMessageFunc returns. See the `wire` package for an example implementation.
 type WriteMessageFunc func(msg proto.Message) (err error)
 
+func (ctx *DiffContext) WriteMessages(old, new io.Reader, matches []Match, writeMessage WriteMessageFunc) error {
+	var prevMatch Match
+	first := true
+
+	bsdc := &Control{}
+
+	obuf, err := ioutil.ReadAll(old)
+	if err != nil {
+		return err
+	}
+
+	nbuf, err := ioutil.ReadAll(new)
+	if err != nil {
+		return err
+	}
+
+	for _, match := range matches {
+		if first {
+			first = false
+		} else {
+			bsdc.Seek = int64(match.addOldStart - (prevMatch.addOldStart + prevMatch.addLength))
+
+			err := writeMessage(bsdc)
+			if err != nil {
+				return err
+			}
+		}
+
+		ctx.db.Reset()
+		ctx.db.Grow(match.addLength)
+
+		for i := 0; i < match.addLength; i++ {
+			ctx.db.WriteByte(nbuf[match.addNewStart+i] - obuf[match.addOldStart+i])
+		}
+
+		bsdc.Add = ctx.db.Bytes()
+		bsdc.Copy = nbuf[match.copyStart():match.copyEnd]
+
+		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
+			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
+		}
+
+		prevMatch = match
+	}
+
+	bsdc.Seek = 0
+	err = writeMessage(bsdc)
+	if err != nil {
+		return err
+	}
+
+	bsdc.Reset()
+	bsdc.Eof = true
+	err = writeMessage(bsdc)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Do computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
-func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
+func (ctx *DiffContext) Do(old, new io.Reader, writeMatch WriteMatchFunc, consumer *state.Consumer) error {
 	var memstats *runtime.MemStats
 	var err error
 
@@ -120,7 +183,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	}
 
 	if ctx.Partitions > 0 {
-		return ctx.doPartitioned(obuf, obuflen, nbuf, nbuflen, memstats, writeMessage, consumer)
+		return ctx.doPartitioned(obuf, obuflen, nbuf, nbuflen, memstats, writeMatch, consumer)
 	}
 
 	consumer.ProgressLabel(fmt.Sprintf("Sorting %s...", humanize.IBytes(uint64(obuflen))))
@@ -146,8 +209,6 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 		runtime.ReadMemStats(memstats)
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
-
-	bsdc := &Control{}
 
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s...", humanize.IBytes(uint64(nbuflen))))
 
@@ -245,15 +306,16 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 				ctx.db.WriteByte(nbuf[lastscan+i] - obuf[lastpos+i])
 			}
 
-			bsdc.Add = ctx.db.Bytes()
-			bsdc.Copy = nbuf[(lastscan + lenf):(scan - lenb)]
-			bsdc.Seek = int64((pos - lenb) - (lastpos + lenf))
+			m := Match{
+				addOldStart: lastpos,
+				addNewStart: lastscan,
+				addLength:   lenf,
+				copyEnd:     scan - lenb,
+			}
 
-			// fmt.Fprintf(os.Stderr, "[s] add %d, copy %d\n", len(bsdc.Add), len(bsdc.Copy))
-
-			err := writeMessage(bsdc)
-			if err != nil {
-				return err
+			if m.addLength > 0 || (m.copyEnd != m.copyStart()) {
+				// if not a no-op, send
+				writeMatch(m)
 			}
 
 			if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(lenf) {
@@ -273,13 +335,6 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	if ctx.MeasureMem {
 		runtime.ReadMemStats(memstats)
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
-	}
-
-	bsdc.Reset()
-	bsdc.Eof = true
-	err = writeMessage(bsdc)
-	if err != nil {
-		return err
 	}
 
 	return nil

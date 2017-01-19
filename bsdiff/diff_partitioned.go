@@ -16,9 +16,7 @@ type blockWorkerState struct {
 	matches  chan Match
 }
 
-func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMessage WriteMessageFunc, consumer *state.Consumer) error {
-	var err error
-
+func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbuflen int, memstats *runtime.MemStats, writeMatch WriteMatchFunc, consumer *state.Consumer) error {
 	partitions := ctx.Partitions
 	if partitions >= len(obuf)-1 {
 		partitions = 1
@@ -60,8 +58,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		runtime.ReadMemStats(memstats)
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after qsufsort: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
-
-	bsdc := &Control{}
 
 	consumer.ProgressLabel(fmt.Sprintf("Preparing to scan %s...", humanize.IBytes(uint64(nbuflen))))
 	consumer.Progress(0.0)
@@ -153,7 +149,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 					addNewStart: lastscan + offset,
 					addLength:   lenf,
 					copyEnd:     scan - lenb + offset,
-					offset:      offset,
 				}
 
 				if m.addLength > 0 || (m.copyEnd != m.copyStart()) {
@@ -182,13 +177,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 	if numWorkers > numBlocks {
 		numWorkers = numBlocks
 	}
-
-	// fmt.Fprintf(os.Stderr, "Divvying %s in %d block(s) of %s (with %d workers)\n",
-	// 	humanize.IBytes(uint64(nbuflen)),
-	// 	numBlocks,
-	// 	humanize.IBytes(uint64(blockSize)),
-	// 	partitions,
-	// )
 
 	blockWorkersState := make([]blockWorkerState, numWorkers)
 
@@ -235,77 +223,25 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan-prepare: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 	}
 
-	var prevMatch Match
-	first := true
-
 	consumer.ProgressLabel(fmt.Sprintf("Scanning %s (%d blocks of %s)...", humanize.IBytes(uint64(nbuflen)), numBlocks, humanize.IBytes(uint64(blockSize))))
 
-	allMatches := make(chan Match, 1024)
-
-	go func() {
+	{
 		workerIndex := 0
 		for blockIndex := 0; blockIndex < numBlocks; blockIndex++ {
-			consumer.Progress(float64(blockIndex) / float64(numBlocks))
-
-			// fmt.Fprintf(os.Stderr, "\nWaiting on worker %d for block %d", workerIndex, blockIndex)
 			consumer.Progress(float64(blockIndex) / float64(numBlocks))
 			state := blockWorkersState[workerIndex]
 
 			for match := range state.matches {
-				// fmt.Fprintf(os.Stderr, "\nFor block %d, received chunk %#v", blockIndex, chunk)
 				if match.eoc {
 					break
 				}
 
-				allMatches <- match
+				writeMatch(match)
 			}
 
 			state.consumed <- true
 			workerIndex = (workerIndex + 1) % numWorkers
 		}
-
-		close(allMatches)
-	}()
-
-	for match := range allMatches {
-		if match.eoc {
-			break
-		}
-
-		if first {
-			first = false
-		} else {
-			bsdc.Seek = int64(match.addOldStart - (prevMatch.addOldStart + prevMatch.addLength))
-
-			// fmt.Fprintf(os.Stderr, "%d bytes add, %d bytes copy\n", len(bsdc.Add), len(bsdc.Copy))
-
-			err := writeMessage(bsdc)
-			if err != nil {
-				return err
-			}
-		}
-
-		ctx.db.Reset()
-		ctx.db.Grow(match.addLength)
-
-		for i := 0; i < match.addLength; i++ {
-			ctx.db.WriteByte(nbuf[match.addNewStart+i] - obuf[match.addOldStart+i])
-		}
-
-		bsdc.Add = ctx.db.Bytes()
-		bsdc.Copy = nbuf[match.copyStart():match.copyEnd]
-
-		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
-			ctx.Stats.BiggestAdd = int64(len(bsdc.Add))
-		}
-
-		prevMatch = match
-	}
-
-	bsdc.Seek = 0
-	err = writeMessage(bsdc)
-	if err != nil {
-		return err
 	}
 
 	if ctx.Stats != nil {
@@ -316,13 +252,6 @@ func (ctx *DiffContext) doPartitioned(obuf []byte, obuflen int, nbuf []byte, nbu
 		runtime.ReadMemStats(memstats)
 		consumer.Debugf("\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
 		fmt.Fprintf(os.Stderr, "\nAllocated bytes after scan: %s (%s total)", humanize.IBytes(uint64(memstats.Alloc)), humanize.IBytes(uint64(memstats.TotalAlloc)))
-	}
-
-	bsdc.Reset()
-	bsdc.Eof = true
-	err = writeMessage(bsdc)
-	if err != nil {
-		return err
 	}
 
 	return nil
