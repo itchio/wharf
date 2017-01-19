@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"path/filepath"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
@@ -39,6 +42,25 @@ func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer t
 	return s
 }
 
+type Timeline struct {
+	Groups []TimelineGroup `json:"groups"`
+	Items  []TimelineItem  `json:"items"`
+}
+
+type TimelineGroup struct {
+	ID      int    `json:"id"`
+	Content string `json:"content"`
+}
+
+type TimelineItem struct {
+	Start   float64 `json:"start"`
+	End     float64 `json:"end"`
+	Content string  `json:"content"`
+	Style   string  `json:"style"`
+	Title   string  `json:"title"`
+	Group   int     `json:"group"`
+}
+
 type RediffContext struct {
 	SourcePool wsync.Pool
 	TargetPool wsync.Pool
@@ -49,6 +71,7 @@ type RediffContext struct {
 	Compression           *CompressionSettings
 	Consumer              *state.Consumer
 	BsdiffStats           *bsdiff.DiffStats
+	Timeline              *Timeline
 
 	// set on Analyze
 	TargetContainer *tlc.Container
@@ -290,6 +313,87 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		MeasureMem:            rc.MeasureMem,
 	}
 
+	if rc.Timeline != nil {
+		rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
+			ID:      0,
+			Content: "Worker 0",
+		})
+	}
+
+	initialStart := time.Now()
+
+	var biggestSourceFile int64
+	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
+		if diffMapping == nil {
+			continue
+		}
+
+		if sourceFile.Size > biggestSourceFile {
+			biggestSourceFile = sourceFile.Size
+		}
+	}
+
+	allMatches := make(map[int64][]bsdiff.Match)
+
+	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
+
+		if diffMapping == nil {
+			continue
+		}
+
+		// then bsdiff
+		sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		_, err = sourceFileReader.Seek(0, os.SEEK_SET)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		_, err = targetFileReader.Seek(0, os.SEEK_SET)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		rc.Consumer.ProgressLabel(sourceFile.Path)
+
+		var matches []bsdiff.Match
+
+		startTime := time.Now()
+
+		err = bdc.Do(targetFileReader, sourceFileReader, func(m bsdiff.Match) {
+			matches = append(matches, m)
+		}, rc.Consumer)
+		if err != nil {
+			return errors.Wrap(err, 1)
+		}
+
+		endTime := time.Now()
+
+		if rc.Timeline != nil {
+			heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
+			rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
+				Content: filepath.Base(sourceFile.Path),
+				Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
+				Title:   fmt.Sprintf("%s %s", humanize.IBytes(uint64(sourceFile.Size)), sourceFile.Path),
+				Start:   startTime.Sub(initialStart).Seconds(),
+				End:     endTime.Sub(initialStart).Seconds(),
+				Group:   0,
+			})
+		}
+
+		allMatches[int64(sourceFileIndex)] = matches
+	}
+
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
 		err = rctx.ReadMessage(sh)
@@ -378,24 +482,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
-			var matches []bsdiff.Match
-
-			err = bdc.Do(targetFileReader, sourceFileReader, func(m bsdiff.Match) {
-				matches = append(matches, m)
-			}, rc.Consumer)
-			if err != nil {
-				return errors.Wrap(err, 1)
-			}
-
-			_, err = sourceFileReader.Seek(0, os.SEEK_SET)
-			if err != nil {
-				return errors.Wrap(err, 1)
-			}
-
-			_, err = targetFileReader.Seek(0, os.SEEK_SET)
-			if err != nil {
-				return errors.Wrap(err, 1)
-			}
+			matches := allMatches[int64(sourceFileIndex)]
 
 			err = bdc.WriteMessages(targetFileReader, sourceFileReader, matches, wctx.WriteMessage)
 			if err != nil {

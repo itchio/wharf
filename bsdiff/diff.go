@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"runtime"
@@ -87,20 +86,28 @@ type DiffStats struct {
 type WriteMessageFunc func(msg proto.Message) (err error)
 
 func (ctx *DiffContext) WriteMessages(old, new io.Reader, matches []Match, writeMessage WriteMessageFunc) error {
-	var prevMatch Match
-	first := true
+	var err error
 
 	bsdc := &Control{}
 
-	obuf, err := ioutil.ReadAll(old)
+	ctx.obuf.Reset()
+	_, err = io.Copy(&ctx.obuf, old)
 	if err != nil {
 		return err
 	}
 
-	nbuf, err := ioutil.ReadAll(new)
+	obuf := ctx.obuf.Bytes()
+
+	ctx.nbuf.Reset()
+	_, err = io.Copy(&ctx.nbuf, new)
 	if err != nil {
 		return err
 	}
+
+	nbuf := ctx.nbuf.Bytes()
+
+	var prevMatch Match
+	first := true
 
 	for _, match := range matches {
 		if first {
