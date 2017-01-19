@@ -332,14 +332,16 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			ID:      -1,
 			Content: "Orchestrator",
 		})
+	}
 
-		for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
-			contexts[workerIndex] = &bsdiff.DiffContext{
-				SuffixSortConcurrency: rc.SuffixSortConcurrency,
-				Partitions:            rc.Partitions,
-				Stats:                 rc.BsdiffStats,
-				MeasureMem:            rc.MeasureMem,
-			}
+	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+		contexts[workerIndex] = &bsdiff.DiffContext{
+			SuffixSortConcurrency: rc.SuffixSortConcurrency,
+			Partitions:            rc.Partitions,
+			Stats:                 rc.BsdiffStats,
+			MeasureMem:            rc.MeasureMem,
+		}
+		if rc.Timeline != nil {
 			rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
 				ID:      workerIndex,
 				Content: fmt.Sprintf("Worker %d", workerIndex),
