@@ -1,12 +1,9 @@
 package pwr
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"sync"
 	"time"
 
 	"path/filepath"
@@ -24,23 +21,18 @@ import (
 // contribute to a given source file
 type FileOrigin map[int64]int64
 
-// DiffMappings stores correspondances between files - source files are mapped
-// to the target file that has the most blocks in common, or has the same name
-type DiffMappings map[int64]*DiffMapping
-
+// A DiffMapping is a pair of files that have similar contents (blocks in common)
+// or equal paths, and which are good candidates for bsdiffing
 type DiffMapping struct {
 	TargetIndex int64
 	NumBytes    int64
 }
 
-type WriteMatchesFunc func(matches []bsdiff.Match)
+// DiffMappings contains one diff mapping for each pair of files to be bsdiff'd
+type DiffMappings map[int64]*DiffMapping
 
-type RediffTask struct {
-	sourceFileIndex int64
-	obuf            []byte
-	nbuf            []byte
-}
-
+// ToString returns a human-readable representation of all diff mappings,
+// which gives an overview of how files changed.
 func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer tlc.Container) string {
 	s := ""
 	for sourceIndex, diffMapping := range dm {
@@ -53,16 +45,20 @@ func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer t
 	return s
 }
 
+// A Timeline contains time-coded events pertaining to the rediff process
 type Timeline struct {
 	Groups []TimelineGroup `json:"groups"`
 	Items  []TimelineItem  `json:"items"`
 }
 
+// A TimelineGroup is what timeline items are grouped by. All items
+// of a given group appear in the same row.
 type TimelineGroup struct {
 	ID      int    `json:"id"`
 	Content string `json:"content"`
 }
 
+// A TimelineItem represents a task that occured in a certain period of time
 type TimelineItem struct {
 	Start   float64 `json:"start"`
 	End     float64 `json:"end"`
@@ -72,6 +68,8 @@ type TimelineItem struct {
 	Group   int     `json:"group"`
 }
 
+// RediffContext holds options for the rediff process, along with
+// some state.
 type RediffContext struct {
 	SourcePool wsync.Pool
 	TargetPool wsync.Pool
@@ -91,9 +89,10 @@ type RediffContext struct {
 	// internal
 	DiffMappings DiffMappings
 	MeasureMem   bool
-	NumWorkers   int
 }
 
+// AnalyzePatch parses a non-optimized patch, looking for good bsdiff'ing candidates
+// and building DiffMappings.
 func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 	var err error
 
@@ -235,6 +234,8 @@ func (rc *RediffContext) AnalyzePatch(patchReader io.Reader) error {
 	return nil
 }
 
+// OptimizePatch uses the information computed by AnalyzePatch to write a new version of
+// the patch, but with bsdiff instead of rsync diffs for each DiffMapping.
 func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Writer) error {
 	var err error
 
@@ -318,35 +319,18 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	bh := &BsdiffHeader{}
 	rop := &SyncOp{}
 
-	numWorkers := rc.NumWorkers
-	if numWorkers == 0 {
-		numWorkers = 1
+	bdc := &bsdiff.DiffContext{
+		SuffixSortConcurrency: rc.SuffixSortConcurrency,
+		Partitions:            rc.Partitions,
+		Stats:                 rc.BsdiffStats,
+		MeasureMem:            rc.MeasureMem,
 	}
-
-	rc.Consumer.Infof("Using %d workers", numWorkers)
-
-	contexts := make([]*bsdiff.DiffContext, numWorkers)
 
 	if rc.Timeline != nil {
 		rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
-			ID:      -1,
-			Content: "Orchestrator",
+			ID:      0,
+			Content: "Worker",
 		})
-	}
-
-	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
-		contexts[workerIndex] = &bsdiff.DiffContext{
-			SuffixSortConcurrency: rc.SuffixSortConcurrency,
-			Partitions:            rc.Partitions,
-			Stats:                 rc.BsdiffStats,
-			MeasureMem:            rc.MeasureMem,
-		}
-		if rc.Timeline != nil {
-			rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
-				ID:      workerIndex,
-				Content: fmt.Sprintf("Worker %d", workerIndex),
-			})
-		}
 	}
 
 	initialStart := time.Now()
@@ -362,107 +346,6 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 			biggestSourceFile = sourceFile.Size
 		}
 	}
-
-	allMatches := make(map[int64][]bsdiff.Match)
-	var allMatchesLock sync.Mutex
-	tasks := make(chan RediffTask, numWorkers)
-	workerErrs := make(chan error, numWorkers)
-
-	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
-		go func(workerIndex int) {
-			bdc := contexts[workerIndex]
-
-			for task := range tasks {
-				var matches []bsdiff.Match
-				startTime := time.Now()
-
-				err := bdc.Do(bytes.NewReader(task.obuf), bytes.NewReader(task.nbuf), func(m bsdiff.Match) {
-					matches = append(matches, m)
-				}, rc.Consumer)
-
-				endTime := time.Now()
-
-				if rc.Timeline != nil {
-					sourceFile := sourceContainer.Files[task.sourceFileIndex]
-
-					heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
-					rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
-						Content: filepath.Base(sourceFile.Path),
-						Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
-						Title:   fmt.Sprintf("%s %s", humanize.IBytes(uint64(sourceFile.Size)), sourceFile.Path),
-						Start:   startTime.Sub(initialStart).Seconds(),
-						End:     endTime.Sub(initialStart).Seconds(),
-						Group:   workerIndex,
-					})
-				}
-
-				if err != nil {
-					workerErrs <- err
-					return
-				}
-
-				allMatchesLock.Lock()
-				allMatches[int64(task.sourceFileIndex)] = matches
-				allMatchesLock.Unlock()
-			}
-			workerErrs <- nil
-		}(workerIndex)
-	}
-
-	for sourceFileIndex := range sourceContainer.Files {
-		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
-
-		if diffMapping == nil {
-			continue
-		}
-
-		sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		_, err = sourceFileReader.Seek(0, os.SEEK_SET)
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		_, err = targetFileReader.Seek(0, os.SEEK_SET)
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		obuf, err := ioutil.ReadAll(targetFileReader)
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		nbuf, err := ioutil.ReadAll(sourceFileReader)
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-
-		tasks <- RediffTask{
-			obuf:            obuf,
-			nbuf:            nbuf,
-			sourceFileIndex: int64(sourceFileIndex),
-		}
-	}
-
-	close(tasks)
-
-	for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
-		err = <-workerErrs
-		if err != nil {
-			return errors.Wrap(err, 0)
-		}
-	}
-
-	serializeStartTime := time.Now()
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
@@ -552,13 +435,22 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 			rc.Consumer.ProgressLabel(sourceFile.Path)
 
-			matches := allMatches[int64(sourceFileIndex)]
+			startTime := time.Now()
 
-			bdc := contexts[0]
+			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
 
-			err = bdc.WriteMessages(targetFileReader, sourceFileReader, matches, wctx.WriteMessage)
-			if err != nil {
-				return errors.Wrap(err, 0)
+			endTime := time.Now()
+
+			if rc.Timeline != nil {
+				heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
+				rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
+					Content: filepath.Base(sourceFile.Path),
+					Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
+					Title:   fmt.Sprintf("%s %s", humanize.IBytes(uint64(sourceFile.Size)), sourceFile.Path),
+					Start:   startTime.Sub(initialStart).Seconds(),
+					End:     endTime.Sub(initialStart).Seconds(),
+					Group:   0,
+				})
 			}
 		}
 
@@ -570,18 +462,6 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
-	}
-
-	serializeEndTime := time.Now()
-
-	if rc.Timeline != nil {
-		rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
-			Content: "Serializing all",
-			Style:   "background-color: black",
-			Start:   serializeStartTime.Sub(initialStart).Seconds(),
-			End:     serializeEndTime.Sub(initialStart).Seconds(),
-			Group:   -1,
-		})
 	}
 
 	err = wctx.Close()

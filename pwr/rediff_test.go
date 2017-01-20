@@ -300,7 +300,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 		patchReader := bytes.NewReader(patchBuffer.Bytes())
 
-		log("Optimizing...")
+		log("Optimizing (%d partitions)...", rc.Partitions)
 		aErr := rc.AnalyzePatch(patchReader)
 		assert.NoError(t, aErr)
 
@@ -310,11 +310,10 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		beforeOptimize := time.Now()
 		oErr := rc.OptimizePatch(patchReader, optimizedPatchBuffer)
 		assert.NoError(t, oErr)
-		log("Optimized patch in %s (spent %s sorting, %s scanning, %s writing)",
+		log("Optimized patch in %s (spent %s sorting, %s scanning)",
 			time.Since(beforeOptimize),
 			bsdiffStats.TimeSpentSorting,
 			bsdiffStats.TimeSpentScanning,
-			bsdiffStats.TimeSpentWriting,
 		)
 
 		before := patchBuffer.Len()
