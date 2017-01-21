@@ -334,18 +334,22 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 	}
 
 	initialStart := time.Now()
+	bconsumer := &state.Consumer{}
 
 	var biggestSourceFile int64
-	for sourceFileIndex, sourceFile := range sourceContainer.Files {
-		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
-		if diffMapping == nil {
-			continue
-		}
+	var totalRediffSize int64
 
-		if sourceFile.Size > biggestSourceFile {
-			biggestSourceFile = sourceFile.Size
+	for sourceFileIndex, sourceFile := range sourceContainer.Files {
+		if _, ok := rc.DiffMappings[int64(sourceFileIndex)]; ok {
+			if sourceFile.Size > biggestSourceFile {
+				biggestSourceFile = sourceFile.Size
+			}
+
+			totalRediffSize += sourceFile.Size
 		}
 	}
+
+	var doneSize int64
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
@@ -423,21 +427,25 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 				return errors.Wrap(err, 0)
 			}
 
+			rc.Consumer.ProgressLabel(fmt.Sprintf(">%s", sourceFile.Path))
+
 			_, err = sourceFileReader.Seek(0, os.SEEK_SET)
 			if err != nil {
 				return errors.Wrap(err, 0)
 			}
+
+			rc.Consumer.ProgressLabel(fmt.Sprintf("<%s", sourceFile.Path))
 
 			_, err = targetFileReader.Seek(0, os.SEEK_SET)
 			if err != nil {
 				return errors.Wrap(err, 0)
 			}
 
-			rc.Consumer.ProgressLabel(sourceFile.Path)
+			rc.Consumer.ProgressLabel(fmt.Sprintf("*%s", sourceFile.Path))
 
 			startTime := time.Now()
 
-			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, rc.Consumer)
+			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, bconsumer)
 
 			endTime := time.Now()
 
@@ -452,6 +460,8 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 					Group:   0,
 				})
 			}
+
+			doneSize += sourceFile.Size
 		}
 
 		// and don't forget to indicate success
@@ -462,6 +472,8 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
+
+		rc.Consumer.Progress(float64(doneSize) / float64(totalRediffSize))
 	}
 
 	err = wctx.Close()
