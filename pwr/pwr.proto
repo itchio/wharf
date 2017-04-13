@@ -72,6 +72,7 @@ message ManifestHeader {
 
 enum HashAlgorithm {
   SHAKE128_32 = 0;
+  CRC32C = 1;
 }
 
 message ManifestBlockHash {
@@ -97,4 +98,27 @@ message Wound {
   int64 start = 2;
   int64 end = 3;
   WoundKind kind = 4;
+}
+
+// Zip index file format
+
+message ZipIndexHeader {
+  CompressionSettings compression = 1;
+  HashAlgorithm algorithm = 2;
+}
+
+message ZipIndexEntryStart {
+  int64 fileOffset = 1;
+  string path = 2;
+  // number of ZipIndexEntry that follow
+  int64 numEntries = 3;
+}
+
+message ZipIndexEntry {
+  int64 rOffset = 2;
+  int64 wOffset = 3;
+  uint32 b = 4;
+  uint64 nb = 5;
+  bytes hist = 6;
+  bytes hash = 7;
 }
