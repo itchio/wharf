@@ -104,7 +104,6 @@ message Wound {
 
 message ZipIndexHeader {
   CompressionSettings compression = 1;
-  HashAlgorithm algorithm = 2;
 }
 
 message ZipIndexEntryStart {
@@ -118,7 +117,7 @@ message ZipIndexEntry {
   int64 rOffset = 2;
   int64 wOffset = 3;
   uint32 b = 4;
-  uint64 nb = 5;
+  uint32 nb = 5;
   bytes hist = 6;
-  bytes hash = 7;
+  uint32 hash = 7;
 }
