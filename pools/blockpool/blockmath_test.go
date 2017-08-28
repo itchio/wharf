@@ -3,7 +3,7 @@ package blockpool
 import (
 	"testing"
 
-	"github.com/alecthomas/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_BlockMath(t *testing.T) {

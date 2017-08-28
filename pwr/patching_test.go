@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alecthomas/assert"
+	"github.com/stretchr/testify/assert"
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pools/fspool"

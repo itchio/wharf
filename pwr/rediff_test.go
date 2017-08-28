@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Datadog/zstd"
-	"github.com/alecthomas/assert"
+	"github.com/stretchr/testify/assert"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pools/fspool"

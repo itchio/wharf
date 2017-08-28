@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/alecthomas/assert"
+	"github.com/stretchr/testify/assert"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"

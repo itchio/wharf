@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/alecthomas/assert"
+	"github.com/stretchr/testify/assert"
 	"github.com/itchio/wharf/pwr/drip"
 	"github.com/itchio/wharf/wrand"
 )
