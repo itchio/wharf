@@ -1,7 +1,6 @@
 package pwr
 
 import (
-	"github.com/itchio/arkive/zip"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -9,18 +8,20 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/itchio/arkive/zip"
+
 	"github.com/itchio/wharf/tlc"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_NewHealer(t *testing.T) {
-	_, err := NewHealer("", "/dev/null")
+	_, err := NewHealerEx("", "/dev/null", false)
 	assert.Error(t, err)
 
-	_, err = NewHealer("nope,/dev/null", "invalid")
+	_, err = NewHealerEx("nope,/dev/null", "invalid", false)
 	assert.Error(t, err)
 
-	healer, err := NewHealer("archive,/dev/null", "invalid")
+	healer, err := NewHealerEx("archive,/dev/null", "invalid", false)
 	assert.NoError(t, err)
 
 	_, ok := healer.(*ArchiveHealer)
