@@ -6,10 +6,10 @@ import (
 	"path"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_CopyContainer(t *testing.T) {
@@ -28,7 +28,7 @@ func Test_CopyContainer(t *testing.T) {
 		},
 	})
 
-	container, err := tlc.WalkAny(src, nil)
+	container, err := tlc.WalkAny(src, &tlc.WalkOpts{})
 	assert.NoError(t, err)
 
 	inPool := fspool.New(container, src)

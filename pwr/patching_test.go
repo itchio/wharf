@@ -582,7 +582,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	compression := &CompressionSettings{}
 	compression.Algorithm = CompressionAlgorithm_NONE
 
-	sourceContainer, err := tlc.WalkAny(v2, nil)
+	sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
 	assert.NoError(t, err)
 
 	consumer := &state.Consumer{}
@@ -590,7 +590,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	signatureBuffer := new(bytes.Buffer)
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, nil)
+		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
 		assert.NoError(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)

@@ -63,7 +63,7 @@ func Test_ArchiveHealer(t *testing.T) {
 
 	assert.NoError(t, zw.Close())
 
-	container, err := tlc.WalkAny(archivePath, nil)
+	container, err := tlc.WalkAny(archivePath, &tlc.WalkOpts{})
 	assert.NoError(t, err)
 
 	healAll := func() Healer {

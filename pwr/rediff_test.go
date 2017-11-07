@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/Datadog/zstd"
-	"github.com/stretchr/testify/assert"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
+	"github.com/stretchr/testify/assert"
 )
 
 type zstdCompressor struct{}
@@ -210,7 +210,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 	compression.Algorithm = CompressionAlgorithm_ZSTD
 	compression.Quality = 1
 
-	sourceContainer, err := tlc.WalkAny(v2, nil)
+	sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
 	assert.NoError(t, err)
 
 	consumer := &state.Consumer{
@@ -222,7 +222,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 	signatureBuffer := new(bytes.Buffer)
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, nil)
+		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
 		assert.NoError(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
@@ -281,7 +281,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 	}()
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, nil)
+		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
 		assert.NoError(t, dErr)
 
 		bsdiffStats := &bsdiff.DiffStats{}

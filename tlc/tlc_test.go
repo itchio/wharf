@@ -1,13 +1,15 @@
 package tlc
 
 import (
-	"github.com/itchio/arkive/zip"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/itchio/arkive/zip"
 
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/state"
@@ -24,7 +26,7 @@ func Test_NonDirWalk(t *testing.T) {
 	must(t, err)
 	must(t, f.Close())
 
-	_, err = WalkDir(f.Name(), nil)
+	_, err = WalkDir(f.Name(), &WalkOpts{})
 	assert.NotNil(t, err, "should refuse to walk non-directory")
 }
 
@@ -36,7 +38,7 @@ func Test_WalkZip(t *testing.T) {
 	must(t, err)
 	defer os.RemoveAll(tmpPath2)
 
-	container, err := WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, &WalkOpts{})
 	must(t, err)
 
 	zipPath := path.Join(tmpPath2, "container.zip")
@@ -47,13 +49,13 @@ func Test_WalkZip(t *testing.T) {
 	_, err = archiver.CompressZip(zipWriter, tmpPath, &state.Consumer{})
 	must(t, err)
 
-	zipSize, err := zipWriter.Seek(0, os.SEEK_CUR)
+	zipSize, err := zipWriter.Seek(0, io.SeekCurrent)
 	must(t, err)
 
 	zipReader, err := zip.NewReader(zipWriter, zipSize)
 	must(t, err)
 
-	zipContainer, err := WalkZip(zipReader, nil)
+	zipContainer, err := WalkZip(zipReader, &WalkOpts{})
 	must(t, err)
 
 	if testSymlinks {
@@ -75,7 +77,7 @@ func Test_Walk(t *testing.T) {
 	tmpPath := mktestdir(t, "walk")
 	defer os.RemoveAll(tmpPath)
 
-	container, err := WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, &WalkOpts{})
 	must(t, err)
 
 	dirs := []string{
@@ -116,13 +118,38 @@ func Test_Walk(t *testing.T) {
 		totalSize += int64(regular.Size)
 	}
 	assert.Equal(t, totalSize, container.Size, "should report correct size")
+
+	if testSymlinks {
+		container, err := WalkDir(tmpPath, &WalkOpts{Dereference: true})
+		must(t, err)
+
+		assert.EqualValues(t, 0, len(container.Symlinks), "when dereferencing, no symlinks should be listed")
+
+		files := []string{
+			"foo/dir_a/baz",
+			"foo/dir_a/bazzz",
+			"foo/dir_b/zoom",
+			"foo/file_f",
+			"foo/file_m",
+			"foo/file_o",
+			"foo/file_z",
+		}
+		for i, file := range files {
+			assert.Equal(t, file, container.Files[i].Path, "when dereferencing, symlinks should appear as files")
+		}
+
+		// add both dereferenced symlinks to total size
+		totalSize += int64(regulars[3].Size) // foo/file_z
+		totalSize += int64(regulars[1].Size) // foo/dir_a/baz
+		assert.Equal(t, totalSize, container.Size, "when dereferencing, should report correct size")
+	}
 }
 
 func Test_Prepare(t *testing.T) {
 	tmpPath := mktestdir(t, "prepare")
 	defer os.RemoveAll(tmpPath)
 
-	container, err := WalkDir(tmpPath, nil)
+	container, err := WalkDir(tmpPath, &WalkOpts{})
 	must(t, err)
 
 	tmpPath2, err := ioutil.TempDir("", "prepare")
@@ -132,7 +159,7 @@ func Test_Prepare(t *testing.T) {
 	err = container.Prepare(tmpPath2)
 	must(t, err)
 
-	container2, err := WalkDir(tmpPath2, nil)
+	container2, err := WalkDir(tmpPath2, &WalkOpts{})
 	must(t, err)
 
 	must(t, container.EnsureEqual(container2))
