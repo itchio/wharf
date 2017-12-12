@@ -99,25 +99,3 @@ message Wound {
   int64 end = 3;
   WoundKind kind = 4;
 }
-
-// Zip index file format
-
-message ZipIndexHeader {
-  CompressionSettings compression = 1;
-}
-
-message ZipIndexEntryStart {
-  int64 fileOffset = 1;
-  string path = 2;
-  // number of ZipIndexEntry that follow
-  int64 numEntries = 3;
-}
-
-message ZipIndexEntry {
-  int64 rOffset = 2;
-  int64 wOffset = 3;
-  uint32 b = 4;
-  uint32 nb = 5;
-  bytes hist = 6;
-  uint32 hash = 7;
-}
