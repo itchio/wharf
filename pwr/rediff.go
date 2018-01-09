@@ -486,7 +486,7 @@ func (rc *RediffContext) OptimizePatch(patchReader io.Reader, patchWriter io.Wri
 
 func defaultRediffCompressionSettings() *CompressionSettings {
 	return &CompressionSettings{
-		Algorithm: CompressionAlgorithm_ZSTD,
+		Algorithm: CompressionAlgorithm_BROTLI,
 		Quality:   9,
 	}
 }
