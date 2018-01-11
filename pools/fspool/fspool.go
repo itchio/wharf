@@ -16,15 +16,20 @@ const (
 	ModeMask = 0644
 )
 
+type fsEntryReader interface {
+	io.ReadSeeker
+	io.Closer
+}
+
 // FsPool is a filesystem-backed Pool+WritablePool
 type FsPool struct {
 	container *tlc.Container
 	basePath  string
 
 	fileIndex int64
-	reader    eos.File
+	reader    fsEntryReader
 
-	UniqueReader eos.File
+	UniqueReader fsEntryReader
 }
 
 var _ wsync.Pool = (*FsPool)(nil)
@@ -95,6 +100,7 @@ func (cfp *FsPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		cfp.reader = reader
 		cfp.fileIndex = fileIndex
 	}
