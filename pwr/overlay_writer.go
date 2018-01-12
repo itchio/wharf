@@ -196,7 +196,7 @@ func (ow *overlayWriter) fresh(data []byte) error {
 
 func (ow *overlayWriter) skip(skip int64) error {
 	op := &OverlayOp{
-		Fresh: skip,
+		Skip: skip,
 	}
 
 	err := ow.encoder.Encode(op)

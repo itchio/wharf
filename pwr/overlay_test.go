@@ -8,6 +8,7 @@ import (
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/pwr"
 	"github.com/stretchr/testify/assert"
 )
@@ -70,7 +71,7 @@ func testOverlayRoundtrip(t *testing.T, current []byte, patched []byte) {
 	ow := pwr.NewOverlayWriter(bytes.NewReader(current), &nopCloserWriter{outbuf})
 
 	startOverlayTime := time.Now()
-	t.Logf("== Writing to overlay...")
+	t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
 	_, err := io.Copy(ow, bytes.NewReader(patched))
 	assert.NoError(t, err)
 
@@ -78,7 +79,73 @@ func testOverlayRoundtrip(t *testing.T, current []byte, patched []byte) {
 	assert.NoError(t, err)
 
 	t.Logf("== Final overlay size: %s (wrote in %s)", humanize.IBytes(uint64(outbuf.Len())), time.Since(startOverlayTime))
+
+	startPatchTime := time.Now()
+
+	ctx := &pwr.OverlayPatchContext{}
+	bws := newBytesWriteSeeker(current, int64(len(patched)))
+
+	err = ctx.Patch(bytes.NewReader(outbuf.Bytes()), bws)
+	assert.NoError(t, err)
+
+	t.Logf("== Final patched size: %s (applied in %s)", humanize.IBytes(uint64(len(bws.Bytes()))), time.Since(startPatchTime))
+
+	assert.EqualValues(t, len(patched), len(bws.Bytes()))
+	assert.EqualValues(t, patched, bws.Bytes())
 }
+
+// bytesWriteSeeker
+
+type bytesWriteSeeker struct {
+	b []byte
+
+	size   int64
+	offset int64
+}
+
+var _ io.WriteSeeker = (*bytesWriteSeeker)(nil)
+
+func newBytesWriteSeeker(current []byte, size int64) *bytesWriteSeeker {
+	b := make([]byte, size)
+	copy(b, current)
+
+	return &bytesWriteSeeker{
+		b:      b,
+		size:   size,
+		offset: 0,
+	}
+}
+
+func (bws *bytesWriteSeeker) Write(buf []byte) (int, error) {
+	copiedLen := copy(bws.b[int(bws.offset):], buf)
+	bws.offset += int64(copiedLen)
+	return copiedLen, nil
+}
+
+func (bws *bytesWriteSeeker) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		bws.offset = offset
+	case io.SeekCurrent:
+		bws.offset += offset
+	case io.SeekEnd:
+		bws.offset = bws.size + offset
+	default:
+		return bws.offset, errors.New("invalid whence")
+	}
+
+	if bws.offset < 0 || bws.offset > bws.size {
+		return bws.offset, errors.New("invalid seek offset")
+	}
+
+	return bws.offset, nil
+}
+
+func (bws *bytesWriteSeeker) Bytes() []byte {
+	return bws.b
+}
+
+// nopCloserWriter
 
 type nopCloserWriter struct {
 	writer io.Writer
