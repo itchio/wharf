@@ -1,6 +1,7 @@
 package pwr
 
 import (
+	"bufio"
 	"encoding/gob"
 	"io"
 
@@ -14,7 +15,11 @@ type OverlayPatchContext struct {
 const overlayPatchBufSize = 32 * 1024
 
 func (ctx *OverlayPatchContext) Patch(r io.Reader, w io.WriteSeeker) error {
-	decoder := gob.NewDecoder(r)
+	br := bufio.NewReader(r)
+
+	// it's imperative that we buffer here, or gob.Decoder will
+	// make its own bufio.Reader and everything will break
+	decoder := gob.NewDecoder(br)
 	op := &OverlayOp{}
 
 	for {
@@ -44,7 +49,7 @@ func (ctx *OverlayPatchContext) Patch(r io.Reader, w io.WriteSeeker) error {
 				ctx.buf = make([]byte, overlayPatchBufSize)
 			}
 
-			_, err = io.CopyBuffer(w, io.LimitReader(r, op.Fresh), ctx.buf)
+			_, err = io.CopyBuffer(w, io.LimitReader(br, op.Fresh), ctx.buf)
 			if err != nil {
 				return errors.Wrap(err, 0)
 			}

@@ -19,7 +19,7 @@ type OverlayOp struct {
 }
 
 type overlayWriter struct {
-	w io.WriteCloser
+	w io.Writer
 	r io.Reader
 
 	offset int64
@@ -39,7 +39,10 @@ type WriteFlushCloser interface {
 	Flush() error
 }
 
-func NewOverlayWriter(r io.Reader, w io.WriteCloser) WriteFlushCloser {
+// NewOverlayWriter returns a writer that reads from `r` and only
+// encodes changed data to `w`.
+// Closing it will not close the underlying writer!
+func NewOverlayWriter(r io.Reader, w io.Writer) WriteFlushCloser {
 	rbuf := make([]byte, overlayBufSize)
 	encoder := gob.NewEncoder(w)
 
@@ -224,5 +227,5 @@ func (ow *overlayWriter) Close() error {
 		return errors.Wrap(err, 0)
 	}
 
-	return ow.w.Close()
+	return nil
 }

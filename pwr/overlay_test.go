@@ -3,7 +3,10 @@ package pwr_test
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,7 +16,127 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOverlayWriter(t *testing.T) {
+func TestOverlayWriterMemory(t *testing.T) {
+	roundtripMemory := func(t *testing.T, current []byte, patched []byte) {
+		outbuf := new(bytes.Buffer)
+		ow := pwr.NewOverlayWriter(bytes.NewReader(current), outbuf)
+
+		startOverlayTime := time.Now()
+		t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
+		_, err := io.Copy(ow, bytes.NewReader(patched))
+		assert.NoError(t, err)
+
+		err = ow.Close()
+		assert.NoError(t, err)
+
+		t.Logf("== Final overlay size: %s (wrote to memory in %s)", humanize.IBytes(uint64(outbuf.Len())), time.Since(startOverlayTime))
+
+		startPatchTime := time.Now()
+
+		ctx := &pwr.OverlayPatchContext{}
+		bws := newBytesWriteSeeker(current, int64(len(patched)))
+
+		err = ctx.Patch(bytes.NewReader(outbuf.Bytes()), bws)
+		assert.NoError(t, err)
+
+		t.Logf("== Final patched size: %s (applied in memory in %s)", humanize.IBytes(uint64(len(bws.Bytes()))), time.Since(startPatchTime))
+
+		assert.EqualValues(t, len(patched), len(bws.Bytes()))
+		assert.EqualValues(t, patched, bws.Bytes())
+	}
+
+	testOverlayWriter(t, roundtripMemory)
+}
+
+func TestOverlayWriterFS(t *testing.T) {
+	dir, err := ioutil.TempDir("", "overlay")
+	must(t, err)
+
+	t.Logf("Using temp dir %s", dir)
+	if !(os.Getenv("OVERLAY_KEEP_DIR") == "1") {
+		defer os.RemoveAll(dir)
+	}
+
+	roundtripFs := func(t *testing.T, current []byte, patched []byte) {
+		must(t, os.RemoveAll(dir))
+		must(t, os.MkdirAll(dir, 0755))
+
+		intfile, err := os.Create(filepath.Join(dir, "intermediate"))
+		must(t, err)
+
+		defer intfile.Close()
+		ow := pwr.NewOverlayWriter(bytes.NewReader(current), intfile)
+
+		startOverlayTime := time.Now()
+		t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
+		_, err = io.Copy(ow, bytes.NewReader(patched))
+		assert.NoError(t, err)
+
+		err = ow.Close()
+		assert.NoError(t, err)
+
+		overlaySize, err := intfile.Seek(0, io.SeekCurrent)
+		must(t, err)
+
+		err = intfile.Sync()
+		must(t, err)
+
+		t.Logf("== Final overlay size: %s (wrote to fs in %s)", humanize.IBytes(uint64(overlaySize)), time.Since(startOverlayTime))
+
+		// now rewind
+		_, err = intfile.Seek(0, io.SeekStart)
+		must(t, err)
+
+		patchedfile, err := os.Create(filepath.Join(dir, "patched"))
+		must(t, err)
+
+		defer patchedfile.Close()
+
+		// make it look like the current file
+		_, err = patchedfile.Write(current)
+		must(t, err)
+
+		// then rewind
+		_, err = patchedfile.Seek(0, io.SeekStart)
+		must(t, err)
+
+		startPatchTime := time.Now()
+
+		err = patchedfile.Truncate(int64(len(patched)))
+		must(t, err)
+
+		ctx := &pwr.OverlayPatchContext{}
+		err = ctx.Patch(intfile, patchedfile)
+		assert.NoError(t, err)
+
+		patchedSize, err := patchedfile.Seek(0, io.SeekCurrent)
+		must(t, err)
+
+		t.Logf("== Final patched size: %s (applied to fs in %s)", humanize.IBytes(uint64(patchedSize)), time.Since(startPatchTime))
+
+		_, err = patchedfile.Seek(0, io.SeekStart)
+		must(t, err)
+
+		result, err := ioutil.ReadAll(patchedfile)
+		must(t, err)
+
+		assert.EqualValues(t, len(patched), len(result))
+		assert.EqualValues(t, patched, result)
+	}
+
+	defer testOverlayWriter(t, roundtripFs)
+}
+
+func must(t *testing.T, err error) {
+	if err != nil {
+		assert.NoError(t, err)
+		t.FailNow()
+	}
+}
+
+type testerFunc func(t *testing.T, current []byte, patched []byte)
+
+func testOverlayWriter(t *testing.T, tester testerFunc) {
 	const fullDataSize = 4 * 1024 * 1024
 	current := make([]byte, fullDataSize)
 	patched := make([]byte, fullDataSize)
@@ -30,11 +153,11 @@ func TestOverlayWriter(t *testing.T) {
 	t.Logf("Generated in %s", time.Since(startGenTime))
 
 	t.Logf("Testing null-byte data...")
-	testOverlayRoundtrip(t, current, patched)
+	tester(t, current, patched)
 
 	t.Logf("Testing pristine data...")
 	copy(patched, current)
-	testOverlayRoundtrip(t, current, patched)
+	tester(t, current, patched)
 
 	for i := 0; i < 16; i++ {
 		freshSize := 1024 * rng.Intn(256)
@@ -50,7 +173,7 @@ func TestOverlayWriter(t *testing.T) {
 		}
 	}
 	t.Logf("Testing slightly-different data...")
-	testOverlayRoundtrip(t, current, patched)
+	tester(t, current, patched)
 
 	t.Logf("Testing larger data...")
 	{
@@ -59,39 +182,11 @@ func TestOverlayWriter(t *testing.T) {
 
 		patched = append(patched, patched[:trailingSize]...)
 	}
-	testOverlayRoundtrip(t, current, patched)
+	tester(t, current, patched)
 
 	t.Logf("Testing smaller data...")
 	patched = patched[:fullDataSize/2]
-	testOverlayRoundtrip(t, current, patched)
-}
-
-func testOverlayRoundtrip(t *testing.T, current []byte, patched []byte) {
-	outbuf := new(bytes.Buffer)
-	ow := pwr.NewOverlayWriter(bytes.NewReader(current), &nopCloserWriter{outbuf})
-
-	startOverlayTime := time.Now()
-	t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
-	_, err := io.Copy(ow, bytes.NewReader(patched))
-	assert.NoError(t, err)
-
-	err = ow.Close()
-	assert.NoError(t, err)
-
-	t.Logf("== Final overlay size: %s (wrote in %s)", humanize.IBytes(uint64(outbuf.Len())), time.Since(startOverlayTime))
-
-	startPatchTime := time.Now()
-
-	ctx := &pwr.OverlayPatchContext{}
-	bws := newBytesWriteSeeker(current, int64(len(patched)))
-
-	err = ctx.Patch(bytes.NewReader(outbuf.Bytes()), bws)
-	assert.NoError(t, err)
-
-	t.Logf("== Final patched size: %s (applied in %s)", humanize.IBytes(uint64(len(bws.Bytes()))), time.Since(startPatchTime))
-
-	assert.EqualValues(t, len(patched), len(bws.Bytes()))
-	assert.EqualValues(t, patched, bws.Bytes())
+	tester(t, current, patched)
 }
 
 // bytesWriteSeeker
@@ -143,20 +238,4 @@ func (bws *bytesWriteSeeker) Seek(offset int64, whence int) (int64, error) {
 
 func (bws *bytesWriteSeeker) Bytes() []byte {
 	return bws.b
-}
-
-// nopCloserWriter
-
-type nopCloserWriter struct {
-	writer io.Writer
-}
-
-var _ io.WriteCloser = (*nopCloserWriter)(nil)
-
-func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
-	return ncw.writer.Write(buf)
-}
-
-func (ncw *nopCloserWriter) Close() error {
-	return nil
 }
