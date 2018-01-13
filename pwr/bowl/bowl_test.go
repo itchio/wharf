@@ -112,6 +112,19 @@ func Test_DuplicateTwo(t *testing.T) {
 	})
 }
 
+func Test_Swaperoo(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("foodir/foo", []byte("these names are often chosen by"))
+			p.file("bardir/bar", []byte("...developers whose imagination has run dry"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("foodir/foo", "bardir/bar")
+			p.transpose("bardir/bar", "foodir/foo")
+		},
+	})
+}
+
 func Test_AllTogetherNow(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
