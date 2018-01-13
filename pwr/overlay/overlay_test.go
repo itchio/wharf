@@ -1,4 +1,4 @@
-package pwr_test
+package overlay_test
 
 import (
 	"bytes"
@@ -12,14 +12,14 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/go-errors/errors"
-	"github.com/itchio/wharf/pwr"
+	"github.com/itchio/wharf/pwr/overlay"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestOverlayWriterMemory(t *testing.T) {
 	roundtripMemory := func(t *testing.T, current []byte, patched []byte) {
 		outbuf := new(bytes.Buffer)
-		ow := pwr.NewOverlayWriter(bytes.NewReader(current), outbuf)
+		ow := overlay.NewOverlayWriter(bytes.NewReader(current), outbuf)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
@@ -33,7 +33,7 @@ func TestOverlayWriterMemory(t *testing.T) {
 
 		startPatchTime := time.Now()
 
-		ctx := &pwr.OverlayPatchContext{}
+		ctx := &overlay.OverlayPatchContext{}
 		bws := newBytesWriteSeeker(current, int64(len(patched)))
 
 		err = ctx.Patch(bytes.NewReader(outbuf.Bytes()), bws)
@@ -65,7 +65,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		must(t, err)
 
 		defer intfile.Close()
-		ow := pwr.NewOverlayWriter(bytes.NewReader(current), intfile)
+		ow := overlay.NewOverlayWriter(bytes.NewReader(current), intfile)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", humanize.IBytes(uint64(len(patched))))
@@ -105,7 +105,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		err = patchedfile.Truncate(int64(len(patched)))
 		must(t, err)
 
-		ctx := &pwr.OverlayPatchContext{}
+		ctx := &overlay.OverlayPatchContext{}
 		err = ctx.Patch(intfile, patchedfile)
 		assert.NoError(t, err)
 
