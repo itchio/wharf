@@ -649,10 +649,12 @@ func (s byDecreasingLength) Less(i, j int) bool {
 
 func (ob *overlayBowl) deleteGhosts() error {
 	ghosts := detectGhosts(ob.SourceContainer, ob.TargetContainer)
+	debugf("%d total ghosts", len(ghosts))
 
 	sort.Sort(byDecreasingLength(ghosts))
 
 	for _, ghost := range ghosts {
+		debugf("ghost: %v", ghost)
 		op := filepath.Join(ob.OutputFolder, filepath.FromSlash(ghost.Path))
 
 		err := os.Remove(op)
