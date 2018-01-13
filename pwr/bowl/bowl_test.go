@@ -6,7 +6,7 @@ import (
 	"github.com/itchio/wharf/pwr/bowl"
 )
 
-func TestBowlPatchOneSameLength(t *testing.T) {
+func Test_PatchOneSameLength(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("patched", []byte("moon"))
@@ -17,7 +17,7 @@ func TestBowlPatchOneSameLength(t *testing.T) {
 	})
 }
 
-func TestBowlPatchOneSameContents(t *testing.T) {
+func Test_PatchOneSameContents(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("patched", []byte("moon"))
@@ -28,7 +28,7 @@ func TestBowlPatchOneSameContents(t *testing.T) {
 	})
 }
 
-func TestBowlPatchOneLonger(t *testing.T) {
+func Test_PatchOneLonger(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("patched", []byte("moon"))
@@ -39,7 +39,7 @@ func TestBowlPatchOneLonger(t *testing.T) {
 	})
 }
 
-func TestBowlPatchOneShorter(t *testing.T) {
+func Test_PatchOneShorter(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("patched", []byte("nothing makes sense without the end"))
@@ -50,7 +50,20 @@ func TestBowlPatchOneShorter(t *testing.T) {
 	})
 }
 
-func TestBowlRenameOneA(t *testing.T) {
+func Test_PatchOneAddTwo(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("patched", []byte("moon"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.patch("patched", []byte("moon and stars"))
+			p.patch("sticks", []byte("not my tempo"))
+			p.patch("bones", []byte("it's just a yard, don't be so grave"))
+		},
+	})
+}
+
+func Test_RenameOneA(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("fleeting", []byte("nothing makes sense without the end"))
@@ -61,7 +74,7 @@ func TestBowlRenameOneA(t *testing.T) {
 	})
 }
 
-func TestBowlRenameOneB(t *testing.T) {
+func Test_RenameOneB(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("that/is/pretty/deep", []byte("nothing makes sense without the end"))
@@ -72,7 +85,7 @@ func TestBowlRenameOneB(t *testing.T) {
 	})
 }
 
-func TestBowlDuplicateOne(t *testing.T) {
+func Test_DuplicateOne(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("fool", []byte("oh?"))
@@ -84,7 +97,7 @@ func TestBowlDuplicateOne(t *testing.T) {
 	})
 }
 
-func TestBowlDuplicateTwo(t *testing.T) {
+func Test_DuplicateTwo(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("foo", []byte("these names are often chosen by"))
@@ -99,7 +112,7 @@ func TestBowlDuplicateTwo(t *testing.T) {
 	})
 }
 
-func TestBowlAllTogetherNow(t *testing.T) {
+func Test_AllTogetherNow(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("peaceful", []byte("i am not to be disturbed"))
