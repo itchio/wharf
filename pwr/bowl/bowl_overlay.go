@@ -557,6 +557,16 @@ func (ob *overlayBowl) applyOverlays() error {
 			return errors.Wrap(err, 0)
 		}
 
+		finalSize, err := w.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		err = w.Truncate(finalSize)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
 		return nil
 	}
 

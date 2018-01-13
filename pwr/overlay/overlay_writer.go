@@ -95,7 +95,7 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 	rbuf := ow.rbuf
 
 	// time to compare!
-	rbuflen, err := ow.r.Read(rbuf)
+	rbuflen, err := ow.r.Read(rbuf[:len(buf)])
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// EOF is fine, new file might be larger
@@ -163,7 +163,7 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 	}
 
 	// finally, if we have any trailing data, it's fresh
-	if rbuflen < overlayBufSize {
+	if rbuflen < len(buf) {
 		err = ow.fresh(buf[rbuflen:])
 		if err != nil {
 			return 0, errors.Wrap(err, 0)

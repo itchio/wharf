@@ -6,7 +6,100 @@ import (
 	"github.com/itchio/wharf/pwr/bowl"
 )
 
-func TestBowl(t *testing.T) {
+func TestBowlPatchOneSameLength(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("patched", []byte("moon"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.patch("patched", []byte("leaf"))
+		},
+	})
+}
+
+func TestBowlPatchOneSameContents(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("patched", []byte("moon"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.patch("patched", []byte("moon"))
+		},
+	})
+}
+
+func TestBowlPatchOneLonger(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("patched", []byte("moon"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.patch("patched", []byte("moon and stars"))
+		},
+	})
+}
+
+func TestBowlPatchOneShorter(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("patched", []byte("nothing makes sense without the end"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.patch("patched", []byte("nothing makes sense"))
+		},
+	})
+}
+
+func TestBowlRenameOneA(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("fleeting", []byte("nothing makes sense without the end"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("fleeting", "that/is/pretty/deep")
+		},
+	})
+}
+
+func TestBowlRenameOneB(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("that/is/pretty/deep", []byte("nothing makes sense without the end"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("that/is/pretty/deep", "for/an/egg")
+		},
+	})
+}
+
+func TestBowlDuplicateOne(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("fool", []byte("oh?"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("fool", "interview/fool")
+			p.transpose("fool", "senseless/fool")
+		},
+	})
+}
+
+func TestBowlDuplicateTwo(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("foo", []byte("these names are often chosen by"))
+			p.file("bar", []byte("...developers whose imagination has run dry"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("foo", "somewhere/over/the/foo1")
+			p.transpose("foo", "rainbow/foo2")
+			p.transpose("bar", "somewhere/over/the/bar1")
+			p.transpose("bar", "hedge/bar2")
+		},
+	})
+}
+
+func TestBowlAllTogetherNow(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
 			p.file("peaceful", []byte("i am not to be disturbed"))
