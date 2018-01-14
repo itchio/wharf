@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package io.itch.wharf.wire;
+option go_package = "wire";
+
+message Sample {
+    bytes data = 1;
+    int64 number = 2;
+    bool eof = 3;
+}
