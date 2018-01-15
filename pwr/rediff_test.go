@@ -11,10 +11,13 @@ import (
 
 	"github.com/Datadog/zstd"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/itchio/savior"
+	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/wharf/zstdsource"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,8 +29,8 @@ func (zc *zstdCompressor) Apply(writer io.Writer, quality int32) (io.Writer, err
 
 type zstdDecompressor struct{}
 
-func (zd *zstdDecompressor) Apply(reader io.Reader) (io.Reader, error) {
-	return zstd.NewReader(reader), nil
+func (zd *zstdDecompressor) Apply(reader savior.Source) (savior.Source, error) {
+	return zstdsource.New(reader), nil
 }
 
 func init() {
@@ -250,7 +253,11 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		assert.NoError(t, dctx.WritePatch(patchBuffer, signatureBuffer))
 	}()
 
-	signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
+	sigReader := seeksource.FromBytes(signatureBuffer.Bytes())
+	_, sigErr := sigReader.Resume(nil)
+	must(t, sigErr)
+
+	signature, sErr := ReadSignature(sigReader)
 	assert.NoError(t, sErr)
 
 	v1Before := filepath.Join(mainDir, "v1Before")
@@ -269,12 +276,18 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			Consumer: consumer,
 		}
 
-		patchReader := bytes.NewReader(patchBuffer.Bytes())
+		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
+		_, rErr := patchReader.Resume(nil)
+		must(t, rErr)
 
 		aErr := actx.ApplyPatch(patchReader)
 		assert.NoError(t, aErr)
 
-		signature, sErr := ReadSignature(bytes.NewReader(signatureBuffer.Bytes()))
+		sigReader := seeksource.FromBytes(signatureBuffer.Bytes())
+		_, sigErr := sigReader.Resume(nil)
+		must(t, sigErr)
+
+		signature, sErr := ReadSignature(sigReader)
 		assert.NoError(t, sErr)
 		assert.NoError(t, AssertValid(v1After, signature))
 		log("Original applies cleanly")
@@ -298,13 +311,16 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			BsdiffStats: bsdiffStats,
 		}
 
-		patchReader := bytes.NewReader(patchBuffer.Bytes())
+		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
+		_, rErr := patchReader.Resume(nil)
+		assert.NoError(t, rErr)
 
 		log("Optimizing (%d partitions)...", rc.Partitions)
 		aErr := rc.AnalyzePatch(patchReader)
 		assert.NoError(t, aErr)
 
-		patchReader.Seek(0, os.SEEK_SET)
+		_, rErr = patchReader.Resume(nil)
+		assert.NoError(t, rErr)
 		optimizedPatchBuffer := new(bytes.Buffer)
 
 		beforeOptimize := time.Now()
@@ -337,7 +353,9 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 				Consumer: consumer,
 			}
 
-			patchReader := bytes.NewReader(optimizedPatchBuffer.Bytes())
+			patchReader := seeksource.FromBytes(optimizedPatchBuffer.Bytes())
+			_, rErr := patchReader.Resume(nil)
+			assert.NoError(t, rErr)
 
 			aErr := actx.ApplyPatch(patchReader)
 			assert.NoError(t, aErr)

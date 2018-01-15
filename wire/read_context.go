@@ -67,6 +67,10 @@ func NewReadContext(source savior.Source) *ReadContext {
 	return r
 }
 
+func (r *ReadContext) GetSource() savior.Source {
+	return r.source
+}
+
 func (r *ReadContext) Resume(checkpoint *MessageReaderCheckpoint) error {
 	r.saveState = saveStateIdle
 	r.sourceCheckpoint = nil

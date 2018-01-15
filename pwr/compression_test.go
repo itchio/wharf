@@ -5,8 +5,10 @@ import (
 	"io"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/itchio/savior"
+	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/wire"
+	"github.com/stretchr/testify/assert"
 )
 
 type fakeCompressor struct {
@@ -28,9 +30,9 @@ type fakeDecompressor struct {
 
 var _ Decompressor = (*fakeDecompressor)(nil)
 
-func (fd *fakeDecompressor) Apply(reader io.Reader) (io.Reader, error) {
+func (fd *fakeDecompressor) Apply(source savior.Source) (savior.Source, error) {
 	fd.called = true
-	return reader, nil
+	return source, nil
 }
 
 func Test_Compression(t *testing.T) {
@@ -63,7 +65,11 @@ func Test_Compression(t *testing.T) {
 		FileIndex: 672,
 	}))
 
-	rc := wire.NewReadContext(bytes.NewReader(buf.Bytes()))
+	ss := seeksource.FromBytes(buf.Bytes())
+	_, err = ss.Resume(nil)
+	assert.NoError(t, err)
+
+	rc := wire.NewReadContext(ss)
 
 	sh := &SyncHeader{}
 	assert.NoError(t, rc.ReadMessage(sh))
