@@ -1,7 +1,7 @@
 package patcher
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/tlc"
@@ -55,7 +55,7 @@ type SaveConsumer interface {
 	Save(c *Checkpoint) (AfterSaveAction, error)
 }
 
-var ErrStop = errors.New("patching was stopped after save!")
+var ErrStop = fmt.Errorf("patching was stopped after save!")
 
 // nopSaveConsumer
 

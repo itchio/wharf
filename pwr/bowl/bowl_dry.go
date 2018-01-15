@@ -2,8 +2,6 @@ package bowl
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/tlc"
@@ -39,13 +37,13 @@ func NewDryBowl(params *DryBowlParams) (Bowl, error) {
 	}, nil
 }
 
-func (db *dryBowl) GetWriter(index int64) (io.WriteCloser, error) {
+func (db *dryBowl) GetWriter(index int64) (EntryWriter, error) {
 	if index < 0 || index >= int64(len(db.SourceContainer.Files)) {
 		return nil, errors.Wrap(fmt.Errorf("drybowl: invalid source index %d", index), 0)
 	}
 
 	// throw away the writes. alll the writes.
-	return &nopWriteCloser{ioutil.Discard}, nil
+	return &nopEntryWriter{}, nil
 }
 
 func (db *dryBowl) Transpose(t Transposition) error {
@@ -65,18 +63,39 @@ func (db *dryBowl) Commit() error {
 	return nil
 }
 
-// nopWriteCloser
+// nopEntryWriter
 
-type nopWriteCloser struct {
-	w io.Writer
+type nopEntryWriter struct {
+	offset      int64
+	initialized bool
 }
 
-var _ io.WriteCloser = (*nopWriteCloser)(nil)
+var _ EntryWriter = (*nopEntryWriter)(nil)
 
-func (nwc *nopWriteCloser) Write(buf []byte) (int, error) {
-	return nwc.w.Write(buf)
+func (new *nopEntryWriter) Resume(c *Checkpoint) (int64, error) {
+	if c != nil {
+		new.offset = c.Offset
+	}
+
+	new.initialized = true
+	return new.offset, nil
 }
 
-func (nwc *nopWriteCloser) Close() error {
+func (new *nopEntryWriter) Save() (*Checkpoint, error) {
+	return &Checkpoint{
+		Offset: new.offset,
+	}, nil
+}
+
+func (new *nopEntryWriter) Write(buf []byte) (int, error) {
+	if !new.initialized {
+		return 0, errors.Wrap(ErrUninitializedWriter, 0)
+	}
+
+	new.offset += int64(len(buf))
+	return len(buf), nil
+}
+
+func (new *nopEntryWriter) Close() error {
 	return nil
 }

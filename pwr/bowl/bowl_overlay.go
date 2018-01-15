@@ -1,6 +1,7 @@
 package bowl
 
 import (
+	"encoding/gob"
 	"fmt"
 	"io"
 	"os"
@@ -115,7 +116,7 @@ func NewOverlayBowl(params *OverlayBowlParams) (Bowl, error) {
 	}, nil
 }
 
-func (ob *overlayBowl) GetWriter(index int64) (io.WriteCloser, error) {
+func (ob *overlayBowl) GetWriter(index int64) (EntryWriter, error) {
 	sourceFile := ob.SourceContainer.Files[index]
 	if sourceFile == nil {
 		return nil, errors.Wrap(fmt.Errorf("overlayBowl: unknown source file %d", index), 0)
@@ -127,25 +128,13 @@ func (ob *overlayBowl) GetWriter(index int64) (io.WriteCloser, error) {
 		// oh damn, that file already exists in the output - let's make an overlay
 		ob.markOverlay(index)
 
-		r, err := ob.TargetPool.GetReader(targetIndex)
+		r, err := ob.TargetPool.GetReadSeeker(targetIndex)
 		if err != nil {
 			return nil, errors.Wrap(err, 0)
 		}
 
-		w, err := ob.stagePool.GetWriter(index)
-		if err != nil {
-			return nil, errors.Wrap(err, 0)
-		}
-
-		ow := overlay.NewOverlayWriter(r, w)
-
-		return &notifyWriteCloser{
-			w: ow,
-			onClose: func() error {
-				debugf("overlay writer is done")
-				return w.Close()
-			},
-		}, nil
+		wPath := ob.stagePool.GetPath(index)
+		return &overlayEntryWriter{path: wPath, readSeeker: r}, nil
 	}
 
 	// guess it's a new file! let's write it to staging anyway
@@ -153,12 +142,8 @@ func (ob *overlayBowl) GetWriter(index int64) (io.WriteCloser, error) {
 
 	debugf("returning move writer for '%s'", sourceFile.Path)
 
-	w, err := ob.stagePool.GetWriter(index)
-	if err != nil {
-		return nil, errors.Wrap(err, 0)
-	}
-
-	return w, err
+	wPath := ob.stagePool.GetPath(index)
+	return &freshEntryWriter{path: wPath}, nil
 }
 
 func (ob *overlayBowl) markOverlay(index int64) {
@@ -716,4 +701,108 @@ func (nwc *notifyWriteCloser) Close() (rErr error) {
 	}
 
 	return
+}
+
+// overlayEntryWriter
+
+type overlayEntryWriter struct {
+	path       string
+	readSeeker io.ReadSeeker
+	ow         overlay.WriteFlushCloser
+
+	readOffset  int64
+	writeOffset int64
+}
+
+type OverlayEntryWriterCheckpoint struct {
+	ReadOffset int64
+}
+
+func init() {
+	gob.Register(&OverlayEntryWriterCheckpoint{})
+}
+
+func (oew *overlayEntryWriter) Save() (*Checkpoint, error) {
+	err := oew.ow.Flush()
+	if err != nil {
+		return nil, errors.Wrap(err, 0)
+	}
+
+	readOffset, err := oew.readSeeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, errors.Wrap(err, 0)
+	}
+
+	c := &Checkpoint{
+		Offset: oew.writeOffset,
+		Data: &OverlayEntryWriterCheckpoint{
+			ReadOffset: readOffset,
+		},
+	}
+	return c, nil
+}
+
+func (oew *overlayEntryWriter) Resume(c *Checkpoint) (int64, error) {
+	err := os.MkdirAll(filepath.Dir(oew.path), 0755)
+	if err != nil {
+		return 0, errors.Wrap(err, 0)
+	}
+
+	w, err := os.OpenFile(oew.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
+	if err != nil {
+		return 0, errors.Wrap(err, 0)
+	}
+
+	if c != nil {
+		// we might need to seek y'all
+		oewc, ok := c.Data.(*OverlayEntryWriterCheckpoint)
+		if !ok {
+			return 0, errors.New("invalid checkpoint for overlayEntryWriter")
+		}
+
+		// seek the reader first
+		_, err = oew.readSeeker.Seek(oewc.ReadOffset, io.SeekStart)
+		if err != nil {
+			return 0, errors.Wrap(err, 0)
+		}
+
+		// now the writer
+		_, err = w.Seek(c.Offset, io.SeekStart)
+		if err != nil {
+			return 0, errors.Wrap(err, 0)
+		}
+
+		oew.writeOffset = c.Offset
+		oew.readOffset = oewc.ReadOffset
+	}
+
+	r := oew.readSeeker
+	oew.ow = overlay.NewOverlayWriter(r, w)
+
+	return oew.writeOffset, nil
+}
+
+func (oew *overlayEntryWriter) Write(buf []byte) (int, error) {
+	if oew.ow == nil {
+		return 0, ErrUninitializedWriter
+	}
+
+	n, err := oew.ow.Write(buf)
+	oew.writeOffset += int64(n)
+	return n, err
+}
+
+func (oew *overlayEntryWriter) Close() error {
+	if oew.ow == nil {
+		return nil
+	}
+
+	ow := oew.ow
+	oew.ow = nil
+	err := ow.Close()
+	if err != nil {
+		return errors.Wrap(err, 0)
+	}
+
+	return nil
 }
