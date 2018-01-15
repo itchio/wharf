@@ -175,6 +175,8 @@ func (sp *savingPatcher) processFile(c *Checkpoint, targetPool wsync.Pool, sh *p
 func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) error {
 	var op *pwr.SyncOp
 
+	var writer bowl.EntryWriter
+
 	if c.RsyncCheckpoint != nil {
 		return errors.New("processRsync: restore from checkpoint: stub")
 	} else {
@@ -216,15 +218,21 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 
 			return nil
 		}
-	}
 
-	writer, err := bwl.GetWriter(sh.FileIndex)
-	if err != nil {
-		return errors.Wrap(err, 0)
-	}
+		// not a full-file op, let's patch!
+		writer, err = bwl.GetWriter(sh.FileIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
 
-	// FIXME: swallowed error
-	defer writer.Close()
+		// FIXME: swallowed error
+		defer writer.Close()
+
+		_, err = writer.Resume(nil)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+	}
 
 	if sp.rsyncCtx == nil {
 		sp.rsyncCtx = wsync.NewContext(int(pwr.BlockSize))
