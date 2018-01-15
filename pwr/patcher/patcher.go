@@ -222,24 +222,13 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 	if err != nil {
 		return errors.Wrap(err, 0)
 	}
+
 	// FIXME: swallowed error
 	defer writer.Close()
-
-	errs := make(chan error)
-	ops := make(chan wsync.Operation)
 
 	if sp.rsyncCtx == nil {
 		sp.rsyncCtx = wsync.NewContext(int(pwr.BlockSize))
 	}
-
-	go func() {
-		errs <- sp.rsyncCtx.ApplyPatchFull(
-			writer,
-			targetPool,
-			ops,
-			true, /* failFast */
-		)
-	}()
 
 	if op == nil {
 		// we resumed somewhere in the middle, let's initialize op
@@ -248,22 +237,23 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 		// op is non-nil, so we started from scratch and
 		// the first op was not a full-file op.
 		// We want to relay it now
+
 		wop, err := makeWop(op)
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
 
-		select {
-		case ops <- wop:
-			// good, it went through!
-		case err := <-errs:
-			// eh, patcher wasn't happy
+		err = sp.rsyncCtx.ApplySingle(
+			writer,
+			targetPool,
+			wop,
+		)
+		if err != nil {
 			return errors.Wrap(err, 0)
 		}
 	}
 
 	// let's relay the rest of the messages!
-relayMessages:
 	for {
 		if sp.sc.ShouldSave() {
 			return errors.New("rsync checkpoints: stub")
@@ -271,13 +261,12 @@ relayMessages:
 
 		err := sp.rctx.ReadMessage(op)
 		if err != nil {
-			close(ops)
 			return errors.Wrap(err, 0)
 		}
 
 		if op.Type == pwr.SyncOp_HEY_YOU_DID_IT {
 			// hey, we did it!
-			break relayMessages
+			return nil
 		}
 
 		wop, err := makeWop(op)
@@ -285,24 +274,17 @@ relayMessages:
 			return errors.Wrap(err, 0)
 		}
 
-		select {
-		case ops <- wop:
-			// good, enjoy that lil' operation, patcher!
-		case err := <-errs:
-			// eh, patcher wasn't happy
+		err = sp.rsyncCtx.ApplySingle(
+			writer,
+			targetPool,
+			wop,
+		)
+		if err != nil {
 			return errors.Wrap(err, 0)
 		}
 	}
 
-	// wait for patcher to finish its business
-	close(ops)
-	err = <-errs
-	if err != nil {
-		return errors.Wrap(err, 0)
-	}
-
-	// and I think we're done?
-
+	// ohey, we're done!
 	return nil
 }
 
