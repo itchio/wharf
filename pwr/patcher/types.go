@@ -27,12 +27,14 @@ const (
 )
 
 type RsyncCheckpoint struct {
-	OutputOffset int64
+	BowlCheckpoint *bowl.Checkpoint
 }
 
 type BsdiffCheckpoint struct {
-	OutputOffset int64
-	OldOffset    int64
+	BowlCheckpoint *bowl.Checkpoint
+	// instructions in bsdiff are relative seeks, so we need to keep track of
+	// the offset in the (single) target file
+	OldOffset int64
 }
 
 type Patcher interface {
