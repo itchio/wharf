@@ -722,6 +722,10 @@ func init() {
 	gob.Register(&OverlayEntryWriterCheckpoint{})
 }
 
+func (oew *overlayEntryWriter) Tell() int64 {
+	return oew.writeOffset
+}
+
 func (oew *overlayEntryWriter) Save() (*Checkpoint, error) {
 	err := oew.ow.Flush()
 	if err != nil {

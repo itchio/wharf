@@ -72,6 +72,10 @@ type nopEntryWriter struct {
 
 var _ EntryWriter = (*nopEntryWriter)(nil)
 
+func (new *nopEntryWriter) Tell() int64 {
+	return new.offset
+}
+
 func (new *nopEntryWriter) Resume(c *Checkpoint) (int64, error) {
 	if c != nil {
 		new.offset = c.Offset

@@ -2,7 +2,9 @@ package patcher
 
 import (
 	"fmt"
+	"io"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/bsdiff"
 
 	"github.com/itchio/savior"
@@ -125,14 +127,12 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.
 	for c.FileIndex < numFiles {
 		f := sp.sourceContainer.Files[c.FileIndex]
 
-		consumer.Debugf("Patching file %d: '%s'", c.FileIndex, f.Path)
+		consumer.Debugf("→ Patching #%d: '%s'", c.FileIndex, f.Path)
 
 		err := sp.rctx.ReadMessage(sh)
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
-
-		consumer.Debugf("Got sync header: %s", sh)
 
 		if sh.FileIndex != c.FileIndex {
 			return errors.Wrap(fmt.Errorf("corrupted patch or internal error: expected file %d, got file %d", c.FileIndex, sh.FileIndex), 0)
@@ -180,7 +180,7 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 	if c.RsyncCheckpoint != nil {
 		return errors.New("processRsync: restore from checkpoint: stub")
 	} else {
-		// starting from beginning!
+		// starting from the beginning!
 
 		// let's see if it's a transposition
 		op = &pwr.SyncOp{}
@@ -213,7 +213,7 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 			}
 
 			if op.Type != pwr.SyncOp_HEY_YOU_DID_IT {
-				return errors.Wrap(fmt.Errorf("corrupt patch: expected HEY_YOU_DID_IT SyncOp, got %s", op.Type), 0)
+				return errors.Wrap(fmt.Errorf("corrupt patch: expected sentinel SyncOp after rsync series, got %s", op.Type), 0)
 			}
 
 			return nil
@@ -344,8 +344,97 @@ func (sp *savingPatcher) isFullFileOp(sh *pwr.SyncHeader, op *pwr.SyncOp) bool {
 	return true
 }
 
-func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bowl bowl.Bowl) error {
-	return errors.New("processBsdiff: stub")
+func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) error {
+	var writer bowl.EntryWriter
+	var old io.ReadSeeker
+	var oldOffset int64
+
+	if c.BsdiffCheckpoint != nil {
+		return errors.New("processBsdiff: restore from checkpoint: stub")
+	} else {
+		// starting from the beginning!
+		var err error
+
+		bh := &pwr.BsdiffHeader{}
+		err = sp.rctx.ReadMessage(bh)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		old, err = targetPool.GetReadSeeker(bh.TargetIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		// let's patch!
+		writer, err = bwl.GetWriter(sh.FileIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		// FIXME: swallowed error
+		defer writer.Close()
+
+		_, err = writer.Resume(nil)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+	}
+
+	if sp.bsdiffCtx == nil {
+		sp.bsdiffCtx = bsdiff.NewPatchContext()
+	}
+
+	ipc, err := sp.bsdiffCtx.NewIndividualPatchContext(
+		old,
+		oldOffset,
+		writer,
+	)
+	if err != nil {
+		return errors.Wrap(err, 0)
+	}
+
+	ctrl := &bsdiff.Control{}
+	for {
+		err = sp.rctx.ReadMessage(ctrl)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		if ctrl.Eof {
+			// woo!
+			break
+		}
+
+		ipc.Apply(ctrl)
+	}
+
+	// now read the sentinel syncop
+	op := &pwr.SyncOp{}
+	err = sp.rctx.ReadMessage(op)
+	if err != nil {
+		return errors.Wrap(err, 0)
+	}
+
+	if op.Type != pwr.SyncOp_HEY_YOU_DID_IT {
+		return errors.Wrap(fmt.Errorf("corrupt patch: expected sentinel SyncOp after bsdiff series, got %s", op.Type), 0)
+	}
+
+	// now check the final size
+	f := sp.sourceContainer.Files[sh.FileIndex]
+	finalSize := writer.Tell()
+	if finalSize != f.Size {
+		err = fmt.Errorf("corrupted patch: expected '%s' to be %s after patching, but it's %s",
+			f.Path,
+			humanize.IBytes(uint64(f.Size)),
+			humanize.IBytes(uint64(finalSize)),
+		)
+		return errors.Wrap(err, 0)
+	}
+
+	// and we're done!
+
+	return nil
 }
 
 func (sp *savingPatcher) SetSaveConsumer(sc SaveConsumer) {

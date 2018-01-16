@@ -32,9 +32,14 @@ type RsyncCheckpoint struct {
 
 type BsdiffCheckpoint struct {
 	BowlCheckpoint *bowl.Checkpoint
+
 	// instructions in bsdiff are relative seeks, so we need to keep track of
 	// the offset in the (single) target file
 	OldOffset int64
+
+	// bsdiff series are applied against a single target file, and its index
+	// is in a past message, so we need to keep track of it
+	TargetIndex int64
 }
 
 type Patcher interface {

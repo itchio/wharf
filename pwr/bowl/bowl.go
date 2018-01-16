@@ -17,6 +17,7 @@ type Bowl interface {
 type EntryWriter interface {
 	Resume(checkpoint *Checkpoint) (int64, error)
 	Save() (*Checkpoint, error)
+	Tell() int64
 	io.WriteCloser
 }
 

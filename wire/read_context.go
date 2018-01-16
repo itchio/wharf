@@ -13,7 +13,7 @@ import (
 
 var (
 	// ErrFormat is returned when we find a magic number that isn't the one we expected
-	ErrFormat = errors.New("wrong magic (invalid input file)")
+	ErrFormat = fmt.Errorf("wrong magic (invalid input file)")
 )
 
 // ReadContext holds state of a wharf wire format reader

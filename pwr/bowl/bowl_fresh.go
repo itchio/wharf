@@ -125,6 +125,10 @@ type freshEntryWriter struct {
 
 var _ EntryWriter = (*freshEntryWriter)(nil)
 
+func (few *freshEntryWriter) Tell() int64 {
+	return few.offset
+}
+
 func (few *freshEntryWriter) Resume(c *Checkpoint) (int64, error) {
 	err := os.MkdirAll(filepath.Dir(few.path), 0755)
 	if err != nil {
