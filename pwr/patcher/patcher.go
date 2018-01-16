@@ -112,42 +112,51 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.
 	consumer := sp.consumer
 
 	if c != nil {
-		return errors.Wrap(fmt.Errorf("savingPatcher: Resuming with non-nil checkpoint: stub"), 0)
-	}
-
-	c = &Checkpoint{
-		FileIndex: 0,
+		err := sp.rctx.Resume(c.MessageCheckpoint)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+	} else {
+		c = &Checkpoint{
+			FileIndex: 0,
+		}
 	}
 
 	var numFiles = int64(len(sp.sourceContainer.Files))
 	consumer.Debugf("↺ Resuming from file %d / %d", c.FileIndex, numFiles)
 
-	sh := &pwr.SyncHeader{}
-
 	for c.FileIndex < numFiles {
 		f := sp.sourceContainer.Files[c.FileIndex]
+		var sh *pwr.SyncHeader
 
 		consumer.Debugf("→ Patching #%d: '%s'", c.FileIndex, f.Path)
 
-		err := sp.rctx.ReadMessage(sh)
-		if err != nil {
-			return errors.Wrap(err, 0)
+		if c.SyncHeader != nil {
+			sh = c.SyncHeader
+			consumer.Debugf("...from checkpoint")
+		} else {
+			sh = &pwr.SyncHeader{}
+
+			err := sp.rctx.ReadMessage(sh)
+			if err != nil {
+				return errors.Wrap(err, 0)
+			}
+
+			if sh.FileIndex != c.FileIndex {
+				return errors.Wrap(fmt.Errorf("corrupted patch or internal error: expected file %d, got file %d", c.FileIndex, sh.FileIndex), 0)
+			}
+
+			switch sh.Type {
+			case pwr.SyncHeader_RSYNC:
+				c.FileKind = FileKindRsync
+			case pwr.SyncHeader_BSDIFF:
+				c.FileKind = FileKindBsdiff
+			default:
+				return errors.Wrap(fmt.Errorf("unknown patch series kind %d for '%s'", sh.Type, f.Path), 0)
+			}
 		}
 
-		if sh.FileIndex != c.FileIndex {
-			return errors.Wrap(fmt.Errorf("corrupted patch or internal error: expected file %d, got file %d", c.FileIndex, sh.FileIndex), 0)
-		}
-
-		switch sh.Type {
-		case pwr.SyncHeader_RSYNC:
-			c.FileKind = FileKindRsync
-		case pwr.SyncHeader_BSDIFF:
-			c.FileKind = FileKindBsdiff
-		default:
-			return errors.Wrap(fmt.Errorf("unknown patch series kind %d for '%s'", sh.Type, f.Path), 0)
-		}
-
-		err = sp.processFile(c, targetPool, sh, bowl)
+		err := sp.processFile(c, targetPool, sh, bowl)
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
@@ -156,6 +165,8 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.
 		c.FileIndex++
 		c.RsyncCheckpoint = nil
 		c.BsdiffCheckpoint = nil
+		c.MessageCheckpoint = nil
+		c.SyncHeader = nil
 	}
 
 	return nil
@@ -178,7 +189,27 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 	var writer bowl.EntryWriter
 
 	if c.RsyncCheckpoint != nil {
-		return errors.New("processRsync: restore from checkpoint: stub")
+		var err error
+
+		// alrighty let's do it
+		writer, err = bwl.GetWriter(sh.FileIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		// FIXME: swallowed error
+		defer writer.Close()
+
+		_, err = writer.Resume(c.RsyncCheckpoint.BowlCheckpoint)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		f := sp.sourceContainer.Files[sh.FileIndex]
+		sp.consumer.Debugf("↺ Resuming rsync entry @ %s / %s",
+			humanize.IBytes(uint64(writer.Tell())),
+			humanize.IBytes(uint64(f.Size)),
+		)
 	} else {
 		// starting from the beginning!
 
@@ -264,7 +295,35 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 	// let's relay the rest of the messages!
 	for {
 		if sp.sc.ShouldSave() {
-			return errors.New("rsync checkpoints: stub")
+			sp.rctx.WantSave()
+
+			messageCheckpoint := sp.rctx.PopCheckpoint()
+			if messageCheckpoint != nil {
+				bowlCheckpoint, err := writer.Save()
+				if err != nil {
+					return errors.Wrap(err, 0)
+				}
+
+				// oh damn it's our time
+				checkpoint := &Checkpoint{
+					SyncHeader:        sh,
+					FileIndex:         sh.FileIndex,
+					FileKind:          FileKindRsync,
+					MessageCheckpoint: messageCheckpoint,
+					RsyncCheckpoint: &RsyncCheckpoint{
+						BowlCheckpoint: bowlCheckpoint,
+					},
+				}
+				action, err := sp.sc.Save(checkpoint)
+				if err != nil {
+					return errors.Wrap(err, 0)
+				}
+
+				switch action {
+				case AfterSaveStop:
+					return errors.Wrap(ErrStop, 0)
+				}
+			}
 		}
 
 		err := sp.rctx.ReadMessage(op)
@@ -274,6 +333,7 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 
 		if op.Type == pwr.SyncOp_HEY_YOU_DID_IT {
 			// hey, we did it!
+			sp.consumer.Debugf("Hey, we did it!")
 			return nil
 		}
 
@@ -447,4 +507,16 @@ func (sp *savingPatcher) GetSourceContainer() *tlc.Container {
 
 func (sp *savingPatcher) GetTargetContainer() *tlc.Container {
 	return sp.targetContainer
+}
+
+func (sp *savingPatcher) Progress() float64 {
+	if sp.rctx == nil {
+		return -2
+	}
+
+	if sp.rctx.GetSource() == nil {
+		return -1
+	}
+
+	return sp.rctx.GetSource().Progress()
 }
