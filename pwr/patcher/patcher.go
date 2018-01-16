@@ -408,9 +408,38 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 	var writer bowl.EntryWriter
 	var old io.ReadSeeker
 	var oldOffset int64
+	var targetIndex int64
 
 	if c.BsdiffCheckpoint != nil {
-		return errors.New("processBsdiff: restore from checkpoint: stub")
+		var err error
+
+		targetIndex = c.BsdiffCheckpoint.TargetIndex
+		oldOffset = c.BsdiffCheckpoint.OldOffset
+
+		old, err = targetPool.GetReadSeeker(targetIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		// alrighty let's do it
+		writer, err = bwl.GetWriter(sh.FileIndex)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		// FIXME: swallowed error
+		defer writer.Close()
+
+		_, err = writer.Resume(c.BsdiffCheckpoint.BowlCheckpoint)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		f := sp.sourceContainer.Files[sh.FileIndex]
+		sp.consumer.Debugf("↺ Resuming bsdiff entry @ %s / %s",
+			humanize.IBytes(uint64(writer.Tell())),
+			humanize.IBytes(uint64(f.Size)),
+		)
 	} else {
 		// starting from the beginning!
 		var err error
@@ -421,7 +450,9 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 			return errors.Wrap(err, 0)
 		}
 
-		old, err = targetPool.GetReadSeeker(bh.TargetIndex)
+		targetIndex = bh.TargetIndex
+
+		old, err = targetPool.GetReadSeeker(targetIndex)
 		if err != nil {
 			return errors.Wrap(err, 0)
 		}
@@ -456,6 +487,40 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 
 	ctrl := &bsdiff.Control{}
 	for {
+		if sp.sc.ShouldSave() {
+			sp.rctx.WantSave()
+
+			messageCheckpoint := sp.rctx.PopCheckpoint()
+			if messageCheckpoint != nil {
+				bowlCheckpoint, err := writer.Save()
+				if err != nil {
+					return errors.Wrap(err, 0)
+				}
+
+				// aw yeah let's save this state
+				checkpoint := &Checkpoint{
+					SyncHeader:        sh,
+					FileIndex:         sh.FileIndex,
+					FileKind:          FileKindBsdiff,
+					MessageCheckpoint: messageCheckpoint,
+					BsdiffCheckpoint: &BsdiffCheckpoint{
+						BowlCheckpoint: bowlCheckpoint,
+						OldOffset:      ipc.OldOffset,
+						TargetIndex:    targetIndex,
+					},
+				}
+				action, err := sp.sc.Save(checkpoint)
+				if err != nil {
+					return errors.Wrap(err, 0)
+				}
+
+				switch action {
+				case AfterSaveStop:
+					return errors.Wrap(ErrStop, 0)
+				}
+			}
+		}
+
 		err = sp.rctx.ReadMessage(ctrl)
 		if err != nil {
 			return errors.Wrap(err, 0)

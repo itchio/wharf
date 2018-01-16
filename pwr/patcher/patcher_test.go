@@ -3,6 +3,7 @@ package patcher_test
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func Test_Naive(t *testing.T) {
 	v1 := filepath.Join(dir, "v1")
 	wtest.MakeTestDir(t, v1, wtest.TestDirSettings{
 		Entries: []wtest.TestDirEntry{
-			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*60 + 14},
+			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*120 + 14},
 			{Path: "file-1", Seed: 0x2},
 			{Path: "dir2/file-2", Seed: 0x3},
 		},
@@ -45,7 +46,7 @@ func Test_Naive(t *testing.T) {
 	v2 := filepath.Join(dir, "v2")
 	wtest.MakeTestDir(t, v2, wtest.TestDirSettings{
 		Entries: []wtest.TestDirEntry{
-			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*80 + 14, Bsmods: []wtest.Bsmod{
+			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*160 + 14, Bsmods: []wtest.Bsmod{
 				{Interval: wtest.BlockSize/2 + 3, Delta: 0x4},
 				{Interval: wtest.BlockSize/3 + 7, Delta: 0x18},
 			}},
@@ -125,8 +126,12 @@ func Test_Naive(t *testing.T) {
 	}
 
 	// Patch!
-	tryPatchNoSaves := func(patchBytes []byte) {
-		t.Logf("Patching without saves")
+	tryPatchNoSaves := func(t *testing.T, patchBytes []byte) {
+		consumer := &state.Consumer{
+			OnMessage: func(level string, message string) {
+				t.Logf("[%s] %s", level, message)
+			},
+		}
 
 		out := filepath.Join(dir, "out")
 		defer os.RemoveAll(out)
@@ -158,8 +163,12 @@ func Test_Naive(t *testing.T) {
 		t.Logf("Patch applies cleanly!")
 	}
 
-	tryPatchWithSaves := func(patchBytes []byte) {
-		t.Logf("Patching with saves!")
+	tryPatchWithSaves := func(t *testing.T, patchBytes []byte) {
+		consumer := &state.Consumer{
+			OnMessage: func(level string, message string) {
+				t.Logf("[%s] %s", level, message)
+			},
+		}
 
 		out := filepath.Join(dir, "out")
 		defer os.RemoveAll(out)
@@ -234,9 +243,15 @@ func Test_Naive(t *testing.T) {
 	}
 
 	tryPatch := func(kind string, patchBytes []byte) {
-		t.Logf("Applying %s %s patch (%d bytes)", humanize.IBytes(uint64(len(patchBytes))), kind, len(patchBytes))
-		tryPatchNoSaves(patchBytes)
-		tryPatchWithSaves(patchBytes)
+		t.Run(fmt.Sprintf("%s-no-saves", kind), func(t *testing.T) {
+			t.Logf("Applying %s %s patch (%d bytes), no saves", humanize.IBytes(uint64(len(patchBytes))), kind, len(patchBytes))
+			tryPatchNoSaves(t, patchBytes)
+		})
+
+		t.Run(fmt.Sprintf("%s-with-saves", kind), func(t *testing.T) {
+			t.Logf("Applying %s %s patch (%d bytes) with saves", humanize.IBytes(uint64(len(patchBytes))), kind, len(patchBytes))
+			tryPatchWithSaves(t, patchBytes)
+		})
 	}
 
 	tryPatch("simple", patchBuffer.Bytes())
