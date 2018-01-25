@@ -15,13 +15,13 @@ import (
 )
 
 func Test_NewHealer(t *testing.T) {
-	_, err := NewHealerEx("", "/dev/null", false)
+	_, err := NewHealer("", "/dev/null")
 	assert.Error(t, err)
 
-	_, err = NewHealerEx("nope,/dev/null", "invalid", false)
+	_, err = NewHealer("nope,/dev/null", "invalid")
 	assert.Error(t, err)
 
-	healer, err := NewHealerEx("archive,/dev/null", "invalid", false)
+	healer, err := NewHealer("archive,/dev/null", "invalid")
 	assert.NoError(t, err)
 
 	_, ok := healer.(*ArchiveHealer)
