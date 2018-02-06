@@ -240,23 +240,34 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 		// or be at the end of the buffer.
 		sum.head = min(sum.tail+ctx.blockSize, validTo)
 
+		skip := false
+
 		// Compute the rolling hash.
-		if !rolling {
-			β, β1, β2 = βhash(buffer[sum.tail:sum.head])
-			rolling = true
-		} else {
+		if rolling {
+			βold := β
+
 			αPush = uint32(buffer[sum.head-1])
 			β1 = (β1 - αPop + αPush) % _M
 			β2 = (β2 - uint32(sum.head-sum.tail)*αPop + β1) % _M
 			β = β1 + _M*β2
+
+			if β == βold {
+				skip = true
+			}
+		} else {
+			β, β1, β2 = βhash(buffer[sum.tail:sum.head])
+			rolling = true
 		}
 
 		var blockHash *BlockHash
 
-		// Determine if there is a hash match.
-		if hh, ok := library.hashLookup[β]; ok {
-			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize, preferredFileIndex)
+		if !skip {
+			// Determine if there is a hash match.
+			if hh, ok := library.hashLookup[β]; ok {
+				blockHash = ctx.findUniqueHash(hh, buffer[sum.tail:sum.head], shortSize, preferredFileIndex)
+			}
 		}
+
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer
 		// allocation purposes) or to flush the end of the data.
