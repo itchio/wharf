@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/itchio/wharf/pwr/bowl"
@@ -205,7 +205,7 @@ func Test_Naive(t *testing.T) {
 			checkpoint = nil
 			t.Logf("Resuming patcher - has checkpoint: %v", c != nil)
 			err = p.Resume(c, targetPool, b)
-			if errors.Is(err, patcher.ErrStop) {
+			if errors.Cause(err) == patcher.ErrStop {
 				t.Logf("Patcher returned ErrStop")
 
 				if checkpoint == nil {

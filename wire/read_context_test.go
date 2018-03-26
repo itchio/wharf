@@ -13,7 +13,6 @@ import (
 	"github.com/itchio/savior/seeksource"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/wire"
 	"github.com/stretchr/testify/assert"
 )
@@ -132,9 +131,6 @@ func writeSampleMessages(t *testing.T, w *wire.WriteContext) {
 
 func must(t *testing.T, err error) {
 	if err != nil {
-		if se, ok := err.(*errors.Error); ok {
-			t.Logf("Full error stack: %s", se.ErrorStack())
-		}
 		assert.NoError(t, err)
 		t.FailNow()
 	}

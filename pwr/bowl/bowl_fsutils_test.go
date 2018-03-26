@@ -8,23 +8,23 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 func ditto(dst string, src string) error {
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return errors.Wrap(err, 0)
+			return errors.WithStack(err)
 		}
 
 		relPath, err := filepath.Rel(src, path)
 		if err != nil {
-			return errors.Wrap(err, 0)
+			return errors.WithStack(err)
 		}
 
 		dstPath := filepath.Join(dst, relPath)
@@ -33,7 +33,7 @@ func ditto(dst string, src string) error {
 		case info.IsDir():
 			err = os.MkdirAll(dstPath, info.Mode())
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 		case info.Mode()&os.ModeSymlink > 0:
 			return errors.New("don't know how to ditto symlink")
@@ -41,24 +41,24 @@ func ditto(dst string, src string) error {
 			err = func() error {
 				r, err := os.Open(path)
 				if err != nil {
-					return errors.Wrap(err, 0)
+					return errors.WithStack(err)
 				}
 				defer r.Close()
 
 				w, err := os.OpenFile(dstPath, os.O_CREATE, info.Mode())
 				if err != nil {
-					return errors.Wrap(err, 0)
+					return errors.WithStack(err)
 				}
 				defer w.Close()
 
 				_, err = io.Copy(w, r)
 				if err != nil {
-					return errors.Wrap(err, 0)
+					return errors.WithStack(err)
 				}
 				return nil
 			}()
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 		}
 
@@ -66,7 +66,7 @@ func ditto(dst string, src string) error {
 	})
 
 	if err != nil {
-		return errors.Wrap(err, 0)
+		return errors.WithStack(err)
 	}
 	return nil
 }
@@ -272,12 +272,12 @@ func (bs *bowlerSimulator) patch(sourcePath string, data []byte) {
 
 			w, err := os.Create(refPath)
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 
 			_, err = w.Write(data)
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 
 			return nil
@@ -308,7 +308,7 @@ func (bs *bowlerSimulator) transpose(targetPath string, sourcePath string) {
 		must(t, func() error {
 			r, err := bs.b.TargetPool.GetReader(targetIndex)
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 
 			refPath := filepath.Join(bs.b.RefFolder, sourcePath)
@@ -316,12 +316,12 @@ func (bs *bowlerSimulator) transpose(targetPath string, sourcePath string) {
 
 			w, err := os.Create(refPath)
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 
 			_, err = io.Copy(w, r)
 			if err != nil {
-				return errors.Wrap(err, 0)
+				return errors.WithStack(err)
 			}
 
 			return nil
@@ -351,9 +351,6 @@ func findFile(t *testing.T, container *tlc.Container, path string) int64 {
 
 func must(t *testing.T, err error) {
 	if err != nil {
-		if se, ok := err.(*errors.Error); ok {
-			t.Logf("Full stack: %s", se.ErrorStack())
-		}
 		assert.NoError(t, err)
 		t.FailNow()
 	}

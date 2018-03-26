@@ -11,8 +11,8 @@ import (
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/pwr/overlay"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 

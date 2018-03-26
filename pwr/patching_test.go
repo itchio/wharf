@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-errors/errors"
 	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -682,7 +682,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 				}
 			})
 			assert.Error(t, pErr)
-			assert.True(t, errors.Is(pErr, NotVettingError))
+			assert.Equal(t, NotVettingError, errors.Cause(pErr))
 		}()
 
 		func() {
@@ -970,9 +970,6 @@ func Test_OnlyHeaderPatch(t *testing.T) {
 
 func must(t *testing.T, err error) {
 	if err != nil {
-		if se, ok := err.(*errors.Error); ok {
-			t.Logf("Full stack: %s", se.ErrorStack())
-		}
 		assert.NoError(t, err)
 		t.FailNow()
 	}
