@@ -15,12 +15,18 @@ type EOSSettings struct {
 	MaxTries   int
 }
 
+var defaultConsumer *state.Consumer
+
 func DefaultSettings() *EOSSettings {
 	return &EOSSettings{
 		HTTPClient: defaultHTTPClient(),
-		Consumer:   nil,
+		Consumer:   defaultConsumer,
 		MaxTries:   2,
 	}
+}
+
+func SetDefaultConsumer(consumer *state.Consumer) {
+	defaultConsumer = consumer
 }
 
 func defaultHTTPClient() *http.Client {
