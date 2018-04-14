@@ -2,6 +2,7 @@ package wsync
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"math/rand"
 	"testing"
@@ -103,7 +104,7 @@ func Test_GenData(t *testing.T) {
 		targetBuffer := bytes.NewReader(p.Target.Data)
 
 		sig := make([]BlockHash, 0, 10)
-		err := rs.CreateSignature(0, targetBuffer, func(bl BlockHash) error {
+		err := rs.CreateSignature(context.Background(), 0, targetBuffer, func(bl BlockHash) error {
 			sig = append(sig, bl)
 			return nil
 		})

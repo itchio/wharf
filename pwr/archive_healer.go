@@ -56,6 +56,7 @@ type chunkHealedFunc func(chunkHealed int64)
 // Do starts receiving from the wounds channel and healing
 func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container, wounds chan *Wound) error {
 	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 
 	ah.container = container
 

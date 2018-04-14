@@ -2,6 +2,7 @@ package patcher_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"io/ioutil"
@@ -77,11 +78,11 @@ func Test_Naive(t *testing.T) {
 
 		// Sign!
 		t.Logf("Signing %s", sourceContainer.Stats())
-		sourceHashes, err = pwr.ComputeSignature(sourceContainer, fspool.New(sourceContainer, v2), consumer)
+		sourceHashes, err = pwr.ComputeSignature(context.Background(), sourceContainer, fspool.New(sourceContainer, v2), consumer)
 		wtest.Must(t, err)
 
 		targetPool := fspool.New(targetContainer, v1)
-		targetSignature, err := pwr.ComputeSignature(targetContainer, targetPool, consumer)
+		targetSignature, err := pwr.ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
 		wtest.Must(t, err)
 
 		pool := fspool.New(sourceContainer, v2)
@@ -99,7 +100,7 @@ func Test_Naive(t *testing.T) {
 			TargetSignature: targetSignature,
 		}
 
-		wtest.Must(t, dctx.WritePatch(patchBuffer, ioutil.Discard))
+		wtest.Must(t, dctx.WritePatch(context.Background(), patchBuffer, ioutil.Discard))
 
 		// Rediff!
 		t.Logf("Rediffing...")

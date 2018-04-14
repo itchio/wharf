@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/itchio/wharf/werrors"
-
 	"github.com/itchio/wharf/counter"
+
+	"github.com/itchio/wharf/multiread"
+	"github.com/itchio/wharf/taskgroup"
+
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
@@ -148,50 +150,24 @@ func (dctx *DiffContext) WritePatch(ctx context.Context, patchWriter io.Writer, 
 			preferredFileIndex = oldIndex
 		}
 
-		// TODO: we can do much simpler than that, pipes are not the
-		// right abstraction for this
-		//             / differ
-		// source file +
-		//             \ signer
-		diffReader, diffWriter := io.Pipe()
-		signReader, signWriter := io.Pipe()
+		mr := multiread.New(counter.NewReaderCallback(onSourceRead, sourceReader))
+		diffReader := mr.Reader()
+		signReader := mr.Reader()
 
-		done := make(chan error)
-
-		doCopy := func() error {
-			// pipe writers can't return errors on close
-			defer diffWriter.Close()
-			defer signWriter.Close()
-
-			sourceReadCounter := counter.NewReaderCallback(onSourceRead, sourceReader)
-			mw := io.MultiWriter(diffWriter, signWriter)
-			_, err := io.Copy(mw, sourceReadCounter)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			return nil
-		}
-		go func() { done <- doCopy() }()
-
-		go func() {
-			done <- diffContext.ComputeDiff(diffReader, blockLibrary, opsWriter, preferredFileIndex)
-		}()
-
-		go func() {
-			done <- signContext.CreateSignature(ctx, int64(fileIndex), signReader, sigWriter)
-		}()
-
-		// wait until all are done
-		// or an error occurs
-		for c := 0; c < 3; c++ {
-			select {
-			case err := <-done:
-				if err != nil {
-					return errors.WithStack(err)
-				}
-			case <-ctx.Done():
-				return werrors.ErrCancelled
-			}
+		err := taskgroup.Do(
+			ctx,
+			func() error {
+				return diffContext.ComputeDiff(diffReader, blockLibrary, opsWriter, preferredFileIndex)
+			},
+			func() error {
+				return signContext.CreateSignature(ctx, int64(fileIndex), signReader, sigWriter)
+			},
+			func() error {
+				return mr.Do()
+			},
+		)
+		if err != nil {
+			return errors.WithStack(err)
 		}
 
 		err = patchWire.WriteMessage(syncDelimiter)
@@ -210,14 +186,6 @@ func (dctx *DiffContext) WritePatch(ctx context.Context, patchWriter io.Writer, 
 	}
 
 	return nil
-}
-
-func diffFile(sctx *wsync.Context, dctx *DiffContext, blockLibrary *wsync.BlockLibrary, reader io.Reader, opsWriter wsync.OperationWriter, preferredFileIndex int64, done chan error) {
-	done <- sctx.ComputeDiff(reader, blockLibrary, opsWriter, preferredFileIndex)
-}
-
-func signFile(ctx context.Context, sctx *wsync.Context, fileIndex int, reader io.Reader, writeHash wsync.SignatureWriter, done chan error) {
-	done <- sctx.CreateSignature(ctx, int64(fileIndex), reader, writeHash)
 }
 
 func makeSigWriter(wc *wire.WriteContext) wsync.SignatureWriter {
