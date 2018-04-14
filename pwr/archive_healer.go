@@ -169,7 +169,6 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	for wound := range wounds {
 		select {
 		case <-ctx.Done():
-			cancel()
 			return werrors.ErrCancelled
 		default:
 			// keep going!
@@ -177,8 +176,6 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 
 		err := processWound(wound)
 		if err != nil {
-			close(fileIndices)
-			cancel()
 			return errors.WithStack(err)
 		}
 	}
