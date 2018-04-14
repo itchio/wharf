@@ -2,6 +2,7 @@ package pwr
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -229,7 +230,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		assert.NoError(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
-		targetSignature, dErr := ComputeSignature(targetContainer, targetPool, consumer)
+		targetSignature, dErr := ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
 		assert.NoError(t, dErr)
 
 		log("Diffing %s -> %s",
@@ -250,14 +251,14 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			TargetSignature: targetSignature,
 		}
 
-		assert.NoError(t, dctx.WritePatch(patchBuffer, signatureBuffer))
+		assert.NoError(t, dctx.WritePatch(context.Background(), patchBuffer, signatureBuffer))
 	}()
 
 	sigReader := seeksource.FromBytes(signatureBuffer.Bytes())
 	_, sigErr := sigReader.Resume(nil)
 	must(t, sigErr)
 
-	signature, sErr := ReadSignature(sigReader)
+	signature, sErr := ReadSignature(context.Background(), sigReader)
 	assert.NoError(t, sErr)
 
 	v1Before := filepath.Join(mainDir, "v1Before")
@@ -287,7 +288,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		_, sigErr := sigReader.Resume(nil)
 		must(t, sigErr)
 
-		signature, sErr := ReadSignature(sigReader)
+		signature, sErr := ReadSignature(context.Background(), sigReader)
 		assert.NoError(t, sErr)
 		assert.NoError(t, AssertValid(v1After, signature))
 		log("Original applies cleanly")

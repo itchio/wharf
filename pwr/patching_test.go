@@ -2,6 +2,7 @@ package pwr
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -595,7 +596,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		must(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
-		targetSignature, dErr := ComputeSignature(targetContainer, targetPool, consumer)
+		targetSignature, dErr := ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
 		must(t, dErr)
 
 		pool := fspool.New(sourceContainer, v2)
@@ -611,7 +612,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			TargetSignature: targetSignature,
 		}
 
-		must(t, dctx.WritePatch(patchBuffer, signatureBuffer))
+		must(t, dctx.WritePatch(context.Background(), patchBuffer, signatureBuffer))
 	}()
 
 	v1Before := filepath.Join(mainDir, "v1Before")
@@ -626,7 +627,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		_, sigErr := sigReader.Resume(nil)
 		must(t, sigErr)
 
-		signature, sErr := ReadSignature(sigReader)
+		signature, sErr := ReadSignature(context.Background(), sigReader)
 		must(t, sErr)
 
 		if !scenario.unchanged {
@@ -797,7 +798,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		_, sigErr := sigReader.Resume(nil)
 		must(t, sigErr)
 
-		signature, sErr := ReadSignature(sigReader)
+		signature, sErr := ReadSignature(context.Background(), sigReader)
 		must(t, sErr)
 
 		must(t, AssertValid(v1After, signature))
@@ -841,7 +842,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			_, sigErr := sigReader.Resume(nil)
 			must(t, sigErr)
 
-			signature, sErr := ReadSignature(sigReader)
+			signature, sErr := ReadSignature(context.Background(), sigReader)
 			must(t, sErr)
 
 			must(t, AssertValid(v1Before, signature))
@@ -887,7 +888,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 				_, sigErr := sigReader.Resume(nil)
 				must(t, sigErr)
 
-				signature, sErr := ReadSignature(sigReader)
+				signature, sErr := ReadSignature(context.Background(), sigReader)
 				must(t, sErr)
 
 				must(t, AssertValid(v1Before, signature))
