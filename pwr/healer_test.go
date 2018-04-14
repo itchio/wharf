@@ -2,6 +2,7 @@ package pwr
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -74,7 +75,7 @@ func Test_ArchiveHealer(t *testing.T) {
 		done := make(chan bool)
 
 		go func() {
-			err := healer.Do(container, wounds)
+			err := healer.Do(context.Background(), container, wounds)
 			assert.NoError(t, err)
 			done <- true
 		}()
