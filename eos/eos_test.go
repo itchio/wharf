@@ -11,9 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/itchio/httpkit/htfs"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/itchio/httpkit/httpfile"
 )
 
 func Test_OpenEmptyFile(t *testing.T) {
@@ -69,7 +68,7 @@ func (tfs *testfs) Scheme() string {
 	return "testfs"
 }
 
-func (tfs *testfs) MakeResource(u *url.URL) (httpfile.GetURLFunc, httpfile.NeedsRenewalFunc, error) {
+func (tfs *testfs) MakeResource(u *url.URL) (htfs.GetURLFunc, htfs.NeedsRenewalFunc, error) {
 	return tfs.GetURL, tfs.NeedsRenewal, nil
 }
 
@@ -109,7 +108,7 @@ func Test_OpenRemoteDownloadBuild(t *testing.T) {
 	assert.NoError(t, f.Close())
 }
 
-func Test_HttpFile(t *testing.T) {
+func Test_Htfs(t *testing.T) {
 	fakeData := []byte("aaaabbbb")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
