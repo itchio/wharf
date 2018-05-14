@@ -55,7 +55,7 @@ func (cf *CheckingFile) Read(tBuf []byte) (int, error) {
 	}
 
 	if !bytes.Equal(rBuf[:rReadBytes], tBuf[:rReadBytes]) {
-		must(errors.Errorf("reference read %d bytes, trainee read %d", rReadBytes, tReadBytes))
+		must(errors.Errorf("found difference in %d-bytes chunk read by reference & trainee", rReadBytes))
 	}
 
 	return tReadBytes, tErr
