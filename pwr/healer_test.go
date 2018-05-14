@@ -4,14 +4,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/itchio/wharf/pools"
+	"github.com/itchio/wharf/state"
 
 	"github.com/itchio/arkive/zip"
 
 	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/wharf/wrand"
+	"github.com/itchio/wharf/wtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,6 +37,8 @@ func Test_NewHealer(t *testing.T) {
 	assert.True(t, ok)
 }
 
+type healMethod func()
+
 func Test_ArchiveHealer(t *testing.T) {
 	mainDir, err := ioutil.TempDir("", "archivehealer")
 	assert.NoError(t, err)
@@ -44,7 +54,12 @@ func Test_ArchiveHealer(t *testing.T) {
 
 	zw := zip.NewWriter(archiveWriter)
 	numFiles := 16
-	fakeData := []byte{1, 2, 3, 4}
+
+	prng := wrand.RandReader{
+		Source: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+	fakeData, err := ioutil.ReadAll(io.LimitReader(prng, 4*1024))
+	wtest.Must(t, err)
 
 	nameFor := func(index int) string {
 		return fmt.Sprintf("file-%d", index)
@@ -55,7 +70,12 @@ func Test_ArchiveHealer(t *testing.T) {
 	}
 
 	for i := 0; i < numFiles; i++ {
-		writer, cErr := zw.Create(nameFor(i))
+		fh := &zip.FileHeader{
+			Name: nameFor(i),
+		}
+		fh.Method = zip.Deflate
+
+		writer, cErr := zw.CreateHeader(fh)
 		assert.NoError(t, cErr)
 
 		_, cErr = writer.Write(fakeData)
@@ -67,7 +87,20 @@ func Test_ArchiveHealer(t *testing.T) {
 	container, err := tlc.WalkAny(archivePath, &tlc.WalkOpts{})
 	assert.NoError(t, err)
 
-	healAll := func() Healer {
+	pool, err := pools.New(container, archivePath)
+	wtest.Must(t, err)
+
+	consumer := &state.Consumer{}
+
+	hashes, err := ComputeSignature(context.Background(), container, pool, consumer)
+	wtest.Must(t, err)
+
+	sigInfo := &SignatureInfo{
+		Container: container,
+		Hashes:    hashes,
+	}
+
+	healDirect := func() {
 		healer, err := NewHealer(fmt.Sprintf("archive,%s", archivePath), targetDir)
 		assert.NoError(t, err)
 
@@ -85,15 +118,27 @@ func Test_ArchiveHealer(t *testing.T) {
 				Kind:  WoundKind_FILE,
 				Index: int64(i),
 				Start: 0,
-				End:   1,
+				End:   int64(len(fakeData)),
 			}
 		}
 
 		close(wounds)
 
 		<-done
+	}
 
-		return healer
+	healValidate := func() {
+		vc := &ValidatorContext{
+			Consumer:   consumer,
+			HealPath:   fmt.Sprintf("archive,%s", archivePath),
+			NumWorkers: 1,
+		}
+		wtest.Must(t, vc.Validate(context.Background(), targetDir, sigInfo))
+	}
+
+	var healMethods = map[string]healMethod{
+		"direct":   healDirect,
+		"validate": healValidate,
 	}
 
 	assertAllFilesHealed := func() {
@@ -105,32 +150,28 @@ func Test_ArchiveHealer(t *testing.T) {
 		}
 	}
 
-	t.Logf("...with no files present")
-	healer := healAll()
-	assert.Equal(t, int64(numFiles), healer.TotalCorrupted())
-	assert.Equal(t, int64(numFiles*len(fakeData)), healer.TotalHealed())
-	assertAllFilesHealed()
+	for healMethod, doHeal := range healMethods {
+		wtest.Must(t, os.RemoveAll(targetDir))
 
-	t.Logf("...with one file too long")
-	assert.NoError(t, ioutil.WriteFile(pathFor(3), bytes.Repeat(fakeData, 4), 0644))
-	healer = healAll()
-	assert.Equal(t, int64(numFiles), healer.TotalCorrupted())
-	assert.Equal(t, int64(numFiles*len(fakeData)), healer.TotalHealed())
-	assertAllFilesHealed()
+		t.Logf("...with no files present (%s)", healMethod)
+		doHeal()
+		assertAllFilesHealed()
 
-	t.Logf("...with one file too short")
-	assert.NoError(t, ioutil.WriteFile(pathFor(7), fakeData[:1], 0644))
-	healer = healAll()
-	assert.Equal(t, int64(numFiles), healer.TotalCorrupted())
-	assert.Equal(t, int64(numFiles*len(fakeData)), healer.TotalHealed())
-	assertAllFilesHealed()
+		t.Logf("...with one file too long (%s)", healMethod)
+		assert.NoError(t, ioutil.WriteFile(pathFor(3), bytes.Repeat(fakeData, 4), 0644))
+		doHeal()
+		assertAllFilesHealed()
 
-	t.Logf("...with one file slightly corrupted")
-	corruptedFakeData := append([]byte{}, fakeData...)
-	corruptedFakeData[2] = 255
-	assert.NoError(t, ioutil.WriteFile(pathFor(9), corruptedFakeData, 0644))
-	healer = healAll()
-	assert.Equal(t, int64(numFiles), healer.TotalCorrupted())
-	assert.Equal(t, int64(numFiles*len(fakeData)), healer.TotalHealed())
-	assertAllFilesHealed()
+		t.Logf("...with one file too short (%s)", healMethod)
+		assert.NoError(t, ioutil.WriteFile(pathFor(7), fakeData[:1], 0644))
+		doHeal()
+		assertAllFilesHealed()
+
+		t.Logf("...with one file slightly corrupted (%s)", healMethod)
+		corruptedFakeData := append([]byte{}, fakeData...)
+		corruptedFakeData[2] = 255
+		assert.NoError(t, ioutil.WriteFile(pathFor(9), corruptedFakeData, 0644))
+		doHeal()
+		assertAllFilesHealed()
+	}
 }
