@@ -1,8 +1,13 @@
 package bowl_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/itchio/arkive/zip"
+
+	"github.com/itchio/wharf/pools/zipwriterpool"
 	"github.com/itchio/wharf/pwr/bowl"
 )
 
@@ -184,6 +189,35 @@ func runScenario(t *testing.T, params *bowlerParams) {
 		return b, bowlModeInPlace
 	}
 	t.Run("overlayBowl", func(t *testing.T) {
+		runBowler(t, params)
+	})
+
+	// pool bowl
+	params.makeBowl = func(p *makeBowlParams) (bowl.Bowl, bowlMode) {
+		p.ZipFilePath = filepath.Join(p.FreshFolder, "archive.zip")
+		zipFile, err := os.Create(p.ZipFilePath)
+		must(t, err)
+
+		zw := zip.NewWriter(zipFile)
+
+		p.Cleanup = func() {
+			must(t, zw.Close())
+			must(t, zipFile.Close())
+		}
+
+		wp := zipwriterpool.New(p.SourceContainer, zw)
+
+		b, err := bowl.NewPoolBowl(&bowl.PoolBowlParams{
+			TargetContainer: p.TargetContainer,
+			TargetPool:      p.TargetPool,
+			SourceContainer: p.SourceContainer,
+			OutputPool:      wp,
+		})
+		must(t, err)
+
+		return b, bowlModeZip
+	}
+	t.Run("poolBowl", func(t *testing.T) {
 		runBowler(t, params)
 	})
 }

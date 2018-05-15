@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/state"
+
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/tlc"
@@ -93,6 +96,7 @@ const (
 	bowlModeNoop    bowlMode = 0
 	bowlModeFresh   bowlMode = 1
 	bowlModeInPlace bowlMode = 2
+	bowlModeZip     bowlMode = 3
 )
 
 type bowlerParams struct {
@@ -107,6 +111,9 @@ type makeBowlParams struct {
 	TargetPool      wsync.Pool
 	TargetFolder    string
 	FreshFolder     string
+
+	ZipFilePath string
+	Cleanup     func()
 }
 
 func runBowler(t *testing.T, params *bowlerParams) {
@@ -159,13 +166,14 @@ func runBowler(t *testing.T, params *bowlerParams) {
 	b.SourceContainer = sourceContainer
 
 	// now create the bowl
-	bowl, bowlmode := params.makeBowl(&makeBowlParams{
+	mbp := &makeBowlParams{
 		TargetContainer: b.TargetContainer,
 		SourceContainer: b.SourceContainer,
 		TargetPool:      targetPool,
 		TargetFolder:    targetFolder,
 		FreshFolder:     freshFolder,
-	})
+	}
+	bowl, bowlmode := params.makeBowl(mbp)
 
 	// now apply for real
 	bs = &bowlerSimulator{
@@ -179,6 +187,10 @@ func runBowler(t *testing.T, params *bowlerParams) {
 	must(t, targetPool.Close())
 	must(t, bowl.Commit())
 
+	if mbp.Cleanup != nil {
+		mbp.Cleanup()
+	}
+
 	// and now check!
 	var outFolder = ""
 	switch bowlmode {
@@ -186,6 +198,13 @@ func runBowler(t *testing.T, params *bowlerParams) {
 		outFolder = freshFolder
 	case bowlModeInPlace:
 		outFolder = targetFolder
+	case bowlModeZip:
+		outFolder = freshFolder
+		_, err = archiver.ExtractPath(mbp.ZipFilePath, outFolder, archiver.ExtractSettings{
+			Consumer: &state.Consumer{},
+		})
+		must(t, err)
+		must(t, os.Remove(mbp.ZipFilePath))
 	}
 
 	if outFolder != "" {
