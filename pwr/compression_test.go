@@ -47,7 +47,7 @@ func Test_Compression(t *testing.T) {
 	buf := new(bytes.Buffer)
 	wc := wire.NewWriteContext(buf)
 	_, err := CompressWire(wc, &CompressionSettings{
-		Algorithm: CompressionAlgorithm_BROTLI,
+		Algorithm: CompressionAlgorithm(64),
 		Quality:   3,
 	})
 	assert.NotNil(t, err)
