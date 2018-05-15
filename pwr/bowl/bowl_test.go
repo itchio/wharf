@@ -201,7 +201,6 @@ func runScenario(t *testing.T, params *bowlerParams) {
 		zw := zip.NewWriter(zipFile)
 
 		p.Cleanup = func() {
-			must(t, zw.Close())
 			must(t, zipFile.Close())
 		}
 

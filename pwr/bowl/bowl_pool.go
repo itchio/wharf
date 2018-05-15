@@ -105,8 +105,7 @@ func (pb *poolBowl) Transpose(t Transposition) (rErr error) {
 }
 
 func (pb *poolBowl) Commit() error {
-	// it's all done buddy!
-	return nil
+	return pb.OutputPool.Close()
 }
 
 // poolEntryWriter
