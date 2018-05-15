@@ -10,33 +10,35 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Datadog/zstd"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/itchio/go-brotli/enc"
 	"github.com/itchio/savior"
+	"github.com/itchio/savior/brotlisource"
 	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/zstdsource"
-	"github.com/stretchr/testify/assert"
+	"github.com/itchio/wharf/wtest"
 )
 
-type zstdCompressor struct{}
+type brotliCompressor struct{}
 
-func (zc *zstdCompressor) Apply(writer io.Writer, quality int32) (io.Writer, error) {
-	return zstd.NewWriterLevel(writer, int(quality)), nil
+func (bc *brotliCompressor) Apply(writer io.Writer, quality int32) (io.Writer, error) {
+	return enc.NewBrotliWriter(writer, &enc.BrotliWriterOptions{
+		Quality: int(quality),
+	}), nil
 }
 
-type zstdDecompressor struct{}
+type brotliDecompressor struct{}
 
-func (zd *zstdDecompressor) Apply(reader savior.Source) (savior.Source, error) {
-	return zstdsource.New(reader), nil
+func (bc *brotliDecompressor) Apply(source savior.Source) (savior.Source, error) {
+	return brotlisource.New(source), nil
 }
 
 func init() {
-	RegisterCompressor(CompressionAlgorithm_ZSTD, &zstdCompressor{})
-	RegisterDecompressor(CompressionAlgorithm_ZSTD, &zstdDecompressor{})
+	RegisterCompressor(CompressionAlgorithm_BROTLI, &brotliCompressor{})
+	RegisterDecompressor(CompressionAlgorithm_BROTLI, &brotliDecompressor{})
 }
 
 func Test_RediffOneSeq(t *testing.T) {
@@ -200,8 +202,8 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 	log := t.Logf
 
 	mainDir, err := ioutil.TempDir("", "rediff")
-	assert.NoError(t, err)
-	assert.NoError(t, os.MkdirAll(mainDir, 0755))
+	wtest.Must(t, err)
+	wtest.Must(t, os.MkdirAll(mainDir, 0755))
 	defer os.RemoveAll(mainDir)
 
 	v1 := filepath.Join(mainDir, "v1")
@@ -211,11 +213,11 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 	makeTestDir(t, v2, scenario.v2)
 
 	compression := &CompressionSettings{}
-	compression.Algorithm = CompressionAlgorithm_ZSTD
+	compression.Algorithm = CompressionAlgorithm_BROTLI
 	compression.Quality = 1
 
 	sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
-	assert.NoError(t, err)
+	wtest.Must(t, err)
 
 	consumer := &state.Consumer{
 		OnMessage: func(level string, message string) {
@@ -227,11 +229,11 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 	func() {
 		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
-		assert.NoError(t, dErr)
+		wtest.Must(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
 		targetSignature, dErr := ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
-		assert.NoError(t, dErr)
+		wtest.Must(t, dErr)
 
 		log("Diffing %s -> %s",
 			humanize.IBytes(uint64(targetContainer.Size)),
@@ -251,22 +253,22 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			TargetSignature: targetSignature,
 		}
 
-		assert.NoError(t, dctx.WritePatch(context.Background(), patchBuffer, signatureBuffer))
+		wtest.Must(t, dctx.WritePatch(context.Background(), patchBuffer, signatureBuffer))
 	}()
 
 	sigReader := seeksource.FromBytes(signatureBuffer.Bytes())
 	_, sigErr := sigReader.Resume(nil)
-	must(t, sigErr)
+	wtest.Must(t, sigErr)
 
 	signature, sErr := ReadSignature(context.Background(), sigReader)
-	assert.NoError(t, sErr)
+	wtest.Must(t, sErr)
 
 	v1Before := filepath.Join(mainDir, "v1Before")
 	cpDir(t, v1, v1Before)
 
 	v1After := filepath.Join(mainDir, "v1After")
 
-	assert.NoError(t, os.RemoveAll(v1Before))
+	wtest.Must(t, os.RemoveAll(v1Before))
 	cpDir(t, v1, v1Before)
 
 	func() {
@@ -279,24 +281,24 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
 		_, rErr := patchReader.Resume(nil)
-		must(t, rErr)
+		wtest.Must(t, rErr)
 
 		aErr := actx.ApplyPatch(patchReader)
-		assert.NoError(t, aErr)
+		wtest.Must(t, aErr)
 
 		sigReader := seeksource.FromBytes(signatureBuffer.Bytes())
 		_, sigErr := sigReader.Resume(nil)
-		must(t, sigErr)
+		wtest.Must(t, sigErr)
 
 		signature, sErr := ReadSignature(context.Background(), sigReader)
-		assert.NoError(t, sErr)
-		assert.NoError(t, AssertValid(v1After, signature))
+		wtest.Must(t, sErr)
+		wtest.Must(t, AssertValid(v1After, signature))
 		log("Original applies cleanly")
 	}()
 
 	func() {
 		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
-		assert.NoError(t, dErr)
+		wtest.Must(t, dErr)
 
 		bsdiffStats := &bsdiff.DiffStats{}
 
@@ -314,19 +316,19 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
 		_, rErr := patchReader.Resume(nil)
-		assert.NoError(t, rErr)
+		wtest.Must(t, rErr)
 
 		log("Optimizing (%d partitions)...", rc.Partitions)
 		aErr := rc.AnalyzePatch(patchReader)
-		assert.NoError(t, aErr)
+		wtest.Must(t, aErr)
 
 		_, rErr = patchReader.Resume(nil)
-		assert.NoError(t, rErr)
+		wtest.Must(t, rErr)
 		optimizedPatchBuffer := new(bytes.Buffer)
 
 		beforeOptimize := time.Now()
 		oErr := rc.OptimizePatch(patchReader, optimizedPatchBuffer)
-		assert.NoError(t, oErr)
+		wtest.Must(t, oErr)
 		log("Optimized patch in %s (spent %s sorting, %s scanning)",
 			time.Since(beforeOptimize),
 			bsdiffStats.TimeSpentSorting,
@@ -343,7 +345,7 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 			log("Patch is %.2f%% larger (%s > %s)", diff, humanize.IBytes(uint64(after)), humanize.IBytes(uint64(before)))
 		}
 
-		assert.NoError(t, os.RemoveAll(v1Before))
+		wtest.Must(t, os.RemoveAll(v1Before))
 		cpDir(t, v1, v1Before)
 
 		func() {
@@ -356,12 +358,12 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 			patchReader := seeksource.FromBytes(optimizedPatchBuffer.Bytes())
 			_, rErr := patchReader.Resume(nil)
-			assert.NoError(t, rErr)
+			wtest.Must(t, rErr)
 
 			aErr := actx.ApplyPatch(patchReader)
-			assert.NoError(t, aErr)
+			wtest.Must(t, aErr)
 
-			assert.NoError(t, AssertValid(v1After, signature))
+			wtest.Must(t, AssertValid(v1After, signature))
 			log("Optimized patch applies cleanly.")
 		}()
 	}()
