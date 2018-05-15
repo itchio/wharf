@@ -115,6 +115,7 @@ func realOpen(name string, opts ...option.Option) (File, error) {
 				MaxTries: settings.MaxTries,
 				Consumer: settings.Consumer,
 			},
+			DumpStats: settings.HTFSDumpStats,
 		}
 
 		if htfsLogLevel != "" {

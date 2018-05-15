@@ -14,6 +14,7 @@ type EOSSettings struct {
 	Consumer       *state.Consumer
 	MaxTries       int
 	ForceHTFSCheck bool
+	HTFSDumpStats  bool
 }
 
 var defaultConsumer *state.Consumer
@@ -118,4 +119,16 @@ func (o *htfsCheckOption) Apply(settings *EOSSettings) {
 
 func WithHTFSCheck() Option {
 	return &htfsCheckOption{}
+}
+
+//
+
+type htfsDumpStatsOption struct{}
+
+func (o *htfsDumpStatsOption) Apply(settings *EOSSettings) {
+	settings.HTFSDumpStats = true
+}
+
+func WithHTFSDumpStats() Option {
+	return &htfsDumpStatsOption{}
 }
