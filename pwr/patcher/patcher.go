@@ -384,7 +384,7 @@ func (sp *savingPatcher) isFullFileOp(sh *pwr.SyncHeader, op *pwr.SyncOp) bool {
 	}
 
 	targetFile := sp.targetContainer.Files[op.FileIndex]
-	outputFile := sp.targetContainer.Files[sh.FileIndex]
+	outputFile := sp.sourceContainer.Files[sh.FileIndex]
 
 	// and both files have gotta be the same size
 	if targetFile.Size != outputFile.Size {
