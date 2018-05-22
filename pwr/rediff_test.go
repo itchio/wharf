@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/go-brotli/enc"
+	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/savior"
 	"github.com/itchio/savior/brotlisource"
 	"github.com/itchio/savior/seeksource"
@@ -236,8 +236,8 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 		wtest.Must(t, dErr)
 
 		log("Diffing %s -> %s",
-			humanize.IBytes(uint64(targetContainer.Size)),
-			humanize.IBytes(uint64(sourceContainer.Size)),
+			progress.FormatBytes(targetContainer.Size),
+			progress.FormatBytes(sourceContainer.Size),
 		)
 
 		pool := fspool.New(sourceContainer, v2)
@@ -340,9 +340,9 @@ func runRediffScenario(t *testing.T, scenario patchScenario) {
 
 		diff := (float64(after) - float64(before)) / float64(before) * 100
 		if diff < 0 {
-			log("Patch is %.2f%% smaller (%s < %s)", -diff, humanize.IBytes(uint64(after)), humanize.IBytes(uint64(before)))
+			log("Patch is %.2f%% smaller (%s < %s)", -diff, progress.FormatBytes(int64(after)), progress.FormatBytes(int64(before)))
 		} else {
-			log("Patch is %.2f%% larger (%s > %s)", diff, humanize.IBytes(uint64(after)), humanize.IBytes(uint64(before)))
+			log("Patch is %.2f%% larger (%s > %s)", diff, progress.FormatBytes(int64(after)), progress.FormatBytes(int64(before)))
 		}
 
 		wtest.Must(t, os.RemoveAll(v1Before))

@@ -7,12 +7,12 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/savior/brotlisource"
 
 	"github.com/itchio/go-brotli/enc"
 	"github.com/itchio/savior/seeksource"
 
-	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/wharf/wire"
 	"github.com/stretchr/testify/assert"
 )
@@ -66,7 +66,7 @@ func Test_ReadContext(t *testing.T) {
 		writeSampleMessages(t, w)
 
 		must(t, w.Close())
-		log.Printf("Q%d payload size: %s", quality, humanize.IBytes(uint64(buf.Len())))
+		log.Printf("Q%d payload size: %s", quality, progress.FormatBytes(int64(buf.Len())))
 
 		for _, scenario := range scenarios {
 			t.Run(fmt.Sprintf("%s-q%d", scenario.name, quality), func(t *testing.T) {

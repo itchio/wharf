@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	humanize "github.com/dustin/go-humanize"
+	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -218,7 +218,7 @@ func Test_Naive(t *testing.T) {
 				enc := gob.NewEncoder(checkpointBuf)
 				wtest.Must(t, enc.Encode(checkpoint))
 
-				t.Logf("Got %s checkpoint @ %.2f%% of the patch", humanize.IBytes(uint64(checkpointBuf.Len())), p.Progress()*100.0)
+				t.Logf("Got %s checkpoint @ %.2f%% of the patch", progress.FormatBytes(int64(checkpointBuf.Len())), p.Progress()*100.0)
 
 				checkpoint = &patcher.Checkpoint{}
 				dec := gob.NewDecoder(bytes.NewReader(checkpointBuf.Bytes()))
@@ -245,12 +245,12 @@ func Test_Naive(t *testing.T) {
 
 	tryPatch := func(kind string, patchBytes []byte) {
 		t.Run(fmt.Sprintf("%s-no-saves", kind), func(t *testing.T) {
-			t.Logf("Applying %s %s patch (%d bytes), no saves", humanize.IBytes(uint64(len(patchBytes))), kind, len(patchBytes))
+			t.Logf("Applying %s %s patch (%d bytes), no saves", progress.FormatBytes(int64(len(patchBytes))), kind, len(patchBytes))
 			tryPatchNoSaves(t, patchBytes)
 		})
 
 		t.Run(fmt.Sprintf("%s-with-saves", kind), func(t *testing.T) {
-			t.Logf("Applying %s %s patch (%d bytes) with saves", humanize.IBytes(uint64(len(patchBytes))), kind, len(patchBytes))
+			t.Logf("Applying %s %s patch (%d bytes) with saves", progress.FormatBytes(int64(len(patchBytes))), kind, len(patchBytes))
 			tryPatchWithSaves(t, patchBytes)
 		})
 	}
