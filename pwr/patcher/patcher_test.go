@@ -41,6 +41,7 @@ func Test_Naive(t *testing.T) {
 			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*120 + 14},
 			{Path: "file-1", Seed: 0x2},
 			{Path: "dir2/file-2", Seed: 0x3},
+			{Path: "dir3/gone", Seed: 0x4},
 		},
 	})
 
@@ -156,10 +157,12 @@ func Test_Naive(t *testing.T) {
 		wtest.Must(t, err)
 
 		// Validate!
-		wtest.Must(t, pwr.AssertValid(out, &pwr.SignatureInfo{
+		sigInfo := &pwr.SignatureInfo{
 			Container: p.GetSourceContainer(),
 			Hashes:    sourceHashes,
-		}))
+		}
+		wtest.Must(t, pwr.AssertValid(out, sigInfo))
+		wtest.Must(t, pwr.AssertNoGhosts(out, sigInfo))
 
 		t.Logf("Patch applies cleanly!")
 	}

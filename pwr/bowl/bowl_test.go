@@ -90,6 +90,21 @@ func Test_RenameOneB(t *testing.T) {
 	})
 }
 
+func Test_RemoveHalf(t *testing.T) {
+	runScenario(t, &bowlerParams{
+		makeTarget: func(p *bowlerPreparator) {
+			p.file("one", []byte("i'm alive"))
+			p.file("two", []byte("im dead"))
+			p.file("three", []byte("i live on"))
+			p.file("four", []byte("my legacy will live on"))
+		},
+		apply: func(p *bowlerSimulator) {
+			p.transpose("one", "one")
+			p.transpose("three", "three")
+		},
+	})
+}
+
 func Test_DuplicateOne(t *testing.T) {
 	runScenario(t, &bowlerParams{
 		makeTarget: func(p *bowlerPreparator) {
