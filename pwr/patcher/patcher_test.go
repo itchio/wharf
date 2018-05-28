@@ -38,7 +38,7 @@ func Test_Naive(t *testing.T) {
 	v1 := filepath.Join(dir, "v1")
 	wtest.MakeTestDir(t, v1, wtest.TestDirSettings{
 		Entries: []wtest.TestDirEntry{
-			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*120 + 14},
+			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*220 + 14},
 			{Path: "file-1", Seed: 0x2},
 			{Path: "dir2/file-2", Seed: 0x3},
 			{Path: "dir3/gone", Seed: 0x4},
@@ -48,9 +48,12 @@ func Test_Naive(t *testing.T) {
 	v2 := filepath.Join(dir, "v2")
 	wtest.MakeTestDir(t, v2, wtest.TestDirSettings{
 		Entries: []wtest.TestDirEntry{
-			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*160 + 14, Bsmods: []wtest.Bsmod{
+			{Path: "subdir/file-1", Seed: 0x1, Size: wtest.BlockSize*260 + 14, Bsmods: []wtest.Bsmod{
 				{Interval: wtest.BlockSize/2 + 3, Delta: 0x4},
 				{Interval: wtest.BlockSize/3 + 7, Delta: 0x18},
+			}, Swaperoos: []wtest.Swaperoo{
+				{OldStart: 0, NewStart: wtest.BlockSize * 210, Size: wtest.BlockSize * 10},
+				{OldStart: 40, NewStart: wtest.BlockSize*10 + 8, Size: wtest.BlockSize * 40},
 			}},
 			{Path: "file-1", Seed: 0x2},
 			{Path: "dir2/file-2", Seed: 0x3},
