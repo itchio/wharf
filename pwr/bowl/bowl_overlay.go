@@ -526,7 +526,7 @@ func (ob *overlayBowl) applyOverlays() error {
 		defer r.Close()
 
 		outputPath := filepath.Join(ob.OutputFolder, nativePath)
-		w, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		w, err := os.OpenFile(outputPath, os.O_WRONLY, 0644)
 		if err != nil {
 			return errors.WithStack(err)
 		}
