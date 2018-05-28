@@ -720,13 +720,20 @@ type overlayEntryWriter struct {
 	path       string
 	readSeeker io.ReadSeeker
 	f          *os.File
-	ow         overlay.WriteFlushCloser
+	ow         overlay.OverlayWriter
 
-	readOffset  int64
-	writeOffset int64
+	// this is how far into the source (new) file we are.
+	// it doesn't correspond with `OverlayOffset`, which is
+	// how many bytes of output the OverlayWriter has produced.
+	sourceOffset int64
 }
 
 type OverlayEntryWriterCheckpoint struct {
+	// This offset is how many bytes we've written into the
+	// overlay, not how many bytes into the new file we are.
+	OverlayOffset int64
+
+	// This offset is how many bytes we've read from the target (old) file
 	ReadOffset int64
 }
 
@@ -735,7 +742,7 @@ func init() {
 }
 
 func (oew *overlayEntryWriter) Tell() int64 {
-	return oew.writeOffset
+	return oew.sourceOffset
 }
 
 func (oew *overlayEntryWriter) Save() (*Checkpoint, error) {
@@ -749,15 +756,11 @@ func (oew *overlayEntryWriter) Save() (*Checkpoint, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	readOffset, err := oew.readSeeker.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
 	c := &Checkpoint{
-		Offset: oew.writeOffset,
+		Offset: oew.sourceOffset,
 		Data: &OverlayEntryWriterCheckpoint{
-			ReadOffset: readOffset,
+			OverlayOffset: oew.ow.WriteOffset(),
+			ReadOffset:    oew.ow.ReadOffset(),
 		},
 	}
 	return c, nil
@@ -789,19 +792,28 @@ func (oew *overlayEntryWriter) Resume(c *Checkpoint) (int64, error) {
 		}
 
 		// now the writer
-		_, err = f.Seek(c.Offset, io.SeekStart)
+		_, err = f.Seek(oewc.OverlayOffset, io.SeekStart)
 		if err != nil {
 			return 0, errors.WithStack(err)
 		}
 
-		oew.writeOffset = c.Offset
-		oew.readOffset = oewc.ReadOffset
+		oew.sourceOffset = c.Offset
+
+		r := oew.readSeeker
+		oew.ow = overlay.NewOverlayWriter(r, oewc.ReadOffset, f, oewc.OverlayOffset)
+	} else {
+		// the pool we got the readSeeker from doesn't need to give us a reader from 0,
+		// so we need to seek here
+		_, err = oew.readSeeker.Seek(0, io.SeekStart)
+		if err != nil {
+			return 0, errors.WithStack(err)
+		}
+
+		r := oew.readSeeker
+		oew.ow = overlay.NewOverlayWriter(r, 0, f, 0)
 	}
 
-	r := oew.readSeeker
-	oew.ow = overlay.NewOverlayWriter(r, f)
-
-	return oew.writeOffset, nil
+	return oew.sourceOffset, nil
 }
 
 func (oew *overlayEntryWriter) Write(buf []byte) (int, error) {
@@ -810,7 +822,7 @@ func (oew *overlayEntryWriter) Write(buf []byte) (int, error) {
 	}
 
 	n, err := oew.ow.Write(buf)
-	oew.writeOffset += int64(n)
+	oew.sourceOffset += int64(n)
 	return n, err
 }
 
