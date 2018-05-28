@@ -19,7 +19,7 @@ import (
 func TestOverlayWriterMemory(t *testing.T) {
 	roundtripMemory := func(t *testing.T, current []byte, patched []byte) {
 		outbuf := new(bytes.Buffer)
-		ow := overlay.NewOverlayWriter(bytes.NewReader(current), outbuf)
+		ow := overlay.NewOverlayWriter(bytes.NewReader(current), 0, outbuf, 0)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", progress.FormatBytes(int64(len(patched))))
@@ -65,7 +65,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		must(t, err)
 
 		defer intfile.Close()
-		ow := overlay.NewOverlayWriter(bytes.NewReader(current), intfile)
+		ow := overlay.NewOverlayWriter(bytes.NewReader(current), 0, intfile, 0)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", progress.FormatBytes(int64(len(patched))))

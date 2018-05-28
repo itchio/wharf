@@ -47,7 +47,6 @@ var _ Bowl = (*overlayBowl)(nil)
 
 type OverlayBowlParams struct {
 	TargetContainer *tlc.Container
-	TargetPool      wsync.Pool
 	SourceContainer *tlc.Container
 
 	OutputFolder string
@@ -61,10 +60,6 @@ func NewOverlayBowl(params *OverlayBowlParams) (Bowl, error) {
 		return nil, errors.New("overlaybowl: TargetContainer must not be nil")
 	}
 
-	if params.TargetPool == nil {
-		return nil, errors.New("overlaybowl: TargetPool must not be nil")
-	}
-
 	if params.SourceContainer == nil {
 		return nil, errors.New("overlaybowl: SourceContainer must not be nil")
 	}
@@ -75,38 +70,27 @@ func NewOverlayBowl(params *OverlayBowlParams) (Bowl, error) {
 		}
 
 		stats, err := os.Stat(params.OutputFolder)
-		if err == nil {
-			if !stats.IsDir() {
-				return nil, errors.New("overlaybowl: OutputFolder (if it exists) must be a directory")
-			}
+		if err != nil {
+			return nil, errors.New("overlaybowl: OutputFolder must exist")
+		}
+
+		if !stats.IsDir() {
+			return nil, errors.New("overlaybowl: OutputFolder must exist and be a directory")
 		}
 	}
 
-	{
-		if params.StageFolder == "" {
-			return nil, errors.New("overlaybowl: StageFolder must not be nil")
-		}
-
-		stats, err := os.Stat(params.StageFolder)
-		if err == nil {
-			if !stats.IsDir() {
-				return nil, errors.New("overlaybowl: StageFolder (if it exists) must be a directory")
-			}
-		}
+	if params.StageFolder == "" {
+		return nil, errors.New("overlaybowl: StageFolder must not be nil")
 	}
 
 	var err error
-
-	err = os.MkdirAll(params.OutputFolder, 0755)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
 
 	err = os.MkdirAll(params.StageFolder, 0755)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
+	targetPool := fspool.New(params.TargetContainer, params.OutputFolder)
 	stagePool := fspool.New(params.SourceContainer, params.StageFolder)
 
 	targetFilesByPath := make(map[string]int64)
@@ -116,7 +100,7 @@ func NewOverlayBowl(params *OverlayBowlParams) (Bowl, error) {
 
 	return &overlayBowl{
 		TargetContainer: params.TargetContainer,
-		TargetPool:      params.TargetPool,
+		TargetPool:      targetPool,
 		SourceContainer: params.SourceContainer,
 
 		OutputFolder: params.OutputFolder,

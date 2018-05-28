@@ -198,7 +198,6 @@ func runScenario(t *testing.T, params *bowlerParams) {
 			TargetContainer: p.TargetContainer,
 			OutputFolder:    p.TargetFolder,
 			StageFolder:     p.FreshFolder,
-			TargetPool:      p.TargetPool,
 		})
 		must(t, err)
 
