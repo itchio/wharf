@@ -140,6 +140,10 @@ func (pew *poolEntryWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
+func (pew *poolEntryWriter) Finalize() error {
+	return nil
+}
+
 func (pew *poolEntryWriter) Close() error {
 	return pew.w.Close()
 }

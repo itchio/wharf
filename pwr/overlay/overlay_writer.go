@@ -35,7 +35,8 @@ type overlayProcessor struct {
 }
 
 type OverlayWriter interface {
-	io.WriteCloser
+	io.Writer
+	Finalize() error
 	Flush() error
 
 	ReadOffset() int64
@@ -125,6 +126,9 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 			return 0, errors.WithStack(err)
 		}
 	}
+	toProcessLen := int64(len(buf))
+	processedLen := int64(0)
+	savior.Debugf("toProcessLen = %d", toProcessLen)
 
 	{
 		// find data we can skip
@@ -134,7 +138,9 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 		commit := func(i int) error {
 			freshLen := i - same - lastOp
 			if freshLen > 0 {
-				err = ow.fresh(buf[lastOp : i-same])
+				freshBuf := buf[lastOp : i-same]
+				processedLen += int64(len(freshBuf))
+				err = ow.fresh(freshBuf)
 				if err != nil {
 					return errors.WithStack(err)
 				}
@@ -142,6 +148,7 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 			}
 
 			lastOp = i
+			processedLen += int64(same)
 			err = ow.skip(int64(same))
 			if err != nil {
 				return errors.WithStack(err)
@@ -177,7 +184,9 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 
 		// anything fresh left to write?
 		if lastOp < i {
-			err := ow.fresh(buf[lastOp:rbuflen])
+			freshBuf := buf[lastOp:rbuflen]
+			processedLen += int64(len(freshBuf))
+			err := ow.fresh(freshBuf)
 			if err != nil {
 				return 0, errors.WithStack(err)
 			}
@@ -186,11 +195,15 @@ func (op *overlayProcessor) write(buf []byte) (int, error) {
 
 	// finally, if we have any trailing data, it's fresh
 	if rbuflen < len(buf) {
-		err = ow.fresh(buf[rbuflen:])
+		freshBuf := buf[rbuflen:]
+		processedLen += int64(len(freshBuf))
+		err = ow.fresh(freshBuf)
 		if err != nil {
 			return 0, errors.WithStack(err)
 		}
 	}
+
+	savior.Debugf("toProcessLen = %d / %d", toProcessLen, processedLen)
 
 	return len(buf), nil
 }
@@ -229,12 +242,13 @@ func (ow *overlayWriter) skip(skip int64) error {
 	return nil
 }
 
-func (ow *overlayWriter) Close() error {
+func (ow *overlayWriter) Finalize() error {
 	err := ow.Flush()
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	savior.Debugf("writing HEY_YOU_DID_IT at ReadOffset %d, OverlayOffset %d", ow.ReadOffset(), ow.OverlayOffset())
 	op := &OverlayOp{
 		Type: OverlayOp_HEY_YOU_DID_IT,
 	}

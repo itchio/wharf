@@ -176,6 +176,10 @@ func (few *freshEntryWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
+func (few *freshEntryWriter) Finalize() error {
+	return nil
+}
+
 func (few *freshEntryWriter) Close() error {
 	if few.f == nil {
 		return nil

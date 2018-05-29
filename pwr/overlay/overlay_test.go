@@ -29,7 +29,7 @@ func TestOverlayWriterMemory(t *testing.T) {
 		_, err = io.Copy(ow, bytes.NewReader(patched))
 		assert.NoError(t, err)
 
-		err = ow.Close()
+		err = ow.Finalize()
 		assert.NoError(t, err)
 
 		overlaySize := int64(outbuf.Len())
@@ -133,7 +133,7 @@ func TestOverlayWriterFS(t *testing.T) {
 			}
 		}
 
-		err = ow.Close()
+		err = ow.Finalize()
 		must(t, err)
 
 		err = intfile.Sync()

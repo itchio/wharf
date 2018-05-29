@@ -314,6 +314,9 @@ func (bs *bowlerSimulator) patch(sourcePath string, data []byte) {
 
 		_, err = w.Write(data)
 		must(t, err)
+
+		err = w.Finalize()
+		must(t, err)
 	}
 }
 

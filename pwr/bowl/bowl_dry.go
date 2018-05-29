@@ -98,6 +98,10 @@ func (new *nopEntryWriter) Write(buf []byte) (int, error) {
 	return len(buf), nil
 }
 
+func (new *nopEntryWriter) Finalize() error {
+	return nil
+}
+
 func (new *nopEntryWriter) Close() error {
 	return nil
 }

@@ -740,12 +740,14 @@ func (oew *overlayEntryWriter) Save() (*Checkpoint, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	debugf("saving checkpoint: Offset = %d, ReadOffset = %d, OverlayOffset = %d",
+		oew.sourceOffset, oew.ow.ReadOffset(), oew.ow.OverlayOffset())
 
 	c := &Checkpoint{
 		Offset: oew.sourceOffset,
 		Data: &OverlayEntryWriterCheckpoint{
-			OverlayOffset: oew.ow.OverlayOffset(),
 			ReadOffset:    oew.ow.ReadOffset(),
+			OverlayOffset: oew.ow.OverlayOffset(),
 		},
 	}
 	return c, nil
@@ -771,7 +773,8 @@ func (oew *overlayEntryWriter) Resume(c *Checkpoint) (int64, error) {
 		}
 
 		// seek the reader first
-		_, err = oew.readSeeker.Seek(oewc.ReadOffset, io.SeekStart)
+		r := oew.readSeeker
+		_, err = r.Seek(oewc.ReadOffset, io.SeekStart)
 		if err != nil {
 			return 0, errors.WithStack(err)
 		}
@@ -784,7 +787,7 @@ func (oew *overlayEntryWriter) Resume(c *Checkpoint) (int64, error) {
 
 		oew.sourceOffset = c.Offset
 
-		r := oew.readSeeker
+		debugf("making overlaywriter with ReadOffset %d, OverlayOffset %d", oewc.ReadOffset, oewc.OverlayOffset)
 		oew.ow, err = overlay.NewOverlayWriter(r, oewc.ReadOffset, f, oewc.OverlayOffset)
 		if err != nil {
 			return 0, errors.WithStack(err)
@@ -798,6 +801,7 @@ func (oew *overlayEntryWriter) Resume(c *Checkpoint) (int64, error) {
 		}
 
 		r := oew.readSeeker
+		debugf("making overlaywriter with 0 ReadOffset and OverlayOffset")
 		oew.ow, err = overlay.NewOverlayWriter(r, 0, f, 0)
 		if err != nil {
 			return 0, errors.WithStack(err)
@@ -817,22 +821,23 @@ func (oew *overlayEntryWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
-func (oew *overlayEntryWriter) Close() error {
-	if oew.ow == nil {
-		return nil
+func (oew *overlayEntryWriter) Finalize() error {
+	if oew.ow != nil {
+		err := oew.ow.Finalize()
+		if err != nil {
+			return errors.WithMessage(err, "finalizing overlay writer")
+		}
+		oew.ow = nil
 	}
 
-	ow := oew.ow
-	oew.ow = nil
-	err := ow.Close()
+	err := oew.f.Sync()
 	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = oew.f.Sync()
-	if err != nil {
-		return errors.WithStack(err)
+		return errors.WithMessage(err, "syncing overlay patch file")
 	}
 
 	return nil
+}
+
+func (oew *overlayEntryWriter) Close() error {
+	return oew.f.Close()
 }
