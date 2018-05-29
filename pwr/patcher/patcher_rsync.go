@@ -25,7 +25,7 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 			return err
 		}
 
-		_, err = writer.Resume(c.RsyncCheckpoint.BowlCheckpoint)
+		_, err = writer.Resume(c.RsyncCheckpoint.WriterCheckpoint)
 		if err != nil {
 			return err
 		}
@@ -143,19 +143,24 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 
 			messageCheckpoint := sp.rctx.PopCheckpoint()
 			if messageCheckpoint != nil {
-				bowlCheckpoint, err := writer.Save()
+				bowlCheckpoint, err := bwl.Save()
 				if err != nil {
 					return errors.WithStack(err)
 				}
 
-				// oh damn it's our time
+				writerCheckpoint, err := writer.Save()
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
 				checkpoint := &Checkpoint{
 					SyncHeader:        sh,
 					FileIndex:         sh.FileIndex,
 					FileKind:          FileKindRsync,
 					MessageCheckpoint: messageCheckpoint,
+					BowlCheckpoint:    bowlCheckpoint,
 					RsyncCheckpoint: &RsyncCheckpoint{
-						BowlCheckpoint: bowlCheckpoint,
+						WriterCheckpoint: writerCheckpoint,
 					},
 				}
 				action, err := sp.sc.Save(checkpoint)

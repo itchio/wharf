@@ -100,7 +100,7 @@ func New(patchReader savior.SeekSource, consumer *state.Consumer) (Patcher, erro
 	return sp, nil
 }
 
-func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.Bowl) error {
+func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bwl bowl.Bowl) error {
 	if sp.sc == nil {
 		sp.sc = &nopSaveConsumer{}
 	}
@@ -116,6 +116,11 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.
 		c = &Checkpoint{
 			FileIndex: 0,
 		}
+	}
+
+	err := bwl.Resume(c.BowlCheckpoint)
+	if err != nil {
+		return errors.WithMessage(err, "while resuming bowl")
 	}
 
 	var numFiles = int64(len(sp.sourceContainer.Files))
@@ -152,7 +157,7 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bowl bowl.
 			}
 		}
 
-		err := sp.processFile(c, targetPool, sh, bowl)
+		err := sp.processFile(c, targetPool, sh, bwl)
 		if err != nil {
 			return err
 		}

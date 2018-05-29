@@ -43,7 +43,7 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 			}
 		})
 
-		_, err = writer.Resume(c.BsdiffCheckpoint.BowlCheckpoint)
+		_, err = writer.Resume(c.BsdiffCheckpoint.WriterCheckpoint)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -109,7 +109,12 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 
 			messageCheckpoint := sp.rctx.PopCheckpoint()
 			if messageCheckpoint != nil {
-				bowlCheckpoint, err := writer.Save()
+				bowlCheckpoint, err := bwl.Save()
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				writerCheckpoint, err := writer.Save()
 				if err != nil {
 					return errors.WithStack(err)
 				}
@@ -120,10 +125,11 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh 
 					FileIndex:         sh.FileIndex,
 					FileKind:          FileKindBsdiff,
 					MessageCheckpoint: messageCheckpoint,
+					BowlCheckpoint:    bowlCheckpoint,
 					BsdiffCheckpoint: &BsdiffCheckpoint{
-						BowlCheckpoint: bowlCheckpoint,
-						OldOffset:      ipc.OldOffset,
-						TargetIndex:    targetIndex,
+						WriterCheckpoint: writerCheckpoint,
+						OldOffset:        ipc.OldOffset,
+						TargetIndex:      targetIndex,
 					},
 				}
 				action, err := sp.sc.Save(checkpoint)
