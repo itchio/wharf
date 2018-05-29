@@ -136,6 +136,8 @@ func TestOverlayWriterFS(t *testing.T) {
 		err = ow.Finalize()
 		must(t, err)
 
+		defer intfile.Close()
+
 		err = intfile.Sync()
 		must(t, err)
 
