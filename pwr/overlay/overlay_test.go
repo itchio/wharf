@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/itchio/savior/seeksource"
+
 	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/wharf/pwr/overlay"
 	"github.com/pkg/errors"
@@ -19,27 +21,33 @@ import (
 func TestOverlayWriterMemory(t *testing.T) {
 	roundtripMemory := func(t *testing.T, current []byte, patched []byte) {
 		outbuf := new(bytes.Buffer)
-		ow := overlay.NewOverlayWriter(bytes.NewReader(current), 0, outbuf, 0)
+		ow, err := overlay.NewOverlayWriter(bytes.NewReader(current), 0, outbuf, 0)
+		must(t, err)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", progress.FormatBytes(int64(len(patched))))
-		_, err := io.Copy(ow, bytes.NewReader(patched))
+		_, err = io.Copy(ow, bytes.NewReader(patched))
 		assert.NoError(t, err)
 
 		err = ow.Close()
 		assert.NoError(t, err)
 
-		t.Logf("== Final overlay size: %s (wrote to memory in %s)", progress.FormatBytes(int64(outbuf.Len())), time.Since(startOverlayTime))
+		overlaySize := int64(outbuf.Len())
+		t.Logf("== Final overlay size: %s (%d bytes) (wrote to memory in %s)", progress.FormatBytes(overlaySize), overlaySize, time.Since(startOverlayTime))
 
 		startPatchTime := time.Now()
 
 		ctx := &overlay.OverlayPatchContext{}
 		bws := newBytesWriteSeeker(current, int64(len(patched)))
 
-		err = ctx.Patch(bytes.NewReader(outbuf.Bytes()), bws)
+		patchSource := seeksource.FromBytes(outbuf.Bytes())
+		_, err = patchSource.Resume(nil)
+		must(t, err)
+		err = ctx.Patch(patchSource, bws)
 		assert.NoError(t, err)
 
-		t.Logf("== Final patched size: %s (applied in memory in %s)", progress.FormatBytes(int64(len(bws.Bytes()))), time.Since(startPatchTime))
+		patchedSize := int64(len(bws.Bytes()))
+		t.Logf("== Final patched size: %s (%d bytes) (applied in memory in %s)", progress.FormatBytes(patchedSize), patchedSize, time.Since(startPatchTime))
 
 		assert.EqualValues(t, len(patched), len(bws.Bytes()))
 		assert.EqualValues(t, patched, bws.Bytes())
@@ -65,7 +73,8 @@ func TestOverlayWriterFS(t *testing.T) {
 		must(t, err)
 
 		defer intfile.Close()
-		ow := overlay.NewOverlayWriter(bytes.NewReader(current), 0, intfile, 0)
+		ow, err := overlay.NewOverlayWriter(bytes.NewReader(current), 0, intfile, 0)
+		must(t, err)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", progress.FormatBytes(int64(len(patched))))
@@ -81,7 +90,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		err = intfile.Sync()
 		must(t, err)
 
-		t.Logf("== Final overlay size: %s (wrote to fs in %s)", progress.FormatBytes(overlaySize), time.Since(startOverlayTime))
+		t.Logf("== Final overlay size: %s (%d bytes) (wrote to fs in %s)", progress.FormatBytes(overlaySize), overlaySize, time.Since(startOverlayTime))
 
 		// now rewind
 		_, err = intfile.Seek(0, io.SeekStart)
@@ -106,13 +115,16 @@ func TestOverlayWriterFS(t *testing.T) {
 		must(t, err)
 
 		ctx := &overlay.OverlayPatchContext{}
-		err = ctx.Patch(intfile, patchedfile)
+		patchSource := seeksource.FromFile(intfile)
+		_, err = patchSource.Resume(nil)
+		must(t, err)
+		err = ctx.Patch(patchSource, patchedfile)
 		assert.NoError(t, err)
 
 		patchedSize, err := patchedfile.Seek(0, io.SeekCurrent)
 		must(t, err)
 
-		t.Logf("== Final patched size: %s (applied to fs in %s)", progress.FormatBytes(patchedSize), time.Since(startPatchTime))
+		t.Logf("== Final patched size: %s (%d bytes) (applied to fs in %s)", progress.FormatBytes(patchedSize), patchedSize, time.Since(startPatchTime))
 
 		_, err = patchedfile.Seek(0, io.SeekStart)
 		must(t, err)
@@ -137,7 +149,7 @@ func must(t *testing.T, err error) {
 type testerFunc func(t *testing.T, current []byte, patched []byte)
 
 func testOverlayWriter(t *testing.T, tester testerFunc) {
-	const fullDataSize = 4 * 1024 * 1024
+	const fullDataSize = 64 * 1024 * 1024
 	current := make([]byte, fullDataSize)
 	patched := make([]byte, fullDataSize)
 

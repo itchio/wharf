@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package io.itch.wharf.pwr.overlay;
+option go_package = "overlay";
+
+// Overlay file format
+
+message OverlayHeader {
+  // nothing so far
+}
+
+message OverlayOp {
+  enum Type {
+    SKIP = 0;
+    FRESH = 1;
+    HEY_YOU_DID_IT = 2040;
+  }
+  Type type = 1;
+
+  int64 len = 2;
+  bytes data = 3;
+}
