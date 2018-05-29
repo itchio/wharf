@@ -69,26 +69,80 @@ func TestOverlayWriterFS(t *testing.T) {
 		must(t, os.RemoveAll(dir))
 		must(t, os.MkdirAll(dir, 0755))
 
-		intfile, err := os.Create(filepath.Join(dir, "intermediate"))
+		intpath := filepath.Join(dir, "intermediate")
+		intfile, err := os.OpenFile(intpath, os.O_CREATE|os.O_RDWR, 0644)
 		must(t, err)
 
 		defer intfile.Close()
-		ow, err := overlay.NewOverlayWriter(bytes.NewReader(current), 0, intfile, 0)
+		currentReader := bytes.NewReader(current)
+		ow, err := overlay.NewOverlayWriter(currentReader, 0, intfile, 0)
 		must(t, err)
 
 		startOverlayTime := time.Now()
 		t.Logf("== Writing %s to overlay...", progress.FormatBytes(int64(len(patched))))
-		_, err = io.Copy(ow, bytes.NewReader(patched))
-		assert.NoError(t, err)
+
+		maxBufferSize := 128 * 1024
+		refBuf := make([]byte, maxBufferSize)
+		prng := rand.New(rand.NewSource(0x39))
+
+		// io.Copy but with random write sizes
+		patchedReader := bytes.NewReader(patched)
+		for {
+			readLen := 1 + prng.Intn(maxBufferSize-1)
+			buf := refBuf[:readLen]
+			readBytes, readErr := patchedReader.Read(buf)
+
+			wroteBytes, err := ow.Write(buf[:readBytes])
+			must(t, err)
+			assert.Equal(t, readBytes, wroteBytes)
+
+			if readErr == io.EOF {
+				break
+			}
+			must(t, readErr)
+
+			if prng.Intn(100) > 50 {
+				t.Logf("Flushing...")
+
+				// close and redo
+				err = ow.Flush()
+				must(t, err)
+
+				readOffset := ow.ReadOffset()
+				overlayOffset := ow.OverlayOffset()
+
+				t.Logf("Syncing and closing... (readOffset %d, overlayOffset %d)", readOffset, overlayOffset)
+
+				err = intfile.Sync()
+				must(t, err)
+
+				err = intfile.Close()
+				must(t, err)
+
+				intfile, err = os.OpenFile(intpath, os.O_RDWR, 0644)
+				must(t, err)
+
+				_, err = intfile.Seek(overlayOffset, io.SeekStart)
+				must(t, err)
+
+				_, err = currentReader.Seek(readOffset, io.SeekStart)
+				must(t, err)
+
+				ow, err = overlay.NewOverlayWriter(currentReader, readOffset, intfile, overlayOffset)
+				must(t, err)
+			}
+		}
 
 		err = ow.Close()
-		assert.NoError(t, err)
-
-		overlaySize, err := intfile.Seek(0, io.SeekCurrent)
 		must(t, err)
 
 		err = intfile.Sync()
 		must(t, err)
+
+		overlayStats, err := intfile.Stat()
+		must(t, err)
+
+		overlaySize := overlayStats.Size()
 
 		t.Logf("== Final overlay size: %s (%d bytes) (wrote to fs in %s)", progress.FormatBytes(overlaySize), overlaySize, time.Since(startOverlayTime))
 
@@ -119,7 +173,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		_, err = patchSource.Resume(nil)
 		must(t, err)
 		err = ctx.Patch(patchSource, patchedfile)
-		assert.NoError(t, err)
+		must(t, err)
 
 		patchedSize, err := patchedfile.Seek(0, io.SeekCurrent)
 		must(t, err)
@@ -149,7 +203,7 @@ func must(t *testing.T, err error) {
 type testerFunc func(t *testing.T, current []byte, patched []byte)
 
 func testOverlayWriter(t *testing.T, tester testerFunc) {
-	const fullDataSize = 64 * 1024 * 1024
+	const fullDataSize = 4 * 1024 * 1024
 	current := make([]byte, fullDataSize)
 	patched := make([]byte, fullDataSize)
 

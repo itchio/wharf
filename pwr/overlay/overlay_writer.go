@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 
+	"github.com/itchio/savior"
 	"github.com/itchio/wharf/wire"
 
 	"github.com/itchio/wharf/counter"
@@ -58,7 +59,7 @@ func NewOverlayWriter(r io.Reader, readOffset int64, w io.Writer, overlayOffset 
 	ow.cw = cw
 	ow.wctx = wire.NewWriteContext(cw)
 
-	if readOffset == 0 && overlayOffset == 0 {
+	if overlayOffset == 0 {
 		err := ow.wctx.WriteMagic(OverlayMagic)
 		if err != nil {
 			return nil, err
@@ -199,6 +200,7 @@ func (ow *overlayWriter) fresh(data []byte) error {
 		Type: OverlayOp_FRESH,
 		Data: data,
 	}
+	savior.Debugf("fresh(%d)", len(data))
 
 	err := ow.wctx.WriteMessage(op)
 	if err != nil {
@@ -215,6 +217,7 @@ func (ow *overlayWriter) skip(skip int64) error {
 		Type: OverlayOp_SKIP,
 		Len:  skip,
 	}
+	savior.Debugf("skip(%d)", skip)
 
 	err := ow.wctx.WriteMessage(op)
 	if err != nil {
