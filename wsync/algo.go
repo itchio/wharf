@@ -111,7 +111,7 @@ func (ctx *Context) ApplySingleFull(output io.Writer, pool Pool, op Operation, f
 		copied, err := io.CopyBuffer(output, io.LimitReader(target, opSize), buffer)
 		if err != nil {
 			if failFast {
-				return errors.Wrapf(err, "While copying %d bytes: %s", blockSize*op.BlockSpan)
+				return errors.Wrapf(err, "While copying %d bytes", blockSize*op.BlockSpan)
 			}
 
 			remaining := opSize - copied
