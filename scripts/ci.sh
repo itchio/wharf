@@ -2,16 +2,8 @@
 
 go version
 
-export GOPATH=$PWD/gopath
-rm -rf $GOPATH
+export PATH="$PATH:$(go env GOPATH)/bin"
 
-export PKG=github.com/itchio/wharf
-export PATH=$PATH:$GOPATH/bin
-
-mkdir -p $GOPATH/src/$PKG
-rsync -a --exclude 'gopath' . $GOPATH/src/$PKG
-
-go get -v -d -t $PKG/...
-go test -v -cover -coverprofile=coverage.txt -race $PKG/...
+go test -v -race -cover -coverprofile=coverage.txt ./...
 
 curl -s https://codecov.io/bash | bash
