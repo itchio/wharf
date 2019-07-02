@@ -8,11 +8,11 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/itchio/wharf/eos/option"
+	"github.com/itchio/headway/counter"
 
-	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/eos/option"
+	"github.com/itchio/eos"
+	"github.com/itchio/headway/state"
 	"github.com/pkg/errors"
 )
 

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/itchio/httpkit/progress"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/united"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"
@@ -307,8 +307,8 @@ func (w *Wound) PrettyString(container *tlc.Container) string {
 		return fmt.Sprintf("symlink wound (%s should point to %s)", symlink.Path, symlink.Dest)
 	case WoundKind_FILE:
 		file := container.Files[w.Index]
-		woundSize := progress.FormatBytes(w.End - w.Start)
-		offset := progress.FormatBytes(w.Start)
+		woundSize := united.FormatBytes(w.End - w.Start)
+		offset := united.FormatBytes(w.Start)
 		return fmt.Sprintf("~%s wound %s into %s", woundSize, offset, file.Path)
 	default:
 		return fmt.Sprintf("unknown wound (%d)", w.Kind)

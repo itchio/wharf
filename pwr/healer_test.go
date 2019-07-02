@@ -13,13 +13,15 @@ import (
 	"time"
 
 	"github.com/itchio/wharf/pools"
-	"github.com/itchio/wharf/state"
 
 	"github.com/itchio/arkive/zip"
 
 	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wrand"
 	"github.com/itchio/wharf/wtest"
+
+	"github.com/itchio/headway/state"
+	"github.com/itchio/randsource"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,7 +57,7 @@ func Test_ArchiveHealer(t *testing.T) {
 	zw := zip.NewWriter(archiveWriter)
 	numFiles := 16
 
-	prng := wrand.RandReader{
+	prng := randsource.Reader{
 		Source: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	fakeData, err := ioutil.ReadAll(io.LimitReader(prng, 4*1024))

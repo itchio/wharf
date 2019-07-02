@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"github.com/itchio/arkive/zip"
-	"github.com/itchio/httpkit/progress"
 
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/united"
+	"github.com/itchio/headway/state"
+
+	"github.com/itchio/eos"
 	"github.com/pkg/errors"
 )
 
@@ -420,7 +421,7 @@ var _ fmt.Formatter = (*Container)(nil)
 // Stats return a human-readable summary of the contents of a container
 func (container *Container) Format(f fmt.State, c rune) {
 	fmt.Fprintf(f, "%s (%s)",
-		progress.FormatBytes(container.Size),
+		united.FormatBytes(container.Size),
 		container.Stats(),
 	)
 }

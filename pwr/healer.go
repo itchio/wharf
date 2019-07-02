@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 )
 

@@ -8,19 +8,21 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
+
+	"github.com/itchio/eos"
+	"github.com/itchio/eos/option"
+
+	"github.com/itchio/headway/counter"
 
 	"github.com/itchio/wharf/ctxcopy"
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/eos/option"
 	"github.com/itchio/wharf/werrors"
 
 	"github.com/itchio/arkive/zip"
 
-	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pools/zippool"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
@@ -294,7 +296,7 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool wsync.Pool, tar
 
 	if ah.Consumer != nil {
 		f := ah.container.Files[fileIndex]
-		ah.Consumer.Debugf("healing (%s) %s", f.Path, progress.FormatBytes(f.Size))
+		ah.Consumer.Debugf("healing (%s) %s", f.Path, united.FormatBytes(f.Size))
 	}
 
 	reader, err = sourcePool.GetReader(fileIndex)

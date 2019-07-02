@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 )
 
 const SelectionSortThreshold = 16

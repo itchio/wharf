@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
 )
 
 func (f *File) ToString() string {
-	return fmt.Sprintf("%s %10s %s", os.FileMode(f.Mode), progress.FormatBytes(f.Size), f.Path)
+	return fmt.Sprintf("%s %10s %s", os.FileMode(f.Mode), united.FormatBytes(f.Size), f.Path)
 }
 
 func (f *Dir) ToString() string {

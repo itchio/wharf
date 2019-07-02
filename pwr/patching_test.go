@@ -12,7 +12,7 @@ import (
 	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"

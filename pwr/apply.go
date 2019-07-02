@@ -11,11 +11,11 @@ import (
 
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
-	"github.com/itchio/wharf/counter"
+	"github.com/itchio/headway/counter"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pools/nullpool"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"

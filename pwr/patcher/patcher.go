@@ -5,7 +5,7 @@ import (
 
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/pwr/bowl"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
 

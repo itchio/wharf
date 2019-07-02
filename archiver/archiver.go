@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/itchio/httpkit/htfs"
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/eos/option"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/eos"
+	"github.com/itchio/eos/option"
+	"github.com/itchio/headway/state"
+
 	"github.com/pkg/errors"
 )
 

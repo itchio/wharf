@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 )
 
 var testSymlinks bool = (runtime.GOOS != "windows")

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/itchio/wharf/counter"
+	"github.com/itchio/headway/counter"
 )
 
 func Test_Writer(t *testing.T) {

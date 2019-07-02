@@ -7,10 +7,10 @@ import (
 
 	"path/filepath"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
@@ -39,7 +39,7 @@ func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer t
 		s += fmt.Sprintf("%s <- %s (%s in common)\n",
 			sourceContainer.Files[sourceIndex].Path,
 			targetContainer.Files[diffMapping.TargetIndex].Path,
-			progress.FormatBytes(diffMapping.NumBytes),
+			united.FormatBytes(diffMapping.NumBytes),
 		)
 	}
 	return s
@@ -486,7 +486,7 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 				rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
 					Content: filepath.Base(sourceFile.Path),
 					Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
-					Title:   fmt.Sprintf("%s %s", progress.FormatBytes(sourceFile.Size), sourceFile.Path),
+					Title:   fmt.Sprintf("%s %s", united.FormatBytes(sourceFile.Size), sourceFile.Path),
 					Start:   startTime.Sub(initialStart).Seconds(),
 					End:     endTime.Sub(initialStart).Seconds(),
 					Group:   0,

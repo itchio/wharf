@@ -7,9 +7,10 @@ import (
 
 	"github.com/itchio/arkive/zip"
 
+	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
+
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"

@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/itchio/savior"
-	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/werrors"
 	"github.com/itchio/wharf/wire"

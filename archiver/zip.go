@@ -13,8 +13,9 @@ import (
 
 	"github.com/itchio/arkive/zip"
 
-	"github.com/itchio/wharf/counter"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
+
 	"github.com/pkg/errors"
 )
 

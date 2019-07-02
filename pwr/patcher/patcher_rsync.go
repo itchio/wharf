@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/wsync"
@@ -38,8 +38,8 @@ func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *
 
 		f := sp.sourceContainer.Files[sh.FileIndex]
 		sp.consumer.Debugf("↺ Resuming rsync entry @ %s / %s",
-			progress.FormatBytes(writer.Tell()),
-			progress.FormatBytes(f.Size),
+			united.FormatBytes(writer.Tell()),
+			united.FormatBytes(f.Size),
 		)
 	} else {
 		// starting from the beginning!

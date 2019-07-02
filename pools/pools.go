@@ -7,7 +7,7 @@ import (
 
 	"path/filepath"
 
-	"github.com/itchio/wharf/eos"
+	"github.com/itchio/eos"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pools/zippool"
 	"github.com/itchio/wharf/tlc"

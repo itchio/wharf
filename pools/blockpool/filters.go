@@ -3,7 +3,7 @@ package blockpool
 import (
 	"fmt"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
 
 	"github.com/itchio/wharf/tlc"
 )
@@ -56,7 +56,7 @@ func (bf BlockFilter) Stats(container *tlc.Container) string {
 	}
 
 	return fmt.Sprintf("%d / %d blocks, %s / %s (%.2f%%)", usedBlocks, totalBlocks,
-		progress.FormatBytes(usedSize), progress.FormatBytes(totalSize),
+		united.FormatBytes(usedSize), united.FormatBytes(totalSize),
 		float64(usedSize)/float64(totalSize)*100.0)
 }
 

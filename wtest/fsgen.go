@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/itchio/wharf/pwr/drip"
-	"github.com/itchio/wharf/wrand"
+	"github.com/itchio/randsource"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,7 +66,7 @@ type TestDirSettings struct {
 }
 
 func MakeTestDir(t *testing.T, dir string, s TestDirSettings) {
-	prng := wrand.RandReader{
+	prng := randsource.Reader{
 		Source: rand.New(rand.NewSource(s.Seed)),
 	}
 

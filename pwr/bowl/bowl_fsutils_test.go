@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"

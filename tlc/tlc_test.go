@@ -12,7 +12,7 @@ import (
 	"github.com/itchio/arkive/zip"
 
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/stretchr/testify/assert"
 )
 

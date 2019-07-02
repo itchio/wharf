@@ -12,7 +12,7 @@ import (
 	"index/suffixarray"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/itchio/wharf/state"
+	"github.com/itchio/headway/state"
 	"github.com/jgallagher/gosaca"
 )
 

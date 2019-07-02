@@ -13,7 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/itchio/wharf/pwr/drip"
-	"github.com/itchio/wharf/wrand"
+
+	"github.com/itchio/randsource"
 )
 
 var testSymlinks = (runtime.GOOS != "windows")
@@ -63,7 +64,7 @@ func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
 }
 
 func makeTestDir(t *testing.T, dir string, s testDirSettings) {
-	prng := wrand.RandReader{
+	prng := randsource.Reader{
 		Source: rand.New(rand.NewSource(s.seed)),
 	}
 
