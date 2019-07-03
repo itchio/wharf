@@ -9,11 +9,11 @@ import (
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
 	"github.com/pkg/errors"
 )
 
-func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) (err error) {
+func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool lake.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) (err error) {
 	var writer bowl.EntryWriter
 	var closeWriterOnce sync.Once
 

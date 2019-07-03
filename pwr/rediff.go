@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 
 	"github.com/itchio/headway/united"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
-	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/pkg/errors"
 )
 
@@ -71,8 +71,8 @@ type TimelineItem struct {
 // RediffContext holds options for the rediff process, along with
 // some state.
 type RediffContext struct {
-	SourcePool wsync.Pool
-	TargetPool wsync.Pool
+	SourcePool lake.Pool
+	TargetPool lake.Pool
 
 	////////////////////
 	// optional

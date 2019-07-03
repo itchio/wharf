@@ -11,12 +11,14 @@ import (
 	"github.com/itchio/headway/state"
 
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
+
 	"github.com/pkg/errors"
 )
 
-func CompressZip(archiveWriter io.Writer, container *tlc.Container, pool wsync.Pool, consumer *state.Consumer) (*archiver.CompressResult, error) {
+func CompressZip(archiveWriter io.Writer, container *tlc.Container, pool lake.Pool, consumer *state.Consumer) (*archiver.CompressResult, error) {
 	var err error
 	var uncompressedSize int64
 	var compressedSize int64

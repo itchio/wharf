@@ -11,9 +11,9 @@ import (
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/wharf/pwr/overlay"
 
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/tlc"
+	"github.com/itchio/lake"
 	"github.com/pkg/errors"
 )
 
@@ -28,7 +28,7 @@ func debugf(format string, args ...interface{}) {
 
 type overlayBowl struct {
 	TargetContainer *tlc.Container
-	TargetPool      wsync.Pool
+	TargetPool      lake.Pool
 	SourceContainer *tlc.Container
 
 	OutputFolder string

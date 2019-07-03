@@ -7,7 +7,8 @@ import (
 	"github.com/itchio/savior"
 	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/werrors"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
@@ -23,7 +24,7 @@ type SignatureInfo struct {
 // ComputeSignature compute the signature of all blocks of all files in a given container,
 // by reading them from disk, relative to `basePath`, and notifying `consumer` of its
 // progress
-func ComputeSignature(ctx context.Context, container *tlc.Container, pool wsync.Pool, consumer *state.Consumer) ([]wsync.BlockHash, error) {
+func ComputeSignature(ctx context.Context, container *tlc.Container, pool lake.Pool, consumer *state.Consumer) ([]wsync.BlockHash, error) {
 	var signature []wsync.BlockHash
 
 	err := ComputeSignatureToWriter(ctx, container, pool, consumer, func(bl wsync.BlockHash) error {
@@ -39,7 +40,7 @@ func ComputeSignature(ctx context.Context, container *tlc.Container, pool wsync.
 
 // ComputeSignatureToWriter is a variant of ComputeSignature that writes hashes
 // to a callback
-func ComputeSignatureToWriter(ctx context.Context, container *tlc.Container, pool wsync.Pool, consumer *state.Consumer, sigWriter wsync.SignatureWriter) error {
+func ComputeSignatureToWriter(ctx context.Context, container *tlc.Container, pool lake.Pool, consumer *state.Consumer, sigWriter wsync.SignatureWriter) error {
 	var err error
 
 	defer func() {

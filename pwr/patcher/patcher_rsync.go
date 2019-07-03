@@ -5,13 +5,17 @@ import (
 	"sync"
 
 	"github.com/itchio/headway/united"
+
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/wsync"
+
+	"github.com/itchio/lake"
+
 	"github.com/pkg/errors"
 )
 
-func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) (err error) {
+func (sp *savingPatcher) processRsync(c *Checkpoint, targetPool lake.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) (err error) {
 	var op *pwr.SyncOp
 
 	var writer bowl.EntryWriter

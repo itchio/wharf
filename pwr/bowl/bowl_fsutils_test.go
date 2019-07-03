@@ -9,12 +9,14 @@ import (
 	"testing"
 
 	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/pwr/bowl"
+
 	"github.com/itchio/headway/state"
 
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/pwr/bowl"
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/tlc"
+
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -83,7 +85,7 @@ type bowler struct {
 
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
-	TargetPool      wsync.Pool
+	TargetPool      lake.Pool
 
 	TargetFolder string
 	RefFolder    string
@@ -108,7 +110,7 @@ type bowlerParams struct {
 type makeBowlParams struct {
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
-	TargetPool      wsync.Pool
+	TargetPool      lake.Pool
 	TargetFolder    string
 	FreshFolder     string
 

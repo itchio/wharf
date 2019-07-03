@@ -3,11 +3,11 @@ package patcher
 import (
 	"fmt"
 
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
-	"github.com/itchio/wharf/wsync"
 )
 
 type Checkpoint struct {
@@ -47,7 +47,7 @@ type BsdiffCheckpoint struct {
 
 type Patcher interface {
 	SetSaveConsumer(sc SaveConsumer)
-	Resume(checkpoint *Checkpoint, targetPool wsync.Pool, bowl bowl.Bowl) error
+	Resume(checkpoint *Checkpoint, targetPool lake.Pool, bowl bowl.Bowl) error
 	Progress() float64
 
 	GetSourceContainer() *tlc.Container

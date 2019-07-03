@@ -1,4 +1,4 @@
-// Package sync computes a list of operations needed to mutate one file
+// Package wsync computes a list of operations needed to mutate one file
 // into another file, re-using as much of the former as possible.
 //
 // Base on code from: https://bitbucket.org/kardianos/rsync/
@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/itchio/lake"
 	"github.com/pkg/errors"
 )
 
@@ -50,12 +51,12 @@ func (dvr *devNullReader) Read(buf []byte) (int, error) {
 }
 
 // ApplyPatch applies the difference to the target.
-func (ctx *Context) ApplyPatch(output io.Writer, pool Pool, ops chan Operation) error {
+func (ctx *Context) ApplyPatch(output io.Writer, pool lake.Pool, ops chan Operation) error {
 	return ctx.ApplyPatchFull(output, pool, ops, true)
 }
 
 // ApplyPatchFull is like ApplyPatch but accepts an ApplyWound channel
-func (ctx *Context) ApplyPatchFull(output io.Writer, pool Pool, ops chan Operation, failFast bool) error {
+func (ctx *Context) ApplyPatchFull(output io.Writer, pool lake.Pool, ops chan Operation, failFast bool) error {
 	for op := range ops {
 		err := ctx.ApplySingleFull(output, pool, op, failFast)
 		if err != nil {
@@ -66,11 +67,11 @@ func (ctx *Context) ApplyPatchFull(output io.Writer, pool Pool, ops chan Operati
 	return nil
 }
 
-func (ctx *Context) ApplySingle(output io.Writer, pool Pool, op Operation) error {
+func (ctx *Context) ApplySingle(output io.Writer, pool lake.Pool, op Operation) error {
 	return ctx.ApplySingleFull(output, pool, op, true)
 }
 
-func (ctx *Context) ApplySingleFull(output io.Writer, pool Pool, op Operation, failFast bool) error {
+func (ctx *Context) ApplySingleFull(output io.Writer, pool lake.Pool, op Operation, failFast bool) error {
 	const minBufferSize = 32 * 1024 // golang's io.Copy default szie
 	if len(ctx.buffer) < minBufferSize {
 		ctx.buffer = make([]byte, minBufferSize)

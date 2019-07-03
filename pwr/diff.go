@@ -6,12 +6,13 @@ import (
 	"io"
 
 	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
 
 	"github.com/itchio/wharf/multiread"
 	"github.com/itchio/wharf/taskgroup"
 
-	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
@@ -23,7 +24,7 @@ type DiffContext struct {
 	Consumer    *state.Consumer
 
 	SourceContainer *tlc.Container
-	Pool            wsync.Pool
+	Pool            lake.Pool
 
 	TargetContainer *tlc.Container
 	TargetSignature []wsync.BlockHash

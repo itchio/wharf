@@ -3,8 +3,8 @@ package bowl
 import (
 	"io"
 
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/pkg/errors"
 )
 
@@ -13,8 +13,8 @@ type poolBowl struct {
 	SourceContainer *tlc.Container
 	TargetPath      string
 
-	TargetPool wsync.Pool
-	OutputPool wsync.WritablePool
+	TargetPool lake.Pool
+	OutputPool lake.WritablePool
 
 	buf []byte
 }
@@ -27,8 +27,8 @@ type PoolBowlParams struct {
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
 
-	TargetPool wsync.Pool
-	OutputPool wsync.WritablePool
+	TargetPool lake.Pool
+	OutputPool lake.WritablePool
 }
 
 // NewPoolBowl returns a bowl that applies all writes to

@@ -16,9 +16,9 @@ import (
 	"github.com/itchio/savior/brotlisource"
 	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/bsdiff"
-	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wtest"
 )
 

@@ -12,11 +12,12 @@ import (
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/headway/counter"
-	"github.com/itchio/wharf/pools"
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/pools/nullpool"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
+	"github.com/itchio/lake/pools"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/pools/nullpool"
 	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
@@ -70,9 +71,9 @@ type ApplyContext struct {
 	DryRun bool
 
 	TargetContainer *tlc.Container
-	TargetPool      wsync.Pool
+	TargetPool      lake.Pool
 	SourceContainer *tlc.Container
-	OutputPool      wsync.WritablePool
+	OutputPool      lake.WritablePool
 
 	WoundsPath     string
 	HealPath       string
@@ -870,7 +871,7 @@ type Transposition struct {
 	OutputPath string
 }
 
-func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool wsync.Pool, outputContainer *tlc.Container, outputPool wsync.WritablePool,
+func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool lake.Pool, outputContainer *tlc.Container, outputPool lake.WritablePool,
 	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (transposition *Transposition, err error) {
 
 	var writer io.WriteCloser

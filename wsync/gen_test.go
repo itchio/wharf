@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/itchio/lake"
 	"github.com/itchio/randsource"
 )
 
@@ -164,7 +165,7 @@ type SinglePool struct {
 	size   int64
 }
 
-var _ Pool = (*SinglePool)(nil)
+var _ lake.Pool = (*SinglePool)(nil)
 
 func (sp *SinglePool) GetSize(fileIndex int64) int64 {
 	return sp.size

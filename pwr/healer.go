@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 )
 
 // A LockMap is an array of channels, corresponding to file indices

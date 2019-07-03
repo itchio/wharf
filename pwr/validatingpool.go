@@ -7,7 +7,8 @@ import (
 
 	"github.com/itchio/wharf/pwr/drip"
 	"github.com/itchio/wharf/pwr/onclose"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
 )
@@ -21,7 +22,7 @@ type WoundsFilterFunc func(wounds chan *Wound) chan *Wound
 type ValidatingPool struct {
 	// required
 
-	Pool wsync.WritablePool
+	Pool lake.WritablePool
 	// Container must match Pool - may have different file indices than Signature.Container
 	Container *tlc.Container
 	Signature *SignatureInfo
@@ -37,7 +38,7 @@ type ValidatingPool struct {
 	sctx       *wsync.Context
 }
 
-var _ wsync.WritablePool = (*ValidatingPool)(nil)
+var _ lake.WritablePool = (*ValidatingPool)(nil)
 
 // GetSize is a pass-through to the underlying Pool
 func (vp *ValidatingPool) GetSize(fileIndex int64) int64 {

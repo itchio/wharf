@@ -9,22 +9,22 @@ import (
 	"sync"
 
 	"github.com/itchio/headway/united"
-
-	"github.com/itchio/eos"
-	"github.com/itchio/eos/option"
-
 	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
+
+	"github.com/itchio/httpkit/eos"
+	"github.com/itchio/httpkit/eos/option"
 
 	"github.com/itchio/wharf/ctxcopy"
 	"github.com/itchio/wharf/werrors"
 
 	"github.com/itchio/arkive/zip"
 
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/pools/zippool"
-	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/pools/zippool"
+
 	"github.com/pkg/errors"
 )
 
@@ -231,10 +231,10 @@ func (ah *ArchiveHealer) openArchive() (eos.File, error) {
 	return ah.archiveFile, ah.archiveFileErr
 }
 
-func (ah *ArchiveHealer) heal(ctx context.Context, container *tlc.Container, targetPool wsync.WritablePool,
+func (ah *ArchiveHealer) heal(ctx context.Context, container *tlc.Container, targetPool lake.WritablePool,
 	fileIndices chan int64, chunkHealed chunkHealedFunc) error {
 
-	var sourcePool wsync.Pool
+	var sourcePool lake.Pool
 	var err error
 
 	for {
@@ -279,7 +279,7 @@ func (ah *ArchiveHealer) heal(ctx context.Context, container *tlc.Container, tar
 	}
 }
 
-func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
+func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targetPool lake.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
 	if ah.lockMap != nil {
 		lock := ah.lockMap[fileIndex]
 		select {

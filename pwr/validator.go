@@ -9,11 +9,11 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 
 	"github.com/itchio/headway/counter"
-	"github.com/itchio/wharf/pools"
-	"github.com/itchio/wharf/pools/nullpool"
+	"github.com/itchio/lake/pools"
+	"github.com/itchio/lake/pools/nullpool"
 	"github.com/itchio/headway/state"
 	"github.com/pkg/errors"
 )

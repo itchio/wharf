@@ -1,16 +1,18 @@
 package patcher
 
 import (
-	"github.com/itchio/wharf/bsdiff"
-
 	"github.com/itchio/savior"
-	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/headway/state"
+
+	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
-
+	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pwr"
-	"github.com/itchio/wharf/tlc"
+
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
+
 	"github.com/pkg/errors"
 )
 
@@ -100,7 +102,7 @@ func New(patchReader savior.SeekSource, consumer *state.Consumer) (Patcher, erro
 	return sp, nil
 }
 
-func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bwl bowl.Bowl) error {
+func (sp *savingPatcher) Resume(c *Checkpoint, targetPool lake.Pool, bwl bowl.Bowl) error {
 	// we're going to open some readers while patching, and no matter what happens
 	// we want to have it closed at the end (if we error out early or if we complete successfully)
 	defer targetPool.Close()
@@ -175,7 +177,7 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool wsync.Pool, bwl bowl.B
 	return nil
 }
 
-func (sp *savingPatcher) processFile(c *Checkpoint, targetPool wsync.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) error {
+func (sp *savingPatcher) processFile(c *Checkpoint, targetPool lake.Pool, sh *pwr.SyncHeader, bwl bowl.Bowl) error {
 	sp.consumer.ProgressLabel(sp.sourceContainer.Files[sh.FileIndex].Path)
 
 	switch c.FileKind {

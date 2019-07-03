@@ -1,7 +1,7 @@
 package bowl
 
 import (
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 	"github.com/pkg/errors"
 )
 

@@ -6,9 +6,9 @@ import (
 	"path"
 	"testing"
 
-	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/headway/state"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 	"github.com/stretchr/testify/assert"
 )
 

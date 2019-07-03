@@ -7,7 +7,7 @@ import (
 
 	"github.com/itchio/arkive/zip"
 
-	"github.com/itchio/wharf/pools/zipwriterpool"
+	"github.com/itchio/lake/pools/zipwriterpool"
 	"github.com/itchio/wharf/pwr/bowl"
 )
 

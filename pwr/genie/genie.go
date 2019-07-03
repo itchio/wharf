@@ -5,7 +5,7 @@ import (
 
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/pwr"
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"
 )

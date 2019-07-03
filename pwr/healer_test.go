@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itchio/wharf/pools"
+	"github.com/itchio/lake/pools"
 
 	"github.com/itchio/arkive/zip"
 
-	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wtest"
 
 	"github.com/itchio/headway/state"

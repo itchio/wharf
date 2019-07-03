@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/itchio/savior"
-	"github.com/itchio/wharf/pools/fspool"
-	"github.com/itchio/wharf/tlc"
-	"github.com/itchio/wharf/wsync"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/tlc"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +17,7 @@ type freshBowl struct {
 	SourceContainer *tlc.Container
 	TargetPath      string
 
-	TargetPool wsync.Pool
+	TargetPool lake.Pool
 	OutputPool *fspool.FsPool
 
 	buf []byte
@@ -31,7 +31,7 @@ type FreshBowlParams struct {
 	TargetContainer *tlc.Container
 	SourceContainer *tlc.Container
 
-	TargetPool   wsync.Pool
+	TargetPool   lake.Pool
 	OutputFolder string
 }
 
