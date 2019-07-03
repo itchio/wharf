@@ -64,8 +64,6 @@ github.com/itchio/httpkit v0.0.0-20190702085644-0636c33a1bcf/go.mod h1:FrHFbR76c
 github.com/itchio/httpkit v0.0.0-20190702180702-5f405324454d/go.mod h1:p7x9HeOlKu7kkCT61a0uvwFkP2vnQmGFG2un1DFX86Y=
 github.com/itchio/httpkit v0.0.0-20190702180847-a60f0433f2d8/go.mod h1:W28DE7EhpaOiNA57xotM6rykDhhNM4Cq80XT5ClyES8=
 github.com/itchio/httpkit v0.0.0-20190702181331-5f0f36964b0c/go.mod h1:0+baZsWuAUfhyc2a3UeqKrRrf5oSaFT/TgwqP4X2FGE=
-github.com/itchio/httpkit v0.0.0-20190702181558-e26e2b9ba3dd h1:I0aQA7gvLj7L/Hv5hVeb6MF9/jffBvNX2ZVqGg9X5Rc=
-github.com/itchio/httpkit v0.0.0-20190702181558-e26e2b9ba3dd/go.mod h1:UBdiIaRwbSJKEhl+4a8+rD3WrwNhbzvCkI/BmyeGQbQ=
 github.com/itchio/httpkit v0.0.0-20190702184704-639fe5edf1f1/go.mod h1:l+oRs+N4hTtMdh1Nv9HipY8cvkv77HUpw3LHoJ78HAA=
 github.com/itchio/httpkit v0.0.0-20190703105757-f6353d320e52 h1:S91A3cWq0selvlqL46cfECTDbPfG+ge9KwpMo9EeIjs=
 github.com/itchio/httpkit v0.0.0-20190703105757-f6353d320e52/go.mod h1:MAwPXM6IGYlFG9J4IVzFCRbPIDCgysXTjZwRQFtq+Yc=
@@ -128,4 +126,3 @@ golang.org/x/text v0.3.2/go.mod h1:bEr9sfX3Q8Zfm5fL9x+3itogRgK3+ptLWKqgva+5dAk=
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 golang.org/x/tools v0.0.0-20190701194522-38ae2c8f6412/go.mod h1:jcCCGcm9btYwXyDqrUWc6MKQKKGJCWEQ3AfLSRIbEuI=
 golang.org/x/tools v0.0.0-20190702152245-7e72c71c505f/go.mod h1:jcCCGcm9btYwXyDqrUWc6MKQKKGJCWEQ3AfLSRIbEuI=
-golang.org/x/tools v0.0.0-20190702201734-44aeb8b7c377/go.mod h1:jcCCGcm9btYwXyDqrUWc6MKQKKGJCWEQ3AfLSRIbEuI=
