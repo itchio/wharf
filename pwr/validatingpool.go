@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/itchio/wharf/pwr/drip"
-	"github.com/itchio/wharf/pwr/onclose"
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
+	"github.com/itchio/wharf/pwr/drip"
+	"github.com/itchio/wharf/pwr/onclose"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
 )

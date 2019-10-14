@@ -83,6 +83,9 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 	consumer := &state.Consumer{
 		OnMessage: func(level string, message string) {
+			if level == "debug" {
+				return
+			}
 			t.Logf("[%s] %s", level, message)
 		},
 	}
@@ -99,12 +102,17 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	var v2Sig *pwr.SignatureInfo
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
-		wtest.Must(t, dErr)
+		targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
+		wtest.Must(t, err)
 
 		targetPool := fspool.New(targetContainer, v1)
-		targetSignature, dErr := pwr.ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
-		wtest.Must(t, dErr)
+		v1Hashes, err := pwr.ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
+		wtest.Must(t, err)
+
+		v1Sig = &pwr.SignatureInfo{
+			Container: targetContainer,
+			Hashes:    v1Hashes,
+		}
 
 		pool := fspool.New(sourceContainer, v2)
 
@@ -116,7 +124,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 			Pool:            pool,
 
 			TargetContainer: targetContainer,
-			TargetSignature: targetSignature,
+			TargetSignature: v1Hashes,
 		}
 
 		wtest.Must(t, dctx.WritePatch(context.Background(), patchBuffer, signatureBuffer))
@@ -125,18 +133,12 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		_, err = sigReader.Resume(nil)
 		wtest.Must(t, err)
 
-		v1Sig, err = pwr.ReadSignature(context.Background(), sigReader)
+		v2Sig, err = pwr.ReadSignature(context.Background(), sigReader)
 		wtest.Must(t, err)
 	}()
 
 	log("Applying to other directory, with separate check")
 	func() {
-		consumer := &state.Consumer{
-			OnMessage: func(level string, message string) {
-				t.Logf("[%s] %s", level, message)
-			},
-		}
-
 		outDir := filepath.Join(mainDir, "out")
 		wtest.Must(t, os.MkdirAll(outDir, 0o755))
 		defer os.RemoveAll(outDir)
@@ -163,18 +165,18 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 		wtest.Must(t, b.Commit())
 
-		wtest.Must(t, pwr.AssertValid(outDir, v1Sig))
-		wtest.Must(t, pwr.AssertNoGhosts(outDir, v1Sig))
+		wtest.Must(t, pwr.AssertValid(outDir, v2Sig))
+		wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 		log("Applies cleanly + no ghosts!")
 	}()
 
 	log("Applying in-place")
 	func() {
-		outDir := filepath.Join("out")
+		outDir := filepath.Join(mainDir, "out")
 		wtest.Must(t, os.MkdirAll(outDir, 0o755))
 		cpDir(t, v1, outDir)
 
-		stageDir := filepath.Join("stage")
+		stageDir := filepath.Join(mainDir, "stage")
 		wtest.Must(t, os.MkdirAll(stageDir, 0o755))
 
 		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
@@ -199,21 +201,36 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 		wtest.Must(t, b.Commit())
 
-		wtest.Must(t, pwr.AssertValid(outDir, v1Sig))
-		wtest.Must(t, pwr.AssertNoGhosts(outDir, v1Sig))
+		wtest.Must(t, pwr.AssertValid(outDir, v2Sig))
+		wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 		log("Applies cleanly + no ghosts!")
 
-		log("Healing to previous version...")
+		log("Healing to v1...")
 		vctx := &pwr.ValidatorContext{
 			HealPath: "archive," + v1zip,
 			Consumer: consumer,
 		}
 		wtest.Must(t, vctx.Validate(context.Background(), outDir, v1Sig))
 
-		log("Checking we're back to v1 after heal")
+		log("Validating v1...")
 		vctx = &pwr.ValidatorContext{
 			FailFast: true,
 			Consumer: consumer,
 		}
+		wtest.Must(t, vctx.Validate(context.Background(), outDir, v1Sig))
+
+		log("Healing to v2...")
+		vctx = &pwr.ValidatorContext{
+			HealPath: "archive," + v2zip,
+			Consumer: consumer,
+		}
+		wtest.Must(t, vctx.Validate(context.Background(), outDir, v2Sig))
+
+		log("Validating v2...")
+		vctx = &pwr.ValidatorContext{
+			FailFast: true,
+			Consumer: consumer,
+		}
+		wtest.Must(t, vctx.Validate(context.Background(), outDir, v2Sig))
 	}()
 }

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/itchio/headway/united"
 	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
 
 	"github.com/itchio/httpkit/eos"
 	"github.com/itchio/httpkit/eos/option"
@@ -21,9 +21,9 @@ import (
 	"github.com/itchio/arkive/zip"
 
 	"github.com/itchio/lake"
-	"github.com/itchio/lake/tlc"
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/pools/zippool"
+	"github.com/itchio/lake/tlc"
 
 	"github.com/pkg/errors"
 )
@@ -78,9 +78,7 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		// use a sensible default I/O-wise (whether we're reading from disk or network)
 		ah.NumWorkers = 2
 	}
-	if ah.Consumer != nil {
-		ah.Consumer.Debugf("archive healer: using %d workers", ah.NumWorkers)
-	}
+	ah.Consumer.Debugf("archive healer: using %d workers", ah.NumWorkers)
 
 	targetPool := fspool.New(container, ah.Target)
 
@@ -106,9 +104,7 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	}
 
 	processWound := func(wound *Wound) error {
-		if ah.Consumer != nil {
-			ah.Consumer.Debugf("processing wound: %s", wound)
-		}
+		ah.Consumer.Debugf("processing wound: %s", wound)
 
 		if !wound.Healthy() {
 			ah.totalCorrupted += wound.Size()
@@ -147,9 +143,7 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 			}
 
 			file := container.Files[wound.Index]
-			if ah.Consumer != nil {
-				ah.Consumer.ProgressLabel(file.Path)
-			}
+			ah.Consumer.ProgressLabel(file.Path)
 
 			ah.progressMutex.Lock()
 			ah.totalHealing += file.Size
@@ -220,9 +214,7 @@ func (ah *ArchiveHealer) openArchive() (eos.File, error) {
 	defer ah.archiveLock.Unlock()
 
 	ah.archiveOnce.Do(func() {
-		if ah.Consumer != nil {
-			ah.Consumer.Debugf("opening archive for worker!")
-		}
+		ah.Consumer.Debugf("opening archive for worker!")
 
 		file, err := eos.Open(ah.ArchivePath, option.WithConsumer(ah.Consumer))
 		ah.archiveFile = file
@@ -294,21 +286,32 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 	var reader io.Reader
 	var writer io.WriteCloser
 
-	if ah.Consumer != nil {
-		f := ah.container.Files[fileIndex]
-		ah.Consumer.Debugf("healing (%s) %s", f.Path, united.FormatBytes(f.Size))
-	}
+	f := ah.container.Files[fileIndex]
+
+	ah.Consumer.Debugf("healing (%s) %s", f.Path, united.FormatBytes(f.Size))
 
 	reader, err = sourcePool.GetReader(fileIndex)
 	if err != nil {
 		return err
 	}
 
+	// ah.Consumer.Debugf("getting writer and truncating to %d", f.Size)
+	// writer, err = targetPool.GetWriterAndTruncate(fileIndex, f.Size)
+	ah.Consumer.Debugf("getting writer and *not* truncating")
 	writer, err = targetPool.GetWriter(fileIndex)
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
+
+	if f, ok := writer.(*os.File); ok {
+		stats, err := f.Stat()
+		if err != nil {
+			ah.Consumer.Debugf("was a file but can't stat: %+v", err)
+		} else {
+			ah.Consumer.Debugf("was a file: %d bytes", stats.Size())
+		}
+	}
 
 	lastCount := int64(0)
 	cw := counter.NewWriterCallback(func(count int64) {
@@ -321,6 +324,7 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 	if err != nil {
 		return err
 	}
+	ah.Consumer.Debugf("lastCount = %d", lastCount)
 
 	return err
 }

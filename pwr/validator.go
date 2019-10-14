@@ -12,13 +12,13 @@ import (
 	"github.com/itchio/lake/tlc"
 
 	"github.com/itchio/headway/counter"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/lake/pools"
 	"github.com/itchio/lake/pools/nullpool"
-	"github.com/itchio/headway/state"
 	"github.com/pkg/errors"
 )
 
-// MaxWoundSize is how large AggregateWounds will let an aggregat
+// MaxWoundSize is how large AggregateWounds will let an aggregate
 // wound get before passing it along to its consumer. The idea is, when
 // we're verifying a large file, we can start healing it before it's done
 // verifying. In practice, this would require sharing file descriptors,
@@ -104,7 +104,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 		}
 	} else if vctx.HealPath != "" {
 		// healers can deal with "everything missing"
-		err := os.MkdirAll(target, 0755)
+		err := os.MkdirAll(target, 0o755)
 		if err != nil {
 			return err
 		}
@@ -123,6 +123,11 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 			},
 			OnProgressLabel: func(label string) {
 				vctx.Consumer.ProgressLabel(label)
+			},
+			OnMessage: func(lvl string, msg string) {
+				if vctx.Consumer.OnProgressLabel != nil {
+					vctx.Consumer.OnMessage(lvl, msg)
+				}
 			},
 		}
 		healer.SetConsumer(woundsStateConsumer)
@@ -329,6 +334,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 			return err
 		}
 
+		vctx.Consumer.Debugf("%s: writtenBytes = %d, file.Size = %d", file.Path, writtenBytes, file.Size)
 		if writtenBytes != file.Size {
 			onProgress(file.Size - writtenBytes)
 			wound := &Wound{
