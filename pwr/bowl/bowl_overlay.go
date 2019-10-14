@@ -11,9 +11,9 @@ import (
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/wharf/pwr/overlay"
 
+	"github.com/itchio/lake"
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
-	"github.com/itchio/lake"
 	"github.com/pkg/errors"
 )
 
@@ -61,7 +61,7 @@ type OverlayBowlParams struct {
 	StageFolder  string
 }
 
-func NewOverlayBowl(params *OverlayBowlParams) (Bowl, error) {
+func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 	// input validation
 
 	if params.TargetContainer == nil {
