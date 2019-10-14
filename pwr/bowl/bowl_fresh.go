@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/itchio/savior"
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
+	"github.com/itchio/savior"
 	"github.com/pkg/errors"
 )
 
@@ -37,7 +37,7 @@ type FreshBowlParams struct {
 
 // NewFreshBowl returns a bowl that applies all writes to
 // a given (initially empty) directory.
-func NewFreshBowl(params *FreshBowlParams) (Bowl, error) {
+func NewFreshBowl(params FreshBowlParams) (Bowl, error) {
 	// input validation
 
 	if params.TargetContainer == nil {
