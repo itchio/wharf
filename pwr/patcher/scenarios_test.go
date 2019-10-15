@@ -439,6 +439,17 @@ func Test_Scenarios(t *testing.T) {
 }
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
+	forwardScenario := *&scenario
+	forwardScenario.name += "/forward"
+	runSinglePatchingScenario(t, forwardScenario)
+
+	backScenario := *&scenario
+	backScenario.name += "/back"
+	backScenario.v1, backScenario.v2 = backScenario.v2, backScenario.v1
+	runSinglePatchingScenario(t, backScenario)
+}
+
+func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 	t.Run(scenario.name, func(t *testing.T) {
 		log := t.Logf
 

@@ -233,7 +233,7 @@ func (b *overlayBowl) Commit() error {
 	// - ensure dirs and symlinks
 	err = b.ensureDirsAndSymlinks()
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 
 	// - apply transpositions
@@ -269,11 +269,26 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	for _, dir := range b.SourceContainer.Dirs {
 		path := filepath.Join(outputPath, filepath.FromSlash(dir.Path))
 
-		err := os.MkdirAll(path, 0755)
+		stats, err := os.Lstat(path)
+		if err == nil {
+			// did stat
+			if stats.IsDir() {
+				// good!
+				continue
+			}
+
+			// probably a file or a symlink, clear out
+			err = os.RemoveAll(path)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		err = os.MkdirAll(path, 0755)
 		if err != nil {
 			// If path is already a directory, MkdirAll does nothing and returns nil.
 			// so if we get a non-nil error, we know it's serious business (permissions, etc.)
-			return err
+			return errors.WithStack(err)
 		}
 	}
 
@@ -281,16 +296,29 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 
 	for _, symlink := range b.SourceContainer.Symlinks {
 		path := filepath.Join(outputPath, filepath.FromSlash(symlink.Path))
+
+		stats, err := os.Lstat(path)
+		if err == nil {
+			// did stat
+			if stats.Mode()&os.ModeSymlink == 0 {
+				// not a symlink! clear out
+				err = os.RemoveAll(path)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+
 		dest, err := os.Readlink(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// symlink was missing
 				err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
 				if err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			} else {
-				return err
+				return errors.WithStack(err)
 			}
 		}
 
@@ -299,12 +327,12 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 			// wrong dest, fixing that
 			err = os.Remove(path)
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 
 			err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 
 			return nil
