@@ -175,17 +175,43 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 	for symlinkIndex, symlink := range signature.Container.Symlinks {
 		path := filepath.Join(target, filepath.FromSlash(symlink.Path))
+
+		doWholeSymlinkWound := func() {
+			wound := &Wound{
+				Kind:  WoundKind_SYMLINK,
+				Index: int64(symlinkIndex),
+			}
+
+			select {
+			case vctx.Wounds <- wound:
+			case <-cancelled:
+			}
+		}
+
+		stats, err := os.Lstat(path)
+		if err == nil {
+			// did stat!
+			if stats.IsDir() {
+				vctx.Consumer.Debugf("(%s) expected symlink, found dir", path)
+				doWholeSymlinkWound()
+				continue
+			}
+
+			if stats.Mode()&os.ModeSymlink == 0 {
+				vctx.Consumer.Debugf("(%s) expected symlink, found.. not a symlink (regular file probably)", path)
+				doWholeSymlinkWound()
+				continue
+			}
+		}
+
 		dest, err := os.Readlink(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				vctx.Consumer.Debugf("(%s) expected symlink, was missing", path)
-				vctx.Wounds <- &Wound{
-					Kind:  WoundKind_SYMLINK,
-					Index: int64(symlinkIndex),
-				}
+				doWholeSymlinkWound()
 				continue
 			} else {
-				return err
+				return errors.WithStack(err)
 			}
 		}
 
@@ -293,23 +319,44 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 	doOne := func(fileIndex int64) error {
 		file := signature.Container.Files[fileIndex]
 
+		doWholeFileWound := func() {
+			wound := &Wound{
+				Kind:  WoundKind_FILE,
+				Index: fileIndex,
+				Start: 0,
+				End:   file.Size,
+			}
+			onProgress(file.Size)
+
+			select {
+			case vctx.Wounds <- wound:
+			case <-cancelled:
+			}
+		}
+
+		path := filepath.Join(target, filepath.FromSlash(file.Path))
+		stats, err := os.Lstat(path)
+		if err == nil {
+			// did stat
+			if stats.IsDir() {
+				vctx.Consumer.Debugf("(%s) expected file but found dir", file.Path)
+				doWholeFileWound()
+				return nil
+			}
+
+			if stats.Mode()&os.ModeSymlink != 0 {
+				vctx.Consumer.Debugf("(%s) expected file but found symlink", file.Path)
+				doWholeFileWound()
+				return nil
+			}
+		}
+
 		var reader io.Reader
 		reader, err = targetPool.GetReader(fileIndex)
 		if err != nil {
 			if IsNotExist(err) {
 				// whole file is missing
-				wound := &Wound{
-					Kind:  WoundKind_FILE,
-					Index: fileIndex,
-					Start: 0,
-					End:   file.Size,
-				}
-				onProgress(file.Size)
-
-				select {
-				case vctx.Wounds <- wound:
-				case <-cancelled:
-				}
+				doWholeFileWound()
 				return nil
 			}
 			return err
@@ -336,7 +383,6 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 			return err
 		}
 
-		vctx.Consumer.Debugf("%s: writtenBytes = %d, file.Size = %d", file.Path, writtenBytes, file.Size)
 		if writtenBytes != file.Size {
 			onProgress(file.Size - writtenBytes)
 			wound := &Wound{
