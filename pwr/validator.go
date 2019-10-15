@@ -178,6 +178,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 		dest, err := os.Readlink(path)
 		if err != nil {
 			if os.IsNotExist(err) {
+				vctx.Consumer.Debugf("(%s) expected symlink, was missing", path)
 				vctx.Wounds <- &Wound{
 					Kind:  WoundKind_SYMLINK,
 					Index: int64(symlinkIndex),
@@ -189,6 +190,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 		}
 
 		if dest != filepath.FromSlash(symlink.Dest) {
+			vctx.Consumer.Debugf("(%s) expected symlink to (%s), found symlink to (%s)", path, filepath.FromSlash(symlink.Dest), dest)
 			vctx.Wounds <- &Wound{
 				Kind:  WoundKind_SYMLINK,
 				Index: int64(symlinkIndex),

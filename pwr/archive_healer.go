@@ -116,9 +116,24 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 			dirEntry := container.Dirs[wound.Index]
 			path := filepath.Join(ah.Target, filepath.FromSlash(dirEntry.Path))
 
-			pErr := os.MkdirAll(path, 0755)
-			if pErr != nil {
-				return pErr
+			stats, err := os.Lstat(path)
+			if err == nil {
+				if stats.IsDir() {
+					ah.Consumer.Debugf("For dir wound, found existing dir (%s), all good", path)
+					return nil
+				} else {
+					ah.Consumer.Debugf("For dir wound, found file/symlink (%s), removing", path)
+					err = os.Remove(path)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+				}
+			}
+
+			ah.Consumer.Debugf("For dir wound, doing MkdirAll (%s)", path)
+			err = os.MkdirAll(path, 0o755)
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
 		case WoundKind_SYMLINK:
@@ -126,14 +141,32 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 			path := filepath.Join(ah.Target, filepath.FromSlash(symlinkEntry.Path))
 
 			dir := filepath.Dir(path)
-			pErr := os.MkdirAll(dir, 0755)
-			if pErr != nil {
-				return pErr
+			err := os.MkdirAll(dir, 0o755)
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
-			pErr = os.Symlink(symlinkEntry.Dest, path)
-			if pErr != nil {
-				return pErr
+			stats, err := os.Lstat(path)
+			if err == nil {
+				if stats.IsDir() {
+					ah.Consumer.Debugf("For symlink wound, found dir (%s), doing RemoveAll", path)
+					err = os.RemoveAll(path)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+				} else {
+					ah.Consumer.Debugf("For symlink wound, found file/symlink (%s), doing Remove", path)
+					err = os.Remove(path)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+				}
+			}
+
+			ah.Consumer.Debugf("For symlink wound, doing Symlink (%s) => (%s)", path, symlinkEntry.Dest)
+			err = os.Symlink(symlinkEntry.Dest, path)
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
 		case WoundKind_FILE:
@@ -152,8 +185,8 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 			files[wound.Index] = true
 
 			select {
-			case pErr := <-errs:
-				return pErr
+			case err := <-errs:
+				return errors.WithStack(err)
 			case fileIndices <- wound.Index:
 				// queued for work!
 			}
@@ -190,7 +223,7 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 
 		err := processWound(wound)
 		if err != nil {
-			return errors.WithStack(err)
+			return err
 		}
 	}
 
