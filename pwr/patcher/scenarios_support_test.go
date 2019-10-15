@@ -18,25 +18,11 @@ import (
 )
 
 type patchScenario struct {
-	name                  string
-	v1                    testDirSettings
-	intermediate          *testDirSettings
-	corruptions           *testDirSettings
-	healedBytes           int64
-	v2                    testDirSettings
-	touchedFiles          int // files that were written to (not renamed) during apply
-	noopFiles             int // files that were left as-is during apply
-	movedFiles            int
-	deletedFiles          int
-	deletedSymlinks       int
-	deletedDirs           int
-	leftDirs              int  // folders that couldn't be deleted during apply (because of non-container files in them)
-	extraTests            bool // run in-place patching, etc.
-	testBrokenRename      bool // pretend os.Rename() doesn't work (it doesn't, sometimes, across partitions)
-	unchanged             bool // if true, before folder validates, so don't check that
-	ineffectiveCorruption bool // if true, before folder validates, so don't check that
-	testVet               bool // test that vetting rejections do reject
-	partitions            int
+	name         string
+	v1           testDirSettings
+	intermediate *testDirSettings
+	corruptions  *testDirSettings
+	v2           testDirSettings
 }
 
 const largeAmount int64 = 16

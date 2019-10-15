@@ -10,6 +10,9 @@ import (
 	"github.com/itchio/wharf/wire"
 )
 
+// Checkpoint contains state information for a patcher that
+// can be written to disk and read back from disk to resume
+// roughly where we left off.
 type Checkpoint struct {
 	MessageCheckpoint *wire.MessageReaderCheckpoint
 
@@ -22,17 +25,24 @@ type Checkpoint struct {
 	BsdiffCheckpoint *BsdiffCheckpoint
 }
 
+// FileKind denotes either rsync or bsdiff patching
 type FileKind int
 
 const (
-	FileKindRsync  = 1
+	// FileKindRsync denotes rsync patching (blocks-based)
+	FileKindRsync = 1
+	// FileKindBsdiff denotes bsdiff patching (addition-based)
 	FileKindBsdiff = 2
 )
 
+// RsyncCheckpoint is used when saving a patcher checkpoint in the middle
+// of patching a file with rsync instructions.
 type RsyncCheckpoint struct {
 	WriterCheckpoint *bowl.WriterCheckpoint
 }
 
+// BsdiffCheckpoint is used when saving a patcher checkpoint in the middle
+// of patching a file with bsdiff instructions.
 type BsdiffCheckpoint struct {
 	WriterCheckpoint *bowl.WriterCheckpoint
 
@@ -45,6 +55,10 @@ type BsdiffCheckpoint struct {
 	TargetIndex int64
 }
 
+// A Patcher applies a wharf patch, either standard (rsync-only) or optimized
+// (rsync + bsdiff). It can save its progress and resume.
+// It patches to a bowl: fresh bowls (create new folder with new build), overlay
+// bowls (patch to overlay, then commit that overlay in-place), etc.
 type Patcher interface {
 	SetSaveConsumer(sc SaveConsumer)
 	Resume(checkpoint *Checkpoint, targetPool lake.Pool, bowl bowl.Bowl) error
@@ -54,18 +68,27 @@ type Patcher interface {
 	GetTargetContainer() *tlc.Container
 }
 
+// AfterSaveAction describes what the patcher should do after it saved.
+// This can be used to gracefully stop it.
 type AfterSaveAction int
 
 const (
+	// AfterSaveContinue indicates that the patcher should continue after saving.
 	AfterSaveContinue AfterSaveAction = 1
-	AfterSaveStop     AfterSaveAction = 2
+	// AfterSaveStop indicates that the patcher should stop and return ErrStop
+	AfterSaveStop AfterSaveAction = 2
 )
 
+// A SaveConsumer can be set on a Patcher to decide if the patcher should save
+// (whenever it reaches a convenient place for a checkpoint), and to receive
+// the checkpoints, and let the patcher know if it should stop or continue
 type SaveConsumer interface {
 	ShouldSave() bool
 	Save(c *Checkpoint) (AfterSaveAction, error)
 }
 
+// ErrStop is returned by `patcher.Resume` if it just saved a checkpoint
+// and the `SaveConsumer` returned `AfterSaveStop`.
 var ErrStop = fmt.Errorf("patching was stopped after save!")
 
 // nopSaveConsumer
