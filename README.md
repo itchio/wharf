@@ -1,5 +1,6 @@
 # wharf
 
+[![Build Status](https://travis-ci.org/itchio/wharf.svg?branch=master)](https://travis-ci.org/itchio/wharf)
 [![build status](https://git.itch.ovh/itchio/wharf/badges/master/build.svg)](https://git.itch.ovh/itchio/wharf/commits/master)
 [![codecov](https://codecov.io/gh/itchio/wharf/branch/master/graph/badge.svg)](https://codecov.io/gh/itchio/wharf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/itchio/wharf)](https://goreportcard.com/report/github.com/itchio/wharf)
