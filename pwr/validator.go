@@ -354,12 +354,11 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		var reader io.Reader
 		reader, err = targetPool.GetReader(fileIndex)
 		if err != nil {
-			if IsNotExist(err) {
-				// whole file is missing
-				doWholeFileWound()
-				return nil
-			}
-			return err
+			vctx.Consumer.Debugf("(%s) expected file, got error %+v", err)
+
+			// whole file is missing
+			doWholeFileWound()
+			return nil
 		}
 
 		var writer io.WriteCloser

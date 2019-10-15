@@ -757,7 +757,13 @@ func (b *overlayBowl) deleteGhosts() error {
 		debugf("ghost: %v", ghost)
 		op := filepath.Join(b.OutputFolder, filepath.FromSlash(ghost.Path))
 
-		err := os.Remove(op)
+		_, err := os.Lstat(op)
+		if err != nil {
+			debugf("ghost already gone, bye bye! (%v)", err)
+			continue
+		}
+
+		err = os.Remove(op)
 		if err == nil || os.IsNotExist(err) {
 			// removed or already removed, good
 			debugf("ghost removed or already gone '%s'", ghost.Path)
