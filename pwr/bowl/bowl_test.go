@@ -177,7 +177,7 @@ func runScenario(t *testing.T, params *bowlerParams) {
 
 	// fresh bowl
 	params.makeBowl = func(p *makeBowlParams) (bowl.Bowl, bowlMode) {
-		b, err := bowl.NewFreshBowl(&bowl.FreshBowlParams{
+		b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 			SourceContainer: p.SourceContainer,
 			TargetContainer: p.TargetContainer,
 			TargetPool:      p.TargetPool,
@@ -193,7 +193,7 @@ func runScenario(t *testing.T, params *bowlerParams) {
 
 	// overlay bowl
 	params.makeBowl = func(p *makeBowlParams) (bowl.Bowl, bowlMode) {
-		b, err := bowl.NewOverlayBowl(&bowl.OverlayBowlParams{
+		b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
 			SourceContainer: p.SourceContainer,
 			TargetContainer: p.TargetContainer,
 			OutputFolder:    p.TargetFolder,
@@ -219,7 +219,8 @@ func runScenario(t *testing.T, params *bowlerParams) {
 			must(t, zipFile.Close())
 		}
 
-		wp := zipwriterpool.New(p.SourceContainer, zw)
+		wp, err := zipwriterpool.New(p.SourceContainer, zw)
+		must(t, err)
 
 		b, err := bowl.NewPoolBowl(&bowl.PoolBowlParams{
 			TargetContainer: p.TargetContainer,
