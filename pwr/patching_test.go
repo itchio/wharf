@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/itchio/headway/state"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/lake/pools/fspool"
-	"github.com/itchio/headway/state"
-	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -687,7 +687,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
-			log("In-place with signature (failfast, no corruptions)")
+			log("In-place with signature (f4ilfast, no corruptions)")
 			must(t, runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 			}))
@@ -698,7 +698,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 				return
 			}
 
-			log("In-place with signature (failfast, with corruptions)")
+			log("In-place with signature (f4ilfast, with corruptions)")
 			testErr := runExtraTest(func(actx *ApplyContext) {
 				actx.Signature = signature
 				makeTestDir(t, v1Before, *scenario.corruptions)
