@@ -418,6 +418,24 @@ func Test_Scenarios(t *testing.T) {
 			},
 		})
 	}
+
+	if testSymlinks {
+		runPatchingScenario(t, patchScenario{
+			name: "symlink becomes normal file (itchio/itch#2315)",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "test2.txt", seed: 0x1},
+					{path: "test.txt", dest: "test2.txt"},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "test2.txt", seed: 0x1},
+					{path: "test.txt", seed: 0x2},
+				},
+			},
+		})
+	}
 }
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
@@ -455,18 +473,49 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 		consumer := &state.Consumer{
 			OnMessage: func(level string, message string) {
-				if level == "debug" {
-					return
-				}
 				t.Logf("[%s] %s", level, message)
 			},
+		}
+
+		assertValid := func(target string, signature *pwr.SignatureInfo) error {
+			targetContainer, err := tlc.WalkAny(target, &tlc.WalkOpts{})
+			wtest.Must(t, err)
+
+			consumer.Debugf("===================================")
+			consumer.Debugf("validating container:")
+			targetContainer.Print(func(line string) {
+				consumer.Debugf(line)
+			})
+			consumer.Debugf("===================================")
+
+			vctx := &pwr.ValidatorContext{
+				FailFast: true,
+				Consumer: consumer,
+			}
+
+			return vctx.Validate(context.Background(), target, signature)
 		}
 
 		compression := &pwr.CompressionSettings{}
 		compression.Algorithm = pwr.CompressionAlgorithm_NONE
 
+		targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
+		wtest.Must(t, err)
+
 		sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
 		wtest.Must(t, err)
+
+		consumer.Debugf("===================================")
+		consumer.Debugf("v1 contents:")
+		targetContainer.Print(func(line string) {
+			consumer.Debugf(line)
+		})
+		consumer.Debugf("-----------------------------------")
+		consumer.Debugf("v2 contents:")
+		sourceContainer.Print(func(line string) {
+			consumer.Debugf(line)
+		})
+		consumer.Debugf("===================================")
 
 		patchBuffer := new(bytes.Buffer)
 		signatureBuffer := new(bytes.Buffer)
@@ -474,9 +523,6 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 		var v2Sig *pwr.SignatureInfo
 
 		func() {
-			targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
-			wtest.Must(t, err)
-
 			targetPool := fspool.New(targetContainer, v1)
 			v1Hashes, err := pwr.ComputeSignature(context.Background(), targetContainer, targetPool, consumer)
 			wtest.Must(t, err)
@@ -537,7 +583,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 			wtest.Must(t, b.Commit())
 
-			wtest.Must(t, pwr.AssertValid(outDir, v2Sig))
+			wtest.Must(t, assertValid(outDir, v2Sig))
 			wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 		}()
 
@@ -582,9 +628,9 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 							return errors.WithMessage(err, "in bowl.Commit")
 						}
 
-						err = pwr.AssertValid(outDir, v2Sig)
+						err = assertValid(outDir, v2Sig)
 						if err != nil {
-							return errors.WithMessage(err, "in pwr.AssertValid")
+							return errors.WithMessage(err, "in assertValid")
 						}
 						err = pwr.AssertNoGhosts(outDir, v2Sig)
 						if err != nil {
@@ -624,7 +670,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 
 				wtest.Must(t, b.Commit())
 
-				wtest.Must(t, pwr.AssertValid(outDir, v2Sig))
+				wtest.Must(t, assertValid(outDir, v2Sig))
 				wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 			}()
 
@@ -635,12 +681,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 					Consumer: consumer,
 				}
 				wtest.Must(t, vctx.Validate(context.Background(), outDir, v1Sig))
-
-				vctx = &pwr.ValidatorContext{
-					FailFast: true,
-					Consumer: consumer,
-				}
-				wtest.Must(t, vctx.Validate(context.Background(), outDir, v1Sig))
+				wtest.Must(t, assertValid(outDir, v1Sig))
 			}
 
 			v1Heal()
@@ -657,12 +698,7 @@ func runPatchingScenario(t *testing.T, scenario patchScenario) {
 					Consumer: consumer,
 				}
 				wtest.Must(t, vctx.Validate(context.Background(), outDir, v2Sig))
-
-				vctx = &pwr.ValidatorContext{
-					FailFast: true,
-					Consumer: consumer,
-				}
-				wtest.Must(t, vctx.Validate(context.Background(), outDir, v2Sig))
+				wtest.Must(t, assertValid(outDir, v2Sig))
 			}
 
 			v2Heal()

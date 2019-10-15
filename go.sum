@@ -72,6 +72,8 @@ github.com/itchio/lake v0.0.0-20191014192518-0b0e07cbee2b h1:sIZyN7FIzswo6F1+I2l
 github.com/itchio/lake v0.0.0-20191014192518-0b0e07cbee2b/go.mod h1:n+YVtK3CmWWBStRinjVxvv7o12BTKIrzVVC4coD+Ojg=
 github.com/itchio/lake v0.0.0-20191014192844-fa591e6b8ce2 h1:6mOJ7tYPkPkY7/SQ31GG6fVDNzKT2a8ciTQckJgfaVc=
 github.com/itchio/lake v0.0.0-20191014192844-fa591e6b8ce2/go.mod h1:4iFZSCbjleTtRmkOy94cr1Rm+2Bw2jiwY4e11LdO+xY=
+github.com/itchio/lake v0.0.0-20191015175943-9a7c1f88a2b5 h1:9UYv9gCW8zzLjc1LEip2lYn3tSL1ZQ86YK+MCUH5HNU=
+github.com/itchio/lake v0.0.0-20191015175943-9a7c1f88a2b5/go.mod h1:4iFZSCbjleTtRmkOy94cr1Rm+2Bw2jiwY4e11LdO+xY=
 github.com/itchio/randsource v0.0.0-20190702184213-a7635a4cb94b/go.mod h1:lKWkyaS6DHSVoxVLw7mIeD+po2Kvwv1Hiy8+7VR1zZc=
 github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927 h1:5abFAYun3PFycBSXZnvXk0wqaPNiioSTIOZFf3I0J+A=
 github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927/go.mod h1:lKWkyaS6DHSVoxVLw7mIeD+po2Kvwv1Hiy8+7VR1zZc=
