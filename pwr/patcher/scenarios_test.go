@@ -13,6 +13,7 @@ import (
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior/seeksource"
+	"github.com/itchio/screw"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
@@ -631,7 +632,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 
 		mainDir, err := ioutil.TempDir("", "patch-cycle")
 		wtest.Must(t, err)
-		defer os.RemoveAll(mainDir)
+		defer screw.RemoveAll(mainDir)
 
 		v1 := filepath.Join(mainDir, "v1")
 		makeTestDir(t, v1, scenario.v1)
@@ -643,7 +644,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		v2zip := filepath.Join(mainDir, "v2.zip")
 
 		func() {
-			fw, err := os.Create(v1zip)
+			fw, err := screw.Create(v1zip)
 			wtest.Must(t, err)
 
 			_, err = archiver.CompressZip(fw, v1, nil)
@@ -651,7 +652,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		}()
 
 		func() {
-			fw, err := os.Create(v2zip)
+			fw, err := screw.Create(v2zip)
 			wtest.Must(t, err)
 
 			_, err = archiver.CompressZip(fw, v2, nil)
