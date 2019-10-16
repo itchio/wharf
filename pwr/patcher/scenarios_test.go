@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior/seeksource"
@@ -543,7 +544,8 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 		}
 
 		compression := &pwr.CompressionSettings{}
-		compression.Algorithm = pwr.CompressionAlgorithm_NONE
+		compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
+		compression.Quality = 1
 
 		targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
 		wtest.Must(t, err)
@@ -564,6 +566,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 		consumer.Debugf("===================================")
 
 		patchBuffer := new(bytes.Buffer)
+		optimizedPatchBuffer := new(bytes.Buffer)
 		signatureBuffer := new(bytes.Buffer)
 		var v1Sig *pwr.SignatureInfo
 		var v2Sig *pwr.SignatureInfo
@@ -602,36 +605,32 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 		}()
 
 		func() {
-			log("Applying fresh (v1) -> (v2)")
-			outDir := filepath.Join(mainDir, "out")
-			wtest.Must(t, os.MkdirAll(outDir, 0o755))
-			defer os.RemoveAll(outDir)
+			rc := &pwr.RediffContext{
+				TargetPool: fspool.New(targetContainer, v1),
+				SourcePool: fspool.New(sourceContainer, v2),
+
+				Consumer:              consumer,
+				Compression:           compression,
+				SuffixSortConcurrency: 0,
+				Partitions:            2,
+			}
 
 			patchReader := seeksource.FromBytes(patchBuffer.Bytes())
+			_, err := patchReader.Resume(nil)
+			wtest.Must(t, err)
+
+			err = rc.AnalyzePatch(patchReader)
+			wtest.Must(t, err)
+
 			_, err = patchReader.Resume(nil)
 			wtest.Must(t, err)
 
-			p, err := patcher.New(patchReader, consumer)
+			err = rc.OptimizePatch(patchReader, optimizedPatchBuffer)
 			wtest.Must(t, err)
-
-			targetPool := fspool.New(p.GetTargetContainer(), v1)
-
-			b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
-				SourceContainer: p.GetSourceContainer(),
-				TargetContainer: p.GetTargetContainer(),
-				TargetPool:      targetPool,
-				OutputFolder:    outDir,
-			})
-			wtest.Must(t, err)
-
-			err = p.Resume(nil, targetPool, b)
-			wtest.Must(t, err)
-
-			wtest.Must(t, b.Commit())
-
-			wtest.Must(t, assertValid(outDir, v2Sig))
-			wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 		}()
+
+		log("    Naive patch: %s", united.FormatBytes(int64(patchBuffer.Len())))
+		log("Optimized patch: %s", united.FormatBytes(int64(optimizedPatchBuffer.Len())))
 
 		func() {
 			outDir := filepath.Join(mainDir, "out")
@@ -640,13 +639,117 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 			stageDir := filepath.Join(mainDir, "stage")
 			wtest.Must(t, os.MkdirAll(stageDir, 0o755))
 
-			if scenario.corruptions != nil {
-				func() {
-					log("Applying in-place (v1 corrupted) -> (v2)")
-					cpDir(t, v1, outDir)
-					makeTestDir(t, outDir, *scenario.corruptions)
+			type Patch struct {
+				Name   string
+				Buffer *bytes.Buffer
+			}
+			patches := []Patch{
+				Patch{
+					Name:   "naive",
+					Buffer: patchBuffer,
+				},
+				Patch{
+					Name:   "optimized",
+					Buffer: optimizedPatchBuffer,
+				},
+			}
 
-					patchReader := seeksource.FromBytes(patchBuffer.Bytes())
+			for _, patch := range patches {
+				func() {
+					log("Applying %s fresh (v1) -> (v2)", patch.Name)
+					os.RemoveAll(outDir)
+					wtest.Must(t, os.MkdirAll(outDir, 0o755))
+
+					patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
+					_, err = patchReader.Resume(nil)
+					wtest.Must(t, err)
+
+					p, err := patcher.New(patchReader, consumer)
+					wtest.Must(t, err)
+
+					targetPool := fspool.New(p.GetTargetContainer(), v1)
+
+					b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
+						SourceContainer: p.GetSourceContainer(),
+						TargetContainer: p.GetTargetContainer(),
+						TargetPool:      targetPool,
+						OutputFolder:    outDir,
+					})
+					wtest.Must(t, err)
+
+					err = p.Resume(nil, targetPool, b)
+					wtest.Must(t, err)
+
+					wtest.Must(t, b.Commit())
+
+					wtest.Must(t, assertValid(outDir, v2Sig))
+					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
+				}()
+
+				if scenario.corruptions != nil {
+					func() {
+						log("Applying %s in-place (v1 corrupted) -> (v2)", patch.Name)
+						os.RemoveAll(outDir)
+						wtest.Must(t, os.MkdirAll(outDir, 0o755))
+						cpDir(t, v1, outDir)
+						makeTestDir(t, outDir, *scenario.corruptions)
+
+						patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
+						_, err = patchReader.Resume(nil)
+						wtest.Must(t, err)
+
+						p, err := patcher.New(patchReader, consumer)
+						wtest.Must(t, err)
+
+						targetPool := fspool.New(p.GetTargetContainer(), outDir)
+
+						b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
+							SourceContainer: p.GetSourceContainer(),
+							TargetContainer: p.GetTargetContainer(),
+							StageFolder:     stageDir,
+							OutputFolder:    outDir,
+						})
+						wtest.Must(t, err)
+
+						err = func() error {
+							err := p.Resume(nil, targetPool, b)
+							if err != nil {
+								return errors.WithMessage(err, "in patcher.Resume")
+							}
+
+							err = b.Commit()
+							if err != nil {
+								return errors.WithMessage(err, "in bowl.Commit")
+							}
+
+							err = assertValid(outDir, v2Sig)
+							if err != nil {
+								return errors.WithMessage(err, "in assertValid")
+							}
+							err = pwr.AssertNoGhosts(outDir, v2Sig)
+							if err != nil {
+								return errors.WithMessage(err, "in pwr.AssertNoGhosts")
+							}
+
+							return nil
+						}()
+						if err != nil {
+							log("As expected, got an error: %+v", err)
+						}
+						if patch.Name == "naive" {
+							// sometimes the optimized patches work anyway?
+							assert.Error(t, err)
+						}
+					}()
+				}
+
+				func() {
+					log("Applying %s in-place (v1) -> (v2)", patch.Name)
+					os.RemoveAll(outDir)
+					wtest.Must(t, os.MkdirAll(outDir, 0o755))
+					cpDir(t, v1, outDir)
+
+					patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
 					_, err = patchReader.Resume(nil)
 					wtest.Must(t, err)
 
@@ -663,62 +766,15 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 					})
 					wtest.Must(t, err)
 
-					err = func() error {
-						err := p.Resume(nil, targetPool, b)
-						if err != nil {
-							return errors.WithMessage(err, "in patcher.Resume")
-						}
+					err = p.Resume(nil, targetPool, b)
+					wtest.Must(t, err)
 
-						err = b.Commit()
-						if err != nil {
-							return errors.WithMessage(err, "in bowl.Commit")
-						}
+					wtest.Must(t, b.Commit())
 
-						err = assertValid(outDir, v2Sig)
-						if err != nil {
-							return errors.WithMessage(err, "in assertValid")
-						}
-						err = pwr.AssertNoGhosts(outDir, v2Sig)
-						if err != nil {
-							return errors.WithMessage(err, "in pwr.AssertNoGhosts")
-						}
-
-						return nil
-					}()
-					log("Returned error: %+v", err)
-					assert.Error(t, err)
+					wtest.Must(t, assertValid(outDir, v2Sig))
+					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 				}()
 			}
-
-			func() {
-				log("Applying in-place (v1) -> (v2)")
-				cpDir(t, v1, outDir)
-
-				patchReader := seeksource.FromBytes(patchBuffer.Bytes())
-				_, err = patchReader.Resume(nil)
-				wtest.Must(t, err)
-
-				p, err := patcher.New(patchReader, consumer)
-				wtest.Must(t, err)
-
-				targetPool := fspool.New(p.GetTargetContainer(), outDir)
-
-				b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
-					SourceContainer: p.GetSourceContainer(),
-					TargetContainer: p.GetTargetContainer(),
-					StageFolder:     stageDir,
-					OutputFolder:    outDir,
-				})
-				wtest.Must(t, err)
-
-				err = p.Resume(nil, targetPool, b)
-				wtest.Must(t, err)
-
-				wtest.Must(t, b.Commit())
-
-				wtest.Must(t, assertValid(outDir, v2Sig))
-				wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
-			}()
 
 			v1Heal := func() {
 				log("Healing to (v1)")
