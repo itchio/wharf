@@ -1,11 +1,11 @@
 package bowl_test
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/itchio/arkive/zip"
+	"github.com/itchio/screw"
 
 	"github.com/itchio/lake/pools/zipwriterpool"
 	"github.com/itchio/wharf/pwr/bowl"
@@ -210,7 +210,7 @@ func runScenario(t *testing.T, params *bowlerParams) {
 	// pool bowl
 	params.makeBowl = func(p *makeBowlParams) (bowl.Bowl, bowlMode) {
 		p.ZipFilePath = filepath.Join(p.FreshFolder, "archive.zip")
-		zipFile, err := os.Create(p.ZipFilePath)
+		zipFile, err := screw.Create(p.ZipFilePath)
 		must(t, err)
 
 		zw := zip.NewWriter(zipFile)

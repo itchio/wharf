@@ -9,6 +9,7 @@ import (
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior"
+	"github.com/itchio/screw"
 	"github.com/pkg/errors"
 )
 
@@ -148,12 +149,12 @@ func (few *freshEntryWriter) Tell() int64 {
 }
 
 func (few *freshEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
-	err := os.MkdirAll(filepath.Dir(few.path), 0755)
+	err := screw.MkdirAll(filepath.Dir(few.path), 0755)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
 
-	f, err := os.OpenFile(few.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
+	f, err := screw.OpenFile(few.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
