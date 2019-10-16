@@ -472,6 +472,52 @@ func Test_Scenarios(t *testing.T) {
 			},
 		})
 	}
+
+	if testSymlinks {
+		runPatchingScenario(t, patchScenario{
+			name: "multi-level symlink (1)",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1},
+					{path: "file2", seed: 0x2},
+					{path: "file3", seed: 0x3},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1},
+					{path: "file2", seed: 0x2},
+					{path: "file3", seed: 0x3},
+					{path: "aaa.txt", dest: "aa.txt"},
+					{path: "aa.txt", dest: "a.txt"},
+					{path: "a.txt", seed: 0x4},
+				},
+			},
+		})
+	}
+
+	if testSymlinks {
+		runPatchingScenario(t, patchScenario{
+			name: "multi-level symlink (2)",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1},
+					{path: "file2", seed: 0x2},
+					{path: "file3", seed: 0x3},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "file1", seed: 0x1},
+					{path: "file2", seed: 0x2},
+					{path: "file3", seed: 0x3},
+					{path: "bbb.txt", seed: 0x4},
+					{path: "bb.txt", dest: "bbb.txt"},
+					{path: "b.txt", dest: "bb.txt"},
+				},
+			},
+		})
+	}
 }
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
