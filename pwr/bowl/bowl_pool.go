@@ -81,6 +81,22 @@ func (b *poolBowl) GetWriter(index int64) (EntryWriter, error) {
 	return pew, nil
 }
 
+func (b *poolBowl) Close() error {
+	var err error
+
+	err = b.TargetPool.Close()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = b.OutputPool.Close()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 func (b *poolBowl) Transpose(t Transposition) (rErr error) {
 	// alright y'all it's copy time
 

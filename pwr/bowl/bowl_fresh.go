@@ -128,6 +128,11 @@ func (b *freshBowl) Commit() error {
 	return nil
 }
 
+func (b *freshBowl) Close() error {
+	// nothing to close
+	return nil
+}
+
 // freshEntryWriter
 
 type freshEntryWriter struct {

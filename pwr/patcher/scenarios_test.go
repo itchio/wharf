@@ -815,6 +815,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 						OutputFolder:    outDir,
 					})
 					wtest.Must(t, err)
+					defer b.Close()
 
 					err = p.Resume(nil, targetPool, b)
 					wtest.Must(t, err)
@@ -851,6 +852,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 					if err != nil {
 						return errors.WithStack(err)
 					}
+					defer b.Close()
 
 					err = p.Resume(nil, targetPool, b)
 					if err != nil {

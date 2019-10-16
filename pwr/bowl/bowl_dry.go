@@ -48,6 +48,11 @@ func (b *dryBowl) Resume(c *BowlCheckpoint) error {
 	return nil
 }
 
+func (b *dryBowl) Close() error {
+	// nothing to close
+	return nil
+}
+
 func (b *dryBowl) GetWriter(index int64) (EntryWriter, error) {
 	if index < 0 || index >= int64(len(b.SourceContainer.Files)) {
 		return nil, errors.Errorf("drybowl: invalid source index %d", index)

@@ -263,6 +263,22 @@ func (b *overlayBowl) Commit() error {
 	return nil
 }
 
+func (b *overlayBowl) Close() error {
+	var err error
+
+	err = b.TargetPool.Close()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = b.stagePool.Close()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	outputPath := b.OutputFolder
 

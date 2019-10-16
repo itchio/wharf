@@ -14,6 +14,9 @@ type Bowl interface {
 
 	// phase 2: committing
 	Commit() error
+
+	// cleanups
+	Close() error
 }
 
 type EntryWriter interface {
