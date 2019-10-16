@@ -266,7 +266,7 @@ func (b *overlayBowl) Commit() error {
 func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	outputPath := b.OutputFolder
 
-	for _, dir := range b.SourceContainer.Dirs {
+	processDir := func(dir *tlc.Dir) error {
 		path := filepath.Join(outputPath, filepath.FromSlash(dir.Path))
 
 		stats, err := os.Lstat(path)
@@ -274,7 +274,7 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 			// did stat
 			if stats.IsDir() {
 				// good!
-				continue
+				return nil
 			}
 
 			// probably a file or a symlink, clear out
@@ -290,11 +290,19 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 			// so if we get a non-nil error, we know it's serious business (permissions, etc.)
 			return errors.WithStack(err)
 		}
+		return nil
+	}
+
+	for _, dir := range b.SourceContainer.Dirs {
+		err := processDir(dir)
+		if err != nil {
+			return err
+		}
 	}
 
 	// TODO: behave like github.com/itchio/savior for symlinks on windows ?
 
-	for _, symlink := range b.SourceContainer.Symlinks {
+	processSymlink := func(symlink *tlc.Symlink) error {
 		path := filepath.Join(outputPath, filepath.FromSlash(symlink.Path))
 
 		stats, err := os.Lstat(path)
@@ -313,10 +321,12 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				// symlink was missing
+				debugf("Was missing, linking (%s) => (%s)\n", path, symlink.Dest)
 				err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
 				if err != nil {
 					return errors.WithStack(err)
 				}
+				return nil
 			} else {
 				return errors.WithStack(err)
 			}
@@ -330,12 +340,22 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 				return errors.WithStack(err)
 			}
 
+			debugf("Was wrong path, removed and linking (%s) => (%s)\n", path, symlink.Dest)
 			err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-
 			return nil
+		}
+
+		// existed, was symlink, and pointed to right file
+		return nil
+	}
+
+	for _, symlink := range b.SourceContainer.Symlinks {
+		err := processSymlink(symlink)
+		if err != nil {
+			return err
 		}
 	}
 

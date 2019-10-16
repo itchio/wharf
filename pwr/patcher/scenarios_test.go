@@ -475,7 +475,7 @@ func Test_Scenarios(t *testing.T) {
 
 	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
-			name: "multi-level symlink (1)",
+			name: "multi-level symlink 1",
 			v1: testDirSettings{
 				entries: []testDirEntry{
 					{path: "file1", seed: 0x1},
@@ -498,7 +498,7 @@ func Test_Scenarios(t *testing.T) {
 
 	if testSymlinks {
 		runPatchingScenario(t, patchScenario{
-			name: "multi-level symlink (2)",
+			name: "multi-level symlink 2",
 			v1: testDirSettings{
 				entries: []testDirEntry{
 					{path: "file1", seed: 0x1},
