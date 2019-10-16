@@ -454,6 +454,23 @@ func Test_Scenarios(t *testing.T) {
 			},
 		})
 	}
+
+	if testSymlinks {
+		runPatchingScenario(t, patchScenario{
+			name: "symlink becomes dangling",
+			v1: testDirSettings{
+				entries: []testDirEntry{
+					{path: "test2.txt", seed: 0x1},
+					{path: "test.txt", dest: "test2.txt"},
+				},
+			},
+			v2: testDirSettings{
+				entries: []testDirEntry{
+					{path: "test.txt", dest: "test2.txt"},
+				},
+			},
+		})
+	}
 }
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
