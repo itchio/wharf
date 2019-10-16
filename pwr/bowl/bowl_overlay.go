@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/itchio/savior/filesource"
+	"github.com/itchio/screw"
 	"github.com/itchio/wharf/pwr/overlay"
 
 	"github.com/itchio/lake"
@@ -77,7 +78,7 @@ func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 			return nil, errors.New("overlaybowl: OutputFolder must not be nil")
 		}
 
-		stats, err := os.Stat(params.OutputFolder)
+		stats, err := screw.Lstat(params.OutputFolder)
 		if err != nil {
 			return nil, errors.New("overlaybowl: OutputFolder must exist")
 		}
@@ -93,7 +94,7 @@ func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 
 	var err error
 
-	err = os.MkdirAll(params.StageFolder, 0755)
+	err = screw.MkdirAll(params.StageFolder, 0755)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -285,7 +286,7 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	processDir := func(dir *tlc.Dir) error {
 		path := filepath.Join(outputPath, filepath.FromSlash(dir.Path))
 
-		stats, err := os.Lstat(path)
+		stats, err := screw.Lstat(path)
 		if err == nil {
 			// did stat
 			if stats.IsDir() {
@@ -294,13 +295,13 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 			}
 
 			// probably a file or a symlink, clear out
-			err = os.RemoveAll(path)
+			err = screw.RemoveAll(path)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 		}
 
-		err = os.MkdirAll(path, 0755)
+		err = screw.MkdirAll(path, 0755)
 		if err != nil {
 			// If path is already a directory, MkdirAll does nothing and returns nil.
 			// so if we get a non-nil error, we know it's serious business (permissions, etc.)
@@ -321,24 +322,24 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	processSymlink := func(symlink *tlc.Symlink) error {
 		path := filepath.Join(outputPath, filepath.FromSlash(symlink.Path))
 
-		stats, err := os.Lstat(path)
+		stats, err := screw.Lstat(path)
 		if err == nil {
 			// did stat
 			if stats.Mode()&os.ModeSymlink == 0 {
 				// not a symlink! clear out
-				err = os.RemoveAll(path)
+				err = screw.RemoveAll(path)
 				if err != nil {
 					return errors.WithStack(err)
 				}
 			}
 		}
 
-		dest, err := os.Readlink(path)
+		dest, err := screw.Readlink(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// symlink was missing
 				debugf("Was missing, linking (%s) => (%s)\n", path, symlink.Dest)
-				err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
+				err = screw.Symlink(filepath.FromSlash(symlink.Dest), path)
 				if err != nil {
 					return errors.WithStack(err)
 				}
@@ -351,13 +352,13 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 		// symlink is there
 		if dest != filepath.FromSlash(symlink.Dest) {
 			// wrong dest, fixing that
-			err = os.Remove(path)
+			err = screw.Remove(path)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
 			debugf("Was wrong path, removed and linking (%s) => (%s)\n", path, symlink.Dest)
-			err = os.Symlink(filepath.FromSlash(symlink.Dest), path)
+			err = screw.Symlink(filepath.FromSlash(symlink.Dest), path)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -561,14 +562,14 @@ func (b *overlayBowl) applyTranspositions() error {
 func (b *overlayBowl) copy(oldAbsolutePath string, newAbsolutePath string, mkdirBehavior mkdirBehavior) error {
 	debugf("cp '%s' '%s'", oldAbsolutePath, newAbsolutePath)
 	if mkdirBehavior == mkdirBehaviorIfNeeded {
-		err := os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
+		err := screw.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 		if err != nil {
 			return errors.WithStack(err)
 		}
 	}
 
 	// fall back to copy + remove
-	reader, err := os.Open(oldAbsolutePath)
+	reader, err := screw.Open(oldAbsolutePath)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -579,7 +580,7 @@ func (b *overlayBowl) copy(oldAbsolutePath string, newAbsolutePath string, mkdir
 		return errors.WithStack(err)
 	}
 
-	writer, err := os.OpenFile(newAbsolutePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, stats.Mode()|tlc.ModeMask)
+	writer, err := screw.OpenFile(newAbsolutePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, stats.Mode()|tlc.ModeMask)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -596,14 +597,14 @@ func (b *overlayBowl) copy(oldAbsolutePath string, newAbsolutePath string, mkdir
 func (b *overlayBowl) move(oldAbsolutePath string, newAbsolutePath string) error {
 	debugf("mv '%s' '%s'", oldAbsolutePath, newAbsolutePath)
 
-	err := os.Remove(newAbsolutePath)
+	err := screw.Remove(newAbsolutePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return errors.WithStack(err)
 		}
 	}
 
-	err = os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
+	err = screw.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -611,7 +612,7 @@ func (b *overlayBowl) move(oldAbsolutePath string, newAbsolutePath string) error
 	if debugBrokenRename {
 		err = &os.PathError{}
 	} else {
-		err = os.Rename(oldAbsolutePath, newAbsolutePath)
+		err = screw.Rename(oldAbsolutePath, newAbsolutePath)
 	}
 	if err != nil {
 		debugf("falling back to copy because of %s", err.Error())
@@ -624,7 +625,7 @@ func (b *overlayBowl) move(oldAbsolutePath string, newAbsolutePath string) error
 			return cErr
 		}
 
-		cErr = os.Remove(oldAbsolutePath)
+		cErr = screw.Remove(oldAbsolutePath)
 		if cErr != nil {
 			return cErr
 		}
@@ -672,7 +673,7 @@ func (b *overlayBowl) applyOverlays() error {
 		defer r.Close()
 
 		outputPath := filepath.Join(b.OutputFolder, nativePath)
-		w, err := os.OpenFile(outputPath, os.O_WRONLY, 0644)
+		w, err := screw.OpenFile(outputPath, os.O_WRONLY, 0644)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -793,13 +794,13 @@ func (b *overlayBowl) deleteGhosts() error {
 		debugf("ghost: %v", ghost)
 		op := filepath.Join(b.OutputFolder, filepath.FromSlash(ghost.Path))
 
-		_, err := os.Lstat(op)
+		_, err := screw.Lstat(op)
 		if err != nil {
 			debugf("ghost already gone, bye bye! (%v)", err)
 			continue
 		}
 
-		err = os.Remove(op)
+		err = screw.Remove(op)
 		if err == nil || os.IsNotExist(err) {
 			// removed or already removed, good
 			debugf("ghost removed or already gone '%s'", ghost.Path)
@@ -901,12 +902,12 @@ func (w *overlayEntryWriter) Save() (*WriterCheckpoint, error) {
 }
 
 func (w *overlayEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
-	err := os.MkdirAll(filepath.Dir(w.path), 0755)
+	err := screw.MkdirAll(filepath.Dir(w.path), 0755)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
 
-	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
+	f, err := screw.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}

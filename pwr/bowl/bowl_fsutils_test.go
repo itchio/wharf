@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/itchio/screw"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/pwr/bowl"
 
@@ -36,7 +37,7 @@ func ditto(dst string, src string) error {
 
 		switch {
 		case info.IsDir():
-			err = os.MkdirAll(dstPath, info.Mode())
+			err = screw.MkdirAll(dstPath, info.Mode())
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -44,13 +45,13 @@ func ditto(dst string, src string) error {
 			return errors.New("don't know how to ditto symlink")
 		default:
 			err = func() error {
-				r, err := os.Open(path)
+				r, err := screw.Open(path)
 				if err != nil {
 					return errors.WithStack(err)
 				}
 				defer r.Close()
 
-				w, err := os.OpenFile(dstPath, os.O_CREATE, info.Mode())
+				w, err := screw.OpenFile(dstPath, os.O_CREATE, info.Mode())
 				if err != nil {
 					return errors.WithStack(err)
 				}
@@ -125,17 +126,17 @@ func runBowler(t *testing.T, params *bowlerParams) {
 
 	targetFolder, err := ioutil.TempDir("", "bowler-target")
 	must(t, err)
-	defer os.RemoveAll(targetFolder)
+	defer screw.RemoveAll(targetFolder)
 	b.TargetFolder = targetFolder
 
 	refFolder, err := ioutil.TempDir("", "bowler-reference")
 	must(t, err)
-	defer os.RemoveAll(refFolder)
+	defer screw.RemoveAll(refFolder)
 	b.RefFolder = refFolder
 
 	freshFolder, err := ioutil.TempDir("", "bowler-fresh")
 	must(t, err)
-	defer os.RemoveAll(freshFolder)
+	defer screw.RemoveAll(freshFolder)
 	b.FreshFolder = freshFolder
 
 	// fill up our target folder + target container
@@ -206,7 +207,7 @@ func runBowler(t *testing.T, params *bowlerParams) {
 			Consumer: &state.Consumer{},
 		})
 		must(t, err)
-		must(t, os.Remove(mbp.ZipFilePath))
+		must(t, screw.Remove(mbp.ZipFilePath))
 	}
 
 	if outFolder != "" {
@@ -246,15 +247,15 @@ type bowlerPreparator struct {
 func (bp *bowlerPreparator) dir(path string) {
 	t := bp.b.t
 
-	must(t, os.MkdirAll(filepath.Join(bp.b.TargetFolder, path), 0755))
+	must(t, screw.MkdirAll(filepath.Join(bp.b.TargetFolder, path), 0755))
 }
 
 func (bp *bowlerPreparator) symlink(path string, dest string) {
 	t := bp.b.t
 
 	targetPath := filepath.Join(bp.b.TargetFolder, path)
-	must(t, os.MkdirAll(filepath.Dir(targetPath), 0755))
-	must(t, os.Symlink(dest, targetPath))
+	must(t, screw.MkdirAll(filepath.Dir(targetPath), 0755))
+	must(t, screw.Symlink(dest, targetPath))
 }
 
 func (bp *bowlerPreparator) file(path string, data []byte) {
@@ -263,7 +264,7 @@ func (bp *bowlerPreparator) file(path string, data []byte) {
 	mode := os.FileMode(0644)
 
 	targetPath := filepath.Join(bp.b.TargetFolder, path)
-	must(t, os.MkdirAll(filepath.Dir(targetPath), 0755))
+	must(t, screw.MkdirAll(filepath.Dir(targetPath), 0755))
 	must(t, ioutil.WriteFile(targetPath, data, mode))
 }
 
@@ -289,9 +290,9 @@ func (bs *bowlerSimulator) patch(sourcePath string, data []byte) {
 	case bowlerSimulatorModeMakeReference:
 		must(t, func() error {
 			refPath := filepath.Join(bs.b.RefFolder, sourcePath)
-			must(t, os.MkdirAll(filepath.Dir(refPath), 0755))
+			must(t, screw.MkdirAll(filepath.Dir(refPath), 0755))
 
-			w, err := os.Create(refPath)
+			w, err := screw.Create(refPath)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -336,9 +337,9 @@ func (bs *bowlerSimulator) transpose(targetPath string, sourcePath string) {
 			}
 
 			refPath := filepath.Join(bs.b.RefFolder, sourcePath)
-			must(t, os.MkdirAll(filepath.Dir(refPath), 0755))
+			must(t, screw.MkdirAll(filepath.Dir(refPath), 0755))
 
-			w, err := os.Create(refPath)
+			w, err := screw.Create(refPath)
 			if err != nil {
 				return errors.WithStack(err)
 			}
