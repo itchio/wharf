@@ -32,9 +32,11 @@ func Test_Scenarios(t *testing.T) {
 				{path: "dir2/file-2", seed: 0x3},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x22, size: pwr.BlockSize*11 + 14},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x22, size: pwr.BlockSize*11 + 14},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -55,11 +57,13 @@ func Test_Scenarios(t *testing.T) {
 				}},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "short", chunks: []testDirChunk{
-					testDirChunk{seed: 0x111, size: pwr.BlockSize - 17},
-				}},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "short", chunks: []testDirChunk{
+						testDirChunk{seed: 0x111, size: pwr.BlockSize - 17},
+					}},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -81,13 +85,15 @@ func Test_Scenarios(t *testing.T) {
 				}},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "short", chunks: []testDirChunk{
-					testDirChunk{seed: 0x111, size: pwr.BlockSize},
-					testDirChunk{seed: 0x222, size: 1},
-					testDirChunk{seed: 0x111, size: pwr.BlockSize*15 - 1},
-				}},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "short", chunks: []testDirChunk{
+						testDirChunk{seed: 0x111, size: pwr.BlockSize},
+						testDirChunk{seed: 0x222, size: 1},
+						testDirChunk{seed: 0x111, size: pwr.BlockSize*15 - 1},
+					}},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -111,13 +117,15 @@ func Test_Scenarios(t *testing.T) {
 				}},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", chunks: []testDirChunk{
-					testDirChunk{seed: 0x111, size: pwr.BlockSize*12 + 1},
-					testDirChunk{seed: 0x222, size: pwr.BlockSize*12 + 3},
-					testDirChunk{seed: 0x333, size: pwr.BlockSize * 12},
-				}},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", chunks: []testDirChunk{
+						testDirChunk{seed: 0x111, size: pwr.BlockSize*12 + 1},
+						testDirChunk{seed: 0x222, size: pwr.BlockSize*12 + 3},
+						testDirChunk{seed: 0x333, size: pwr.BlockSize * 12},
+					}},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -276,9 +284,11 @@ func Test_Scenarios(t *testing.T) {
 				{path: "subdir/file-4", seed: 0x44, size: pwr.BlockSize*largeAmount + 17},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -301,9 +311,11 @@ func Test_Scenarios(t *testing.T) {
 				{path: "subdir/file-4", seed: 0x44, size: pwr.BlockSize*largeAmount + 17},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -326,9 +338,11 @@ func Test_Scenarios(t *testing.T) {
 				{path: "subdir/file-4", seed: 0x44, size: pwr.BlockSize*largeAmount + 17},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -351,9 +365,11 @@ func Test_Scenarios(t *testing.T) {
 				{path: "subdir/file-4", seed: 0x44, size: pwr.BlockSize*largeAmount + 17},
 			},
 		},
-		corruptions: &testDirSettings{
-			entries: []testDirEntry{
-				{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+		corruptions: &testCorruption{
+			files: testDirSettings{
+				entries: []testDirEntry{
+					{path: "subdir/file-1", seed: 0x99, size: pwr.BlockSize*largeAmount + 17},
+				},
 			},
 		},
 		v2: testDirSettings{
@@ -518,20 +534,98 @@ func Test_Scenarios(t *testing.T) {
 			},
 		})
 	}
+
+	runPatchingScenario(t, patchScenario{
+		name: "change case",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "apricot", seed: 0x1},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "APRICOT", seed: 0x1},
+			},
+		},
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name: "change parent case",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "base/apricot", seed: 0x1},
+				{path: "base/apple", seed: 0x2},
+				{path: "base/orange", seed: 0x3},
+			},
+		},
+		corruptions: &testCorruption{
+			before: func(t *testing.T, dir string) {
+				wtest.Must(t, os.Rename(
+					filepath.Join(dir, "base"),
+					filepath.Join(dir, "BASE"),
+				))
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "BASE/apricot", seed: 0x1},
+				{path: "BASE/apple", seed: 0x2},
+				{path: "BASE/orange", seed: 0x3},
+			},
+		},
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name: "change case and patch",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "apricot", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: pwr.BlockSize * 8},
+					testDirChunk{seed: 0x222, size: pwr.BlockSize * 8},
+				}},
+			},
+		},
+		corruptions: &testCorruption{
+			before: func(t *testing.T, dir string) {
+				wtest.Must(t, os.Rename(
+					filepath.Join(dir, "apricot"),
+					filepath.Join(dir, "APRICOT"),
+				))
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "APRICOT", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: pwr.BlockSize * 8},
+					testDirChunk{seed: 0x333, size: pwr.BlockSize * 1},
+					testDirChunk{seed: 0x222, size: pwr.BlockSize * 7},
+				}},
+			},
+		},
+	})
 }
+
+type ScenarioDirection int
+
+const (
+	ScenarioForward ScenarioDirection = 1
+	ScenarioBack    ScenarioDirection = 2
+)
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
 	forwardScenario := *&scenario
 	forwardScenario.name += "/forward"
-	runSinglePatchingScenario(t, forwardScenario)
+	runSinglePatchingScenario(t, forwardScenario, ScenarioForward)
 
 	backScenario := *&scenario
 	backScenario.name += "/back"
 	backScenario.v1, backScenario.v2 = backScenario.v2, backScenario.v1
-	runSinglePatchingScenario(t, backScenario)
+	runSinglePatchingScenario(t, backScenario, ScenarioBack)
 }
 
-func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
+func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction ScenarioDirection) {
+	enableCorruptions := scenario.corruptions != nil && direction == ScenarioForward
+
 	t.Run(scenario.name, func(t *testing.T) {
 		log := t.Logf
 
@@ -680,10 +774,10 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 
 		func() {
 			outDir := filepath.Join(mainDir, "out")
-			wtest.Must(t, os.MkdirAll(outDir, 0o755))
+			wipeAndMkDir(t, outDir)
 
 			stageDir := filepath.Join(mainDir, "stage")
-			wtest.Must(t, os.MkdirAll(stageDir, 0o755))
+			wipeAndMkDir(t, stageDir)
 
 			type Patch struct {
 				Name   string
@@ -703,8 +797,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 			for _, patch := range patches {
 				func() {
 					log("Applying %s fresh (v1) -> (v2)", patch.Name)
-					os.RemoveAll(outDir)
-					wtest.Must(t, os.MkdirAll(outDir, 0o755))
+					wipeAndMkDir(t, outDir)
 
 					patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
 					_, err = patchReader.Resume(nil)
@@ -732,53 +825,56 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 				}()
 
-				if scenario.corruptions != nil {
+				applyInPlace := func(beforePatch func()) error {
+					wipeAndCpDir(t, v1, outDir)
+					beforePatch()
+
+					patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
+					_, err = patchReader.Resume(nil)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
+					p, err := patcher.New(patchReader, consumer)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
+					targetPool := fspool.New(p.GetTargetContainer(), outDir)
+
+					b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
+						SourceContainer: p.GetSourceContainer(),
+						TargetContainer: p.GetTargetContainer(),
+						StageFolder:     stageDir,
+						OutputFolder:    outDir,
+					})
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
+					err = p.Resume(nil, targetPool, b)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
+					err = b.Commit()
+					if err != nil {
+						return err
+					}
+
+					err = assertValid(outDir, v2Sig)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+					return nil
+				}
+
+				if enableCorruptions {
 					func() {
-						log("Applying %s in-place (v1 corrupted) -> (v2)", patch.Name)
-						os.RemoveAll(outDir)
-						wtest.Must(t, os.MkdirAll(outDir, 0o755))
-						cpDir(t, v1, outDir)
-						makeTestDir(t, outDir, *scenario.corruptions)
-
-						patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
-						_, err = patchReader.Resume(nil)
-						wtest.Must(t, err)
-
-						p, err := patcher.New(patchReader, consumer)
-						wtest.Must(t, err)
-
-						targetPool := fspool.New(p.GetTargetContainer(), outDir)
-
-						b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
-							SourceContainer: p.GetSourceContainer(),
-							TargetContainer: p.GetTargetContainer(),
-							StageFolder:     stageDir,
-							OutputFolder:    outDir,
+						log("Applying %s in-place (v1 + corruptions) -> (v2)", patch.Name)
+						err := applyInPlace(func() {
+							applyCorruptions(t, outDir, *scenario.corruptions)
 						})
-						wtest.Must(t, err)
-
-						err = func() error {
-							err := p.Resume(nil, targetPool, b)
-							if err != nil {
-								return errors.WithMessage(err, "in patcher.Resume")
-							}
-
-							err = b.Commit()
-							if err != nil {
-								return errors.WithMessage(err, "in bowl.Commit")
-							}
-
-							err = assertValid(outDir, v2Sig)
-							if err != nil {
-								return errors.WithMessage(err, "in assertValid")
-							}
-							err = pwr.AssertNoGhosts(outDir, v2Sig)
-							if err != nil {
-								return errors.WithMessage(err, "in pwr.AssertNoGhosts")
-							}
-
-							return nil
-						}()
 						if err != nil {
 							log("As expected, got an error: %+v", err)
 						}
@@ -789,35 +885,19 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 					}()
 				}
 
+				if scenario.intermediate != nil {
+					func() {
+						log("Applying %s in-place (v1 + intermediate) -> (v2)", patch.Name)
+						err := applyInPlace(func() {
+							makeTestDir(t, outDir, *scenario.intermediate)
+						})
+						wtest.Must(t, err)
+					}()
+				}
+
 				func() {
 					log("Applying %s in-place (v1) -> (v2)", patch.Name)
-					os.RemoveAll(outDir)
-					wtest.Must(t, os.MkdirAll(outDir, 0o755))
-					cpDir(t, v1, outDir)
-
-					patchReader := seeksource.FromBytes(patch.Buffer.Bytes())
-					_, err = patchReader.Resume(nil)
-					wtest.Must(t, err)
-
-					p, err := patcher.New(patchReader, consumer)
-					wtest.Must(t, err)
-
-					targetPool := fspool.New(p.GetTargetContainer(), outDir)
-
-					b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
-						SourceContainer: p.GetSourceContainer(),
-						TargetContainer: p.GetTargetContainer(),
-						StageFolder:     stageDir,
-						OutputFolder:    outDir,
-					})
-					wtest.Must(t, err)
-
-					err = p.Resume(nil, targetPool, b)
-					wtest.Must(t, err)
-
-					wtest.Must(t, b.Commit())
-
-					wtest.Must(t, assertValid(outDir, v2Sig))
+					wtest.Must(t, applyInPlace(func() {}))
 					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
 				}()
 			}
@@ -833,9 +913,11 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 			}
 
 			v1Heal()
-			if scenario.corruptions != nil {
+
+			if enableCorruptions {
+				wipeAndCpDir(t, v1, outDir)
 				log("Corrupting...")
-				makeTestDir(t, outDir, *scenario.corruptions)
+				applyCorruptions(t, outDir, *scenario.corruptions)
 				v1Heal()
 			}
 
@@ -850,11 +932,6 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario) {
 			}
 
 			v2Heal()
-			if scenario.corruptions != nil {
-				log("Corrupting...")
-				makeTestDir(t, outDir, *scenario.corruptions)
-				v2Heal()
-			}
 		}()
 	})
 }

@@ -11,9 +11,11 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/randsource"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/drip"
+	"github.com/itchio/wharf/wtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,8 +23,14 @@ type patchScenario struct {
 	name         string
 	v1           testDirSettings
 	intermediate *testDirSettings
-	corruptions  *testDirSettings
+	corruptions  *testCorruption
 	v2           testDirSettings
+}
+
+type testCorruption struct {
+	before func(t *testing.T, dir string)
+	files  testDirSettings
+	after  func(t *testing.T, dir string)
 }
 
 const largeAmount int64 = 16
@@ -71,6 +79,33 @@ var _ io.Writer = (*nopCloserWriter)(nil)
 
 func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
 	return ncw.writer.Write(buf)
+}
+
+func applyCorruptions(t *testing.T, dir string, c testCorruption) {
+	dump := func() {
+		container, err := tlc.WalkAny(dir, &tlc.WalkOpts{})
+		wtest.Must(t, err)
+		container.Print(func(line string) {
+			t.Logf("%s", line)
+		})
+	}
+
+	t.Logf("=================================")
+	t.Logf("Before corruptions:")
+	dump()
+
+	if c.before != nil {
+		c.before(t, dir)
+	}
+	makeTestDir(t, dir, c.files)
+	if c.after != nil {
+		c.after(t, dir)
+	}
+
+	t.Logf("---------------------------------")
+	t.Logf("After corruptions:")
+	dump()
+	t.Logf("=================================")
 }
 
 func makeTestDir(t *testing.T, dir string, s testDirSettings) {
@@ -197,8 +232,19 @@ func cpFile(t *testing.T, src string, dst string) {
 	assert.NoError(t, fErr)
 }
 
+func wipeAndMkDir(t *testing.T, dst string) {
+	wtest.Must(t, os.RemoveAll(dst))
+	wtest.Must(t, os.MkdirAll(dst, 0o755))
+}
+
+func wipeAndCpDir(t *testing.T, src string, dst string) {
+	wtest.Must(t, os.RemoveAll(dst))
+	wtest.Must(t, os.MkdirAll(dst, 0o755))
+	cpDir(t, src, dst)
+}
+
 func cpDir(t *testing.T, src string, dst string) {
-	assert.NoError(t, os.MkdirAll(dst, 0755))
+	assert.NoError(t, os.MkdirAll(dst, 0o755))
 
 	assert.NoError(t, filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		assert.NoError(t, err)
