@@ -6,11 +6,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/itchio/headway/united"
+	"github.com/itchio/screw"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ import (
 func Test_Naive(t *testing.T) {
 	dir, err := ioutil.TempDir("", "patcher-noop")
 	wtest.Must(t, err)
-	defer os.RemoveAll(dir)
+	defer screw.RemoveAll(dir)
 
 	v1 := filepath.Join(dir, "v1")
 	wtest.MakeTestDir(t, v1, wtest.TestDirSettings{
@@ -138,7 +138,7 @@ func Test_Naive(t *testing.T) {
 		}
 
 		out := filepath.Join(dir, "out")
-		defer os.RemoveAll(out)
+		defer screw.RemoveAll(out)
 
 		patchReader := seeksource.FromBytes(patchBytes)
 
@@ -177,7 +177,7 @@ func Test_Naive(t *testing.T) {
 		}
 
 		out := filepath.Join(dir, "out")
-		defer os.RemoveAll(out)
+		defer screw.RemoveAll(out)
 
 		patchReader := seeksource.FromBytes(patchBytes)
 
