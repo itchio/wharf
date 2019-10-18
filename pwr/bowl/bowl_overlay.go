@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/itchio/headway/state"
 	"github.com/itchio/savior/filesource"
@@ -313,9 +312,12 @@ func (b *overlayBowl) fixExistingCase() error {
 
 	for _, fix := range stats.Fixes {
 		b.TargetContainer.ForEachEntry(func(e tlc.Entry) tlc.ForEachOutcome {
-			if strings.HasPrefix(e.GetPath(), fix.Old) {
-				e.SetPath(strings.Replace(e.GetPath(), fix.Old, fix.New, 1))
+			if newPath, changed := fix.Apply(e.GetPath()); changed {
+				e.SetPath(newPath)
 			}
+			// if strings.HasPrefix(e.GetPath(), fix.Old) {
+			// 	e.SetPath(strings.Replace(e.GetPath(), fix.Old, fix.New, 1))
+			// }
 
 			return tlc.ForEachContinue
 		})

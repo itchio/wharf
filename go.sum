@@ -64,6 +64,8 @@ github.com/itchio/kompress v0.0.0-20190703125833-0b2a6b182782 h1:JCEcOVLpRZpsrbR
 github.com/itchio/kompress v0.0.0-20190703125833-0b2a6b182782/go.mod h1:YEdp1gs/LrGWRcZwYkw7MXli8lIcApwk6fgkAR+3moI=
 github.com/itchio/lake v0.0.0-20191018151306-175d146fd503 h1:KPs9ftly88WHErzhyyCFxXKgM6FN/q9EH2HiKHefVXY=
 github.com/itchio/lake v0.0.0-20191018151306-175d146fd503/go.mod h1:QzMCieUnffQvCeDF5vlDOcsjhtkERfeZE+eKy6KS0wg=
+github.com/itchio/lake v0.0.0-20191018173418-af085e0239d0 h1:6MWYltjNZPnDA11nVTSXet9OdRMGnev61W8/IQe1Ado=
+github.com/itchio/lake v0.0.0-20191018173418-af085e0239d0/go.mod h1:QzMCieUnffQvCeDF5vlDOcsjhtkERfeZE+eKy6KS0wg=
 github.com/itchio/randsource v0.0.0-20190702184213-a7635a4cb94b/go.mod h1:lKWkyaS6DHSVoxVLw7mIeD+po2Kvwv1Hiy8+7VR1zZc=
 github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927 h1:5abFAYun3PFycBSXZnvXk0wqaPNiioSTIOZFf3I0J+A=
 github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927/go.mod h1:lKWkyaS6DHSVoxVLw7mIeD+po2Kvwv1Hiy8+7VR1zZc=

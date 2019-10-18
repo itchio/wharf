@@ -642,6 +642,22 @@ func Test_Scenarios(t *testing.T) {
 			},
 		},
 	})
+
+	runPatchingScenario(t, patchScenario{
+		name: "change case of unrelated directory",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "DataSomething.dll", seed: 0x1},
+				{path: "Data/Hello.txt", seed: 0x2},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "DataSomething.dll", seed: 0x1},
+				{path: "data/Hello.txt", seed: 0x2},
+			},
+		},
+	})
 }
 
 type ScenarioDirection int
