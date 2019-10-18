@@ -6,10 +6,10 @@ import (
 	"sync"
 
 	"github.com/itchio/headway/united"
+	"github.com/itchio/lake"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
-	"github.com/itchio/lake"
 	"github.com/pkg/errors"
 )
 
@@ -78,17 +78,17 @@ func (sp *savingPatcher) processBsdiff(c *Checkpoint, targetPool lake.Pool, sh *
 			return errors.WithStack(err)
 		}
 
-		_, err = writer.Resume(nil)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
 		defer closeWriterOnce.Do(func() {
 			cerr := writer.Close()
 			if err == nil && cerr != nil {
 				err = cerr
 			}
 		})
+
+		_, err = writer.Resume(nil)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	if sp.bsdiffCtx == nil {

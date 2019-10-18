@@ -9,7 +9,9 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
+	"github.com/itchio/screw"
 
 	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/state"
@@ -107,6 +109,22 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 		err := os.MkdirAll(target, 0o755)
 		if err != nil {
 			return err
+		}
+
+		// if we have a healer, we may want to fix case first
+		if screw.IsCaseInsensitiveFS() {
+			targetPool, err := pools.New(signature.Container, target)
+			if err != nil {
+				return err
+			}
+			if cfp, ok := targetPool.(lake.CaseFixerPool); ok {
+				err := cfp.FixExistingCase(lake.CaseFixParams{
+					Consumer: vctx.Consumer,
+				})
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		healer, err := NewHealer(vctx.HealPath, target)

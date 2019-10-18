@@ -577,6 +577,45 @@ func Test_Scenarios(t *testing.T) {
 	})
 
 	runPatchingScenario(t, patchScenario{
+		name: "patch with parent case changed",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "base/apricot", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: pwr.BlockSize * 8},
+					testDirChunk{seed: 0x222, size: pwr.BlockSize * 8},
+				}},
+				{path: "base/apple", seed: 0x2},
+				{path: "base/orange", seed: 0x3},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "BASE/apricot", chunks: []testDirChunk{
+					testDirChunk{seed: 0x111, size: pwr.BlockSize * 8},
+					testDirChunk{seed: 0x333, size: pwr.BlockSize * 1},
+					testDirChunk{seed: 0x222, size: pwr.BlockSize * 7},
+				}},
+				{path: "BASE/apple", seed: 0x2},
+				{path: "BASE/orange", seed: 0x3},
+			},
+		},
+	})
+
+	runPatchingScenario(t, patchScenario{
+		name: "rename with parent case changed",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "base/apple", seed: 0x2},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "BASE/orange", seed: 0x2},
+			},
+		},
+	})
+
+	runPatchingScenario(t, patchScenario{
 		name: "change case and patch",
 		v1: testDirSettings{
 			entries: []testDirEntry{
@@ -849,6 +888,8 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 						TargetContainer: p.GetTargetContainer(),
 						StageFolder:     stageDir,
 						OutputFolder:    outDir,
+
+						Consumer: consumer,
 					})
 					if err != nil {
 						return errors.WithStack(err)
@@ -879,7 +920,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 							applyCorruptions(t, outDir, *scenario.corruptions)
 						})
 						if err != nil {
-							log("As expected, got an error: %+v", err)
+							log("As expected, got an error: %v", err)
 						}
 						if patch.Name == "naive" {
 							// sometimes the optimized patches work anyway?

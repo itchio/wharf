@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/itchio/headway/state"
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/screw"
 	"github.com/itchio/wharf/pwr/overlay"
@@ -35,6 +37,8 @@ type overlayBowl struct {
 	OutputFolder string
 	StageFolder  string
 
+	Consumer *state.Consumer
+
 	stagePool         *fspool.FsPool
 	targetFilesByPath map[string]int64
 
@@ -60,6 +64,8 @@ type OverlayBowlParams struct {
 
 	OutputFolder string
 	StageFolder  string
+
+	Consumer *state.Consumer
 }
 
 func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
@@ -68,6 +74,8 @@ func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 	if params.TargetContainer == nil {
 		return nil, errors.New("overlaybowl: TargetContainer must not be nil")
 	}
+	// TargetContainer gets modified for case-insensitive filesystems
+	params.TargetContainer = params.TargetContainer.Clone()
 
 	if params.SourceContainer == nil {
 		return nil, errors.New("overlaybowl: SourceContainer must not be nil")
@@ -114,6 +122,8 @@ func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 
 		OutputFolder: params.OutputFolder,
 		StageFolder:  params.StageFolder,
+
+		Consumer: params.Consumer,
 
 		stagePool:         stagePool,
 		targetFilesByPath: targetFilesByPath,
@@ -231,6 +241,14 @@ func (b *overlayBowl) Commit() error {
 		return errors.WithStack(err)
 	}
 
+	if screw.IsCaseInsensitiveFS() {
+		// fix casing on-disk, reflect that on renames/etc.
+		err = b.fixExistingCase()
+		if err != nil {
+			return err
+		}
+	}
+
 	// - ensure dirs and symlinks
 	err = b.ensureDirsAndSymlinks()
 	if err != nil {
@@ -275,6 +293,32 @@ func (b *overlayBowl) Close() error {
 	err = b.stagePool.Close()
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+func (b *overlayBowl) fixExistingCase() error {
+	fsp := fspool.New(b.SourceContainer, b.OutputFolder)
+
+	var stats lake.CaseFixStats
+
+	err := fsp.FixExistingCase(lake.CaseFixParams{
+		Stats:    &stats,
+		Consumer: b.Consumer,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, fix := range stats.Fixes {
+		b.TargetContainer.ForEachEntry(func(e tlc.Entry) tlc.ForEachOutcome {
+			if strings.HasPrefix(e.GetPath(), fix.Old) {
+				e.SetPath(strings.Replace(e.GetPath(), fix.Old, fix.New, 1))
+			}
+
+			return tlc.ForEachContinue
+		})
 	}
 
 	return nil
