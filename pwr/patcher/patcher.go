@@ -1,14 +1,15 @@
 package patcher
 
 import (
-	"github.com/itchio/savior"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/savior"
+	"github.com/itchio/screw"
 
+	"github.com/itchio/wharf/bsdiff"
+	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
-	"github.com/itchio/wharf/bsdiff"
-	"github.com/itchio/wharf/pwr"
 
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
@@ -89,6 +90,18 @@ func New(patchReader savior.SeekSource, consumer *state.Consumer) (Patcher, erro
 	consumer.Debugf("→ Created patcher")
 	consumer.Debugf("before: %s", targetContainer.Stats())
 	consumer.Debugf(" after: %s", sourceContainer.Stats())
+
+	if screw.IsCaseInsensitiveFS() {
+		err := targetContainer.AssertCaseInsensitiveSafe()
+		if err != nil {
+			return nil, err
+		}
+
+		err = sourceContainer.AssertCaseInsensitiveSafe()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	sp := &savingPatcher{
 		rctx:     rctx,

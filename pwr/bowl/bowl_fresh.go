@@ -158,6 +158,7 @@ func (few *freshEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
+	few.f = f
 
 	if c != nil && c.Offset != 0 {
 		_, err = f.Seek(c.Offset, io.SeekStart)
@@ -169,7 +170,6 @@ func (few *freshEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
 		few.offset = c.Offset
 	}
 
-	few.f = f
 	return few.offset, nil
 }
 

@@ -53,6 +53,8 @@ github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c h1:Jf20xV/yR/O6eS
 github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c/go.mod h1:oRXh43p/JW9kWosasd+2kHfDpb1ec4m7YrZ5E39s1iI=
 github.com/itchio/headway v0.0.0-20190702175331-a4c65c5306de h1:RQW9xPqYtvjdHHRZR95XsaEA9B4URCuNHK78IuJcc+Y=
 github.com/itchio/headway v0.0.0-20190702175331-a4c65c5306de/go.mod h1:Iif+7HeesRB0PvTYf0gOIFX8lj0za0SUsWryENQYt1E=
+github.com/itchio/headway v0.0.0-20191015112415-46f64dd4d524 h1:eROPirGQCZXnzRiwJw3bOE4OB5CctMF+zsnH91bmv9o=
+github.com/itchio/headway v0.0.0-20191015112415-46f64dd4d524/go.mod h1:Iif+7HeesRB0PvTYf0gOIFX8lj0za0SUsWryENQYt1E=
 github.com/itchio/httpkit v0.0.0-20190702184704-639fe5edf1f1/go.mod h1:l+oRs+N4hTtMdh1Nv9HipY8cvkv77HUpw3LHoJ78HAA=
 github.com/itchio/httpkit v0.0.0-20191016123402-68159f3a0f00 h1:CnbtMlqv1QVL9HN6iZa1NXUXFje654Fy1xpXwnXBQRw=
 github.com/itchio/httpkit v0.0.0-20191016123402-68159f3a0f00/go.mod h1:qWXGHO7IWmtDgGyBSpXDlrWL6MNjERnHJ7SoQd7Vi0c=
@@ -69,6 +71,14 @@ github.com/itchio/savior v0.0.0-20190702184736-b8b849654d01 h1:W+QljvzvaHQdgB/9R
 github.com/itchio/savior v0.0.0-20190702184736-b8b849654d01/go.mod h1:KyMj8mbcmn7QqpWmDZD1QWM2d5GAg5G2mPNTOak2rwI=
 github.com/itchio/screw v0.0.0-20191014142657-0cc2f92b2e26 h1:23IO1zoxNT2KzJ5mPgKKsBjdBv906rRGdh9FqmeLnx4=
 github.com/itchio/screw v0.0.0-20191014142657-0cc2f92b2e26/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
+github.com/itchio/screw v0.0.0-20191016155428-ffcd88dcfef9 h1:cQgzbWWzM2Crgj3fl38EYx2dhmKCmJyCYtP/rWWJfSM=
+github.com/itchio/screw v0.0.0-20191016155428-ffcd88dcfef9/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
+github.com/itchio/screw v0.0.0-20191016174203-0a53cc324ea3 h1:cMOv6UdNikuDvLs4L6ePNDuaAdtY7dysqmEc3wD+wV8=
+github.com/itchio/screw v0.0.0-20191016174203-0a53cc324ea3/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
+github.com/itchio/screw v0.0.0-20191018134747-4ddee4b029eb h1:rxNwoNxAhU9//XDy3KIfrvJ5Geu5OePF/p1iy4YFPqs=
+github.com/itchio/screw v0.0.0-20191018134747-4ddee4b029eb/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
+github.com/itchio/screw v0.0.0-20191018142458-f361f6d1fb67 h1:CR2dSWxwbHntWon+L9PEAoA9i9zV3W4VZ42p+bqNbqo=
+github.com/itchio/screw v0.0.0-20191018142458-f361f6d1fb67/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08 h1:VlCjOBMvVsqr/L/w7k4CW8WEQog5Hj53CihNyYyvvo4=
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08/go.mod h1:iU7U0LShC+6Wjkkymyl3dpCZyiDSGnY4N4DY+xt3yNg=
 github.com/klauspost/compress v1.7.1 h1:VRD0WLa8rweLB7alA5WMSVkoAtrI8xou5RrNd4JUlR0=
@@ -77,6 +87,10 @@ github.com/klauspost/compress v1.8.2 h1:Bx0qjetmNjdFXASH02NSAREKpiaDwkO1DRZ3dV2K
 github.com/klauspost/compress v1.8.2/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
 github.com/klauspost/cpuid v1.2.1 h1:vJi+O/nMdFt0vqm8NZBI6wzALWdA2X+egi0ogNyrC/w=
 github.com/klauspost/cpuid v1.2.1/go.mod h1:Pj4uuM528wm8OyEC2QMXAi2YiTZ96dNQPGgoMS4s3ek=
+github.com/mitchellh/copystructure v1.0.0 h1:Laisrj+bAB6b/yJwB5Bt3ITZhGJdqmxquMKeZ+mmkFQ=
+github.com/mitchellh/copystructure v1.0.0/go.mod h1:SNtv71yrdKgLRyLFxmLdkAbkKEFWgYaq1OVrnRcwhnw=
+github.com/mitchellh/reflectwalk v1.0.0 h1:9D+8oIskB4VJBN5SFlmc27fSlIBZaov1Wpk/IfikLNY=
+github.com/mitchellh/reflectwalk v1.0.0/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
 github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c h1:rp5dCmg/yLR3mgFuSOe4oEnDDmGLROTvMragMUXpTQw=
 github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c/go.mod h1:X07ZCGwUbLaax7L0S3Tw4hpejzu63ZrrQiUe6W0hcy0=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
@@ -108,6 +122,8 @@ golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb h1:fgwFCsaw9buMuxNd6+DQfAuSF
 golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20191008105621-543471e840be h1:QAcqgptGM8IQBC9K/RC4o+O9YmqEm0diQn9QmZw/0mU=
 golang.org/x/sys v0.0.0-20191008105621-543471e840be/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20191018095205-727590c5006e h1:ZtoklVMHQy6BFRHkbG6JzK+S6rX82//Yeok1vMlizfQ=
+golang.org/x/sys v0.0.0-20191018095205-727590c5006e/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.2 h1:tW2bmiBqwgJj/UpqtC8EpXEZVYOwU0yG4iWbprSVAcs=
 golang.org/x/text v0.3.2/go.mod h1:bEr9sfX3Q8Zfm5fL9x+3itogRgK3+ptLWKqgva+5dAk=
