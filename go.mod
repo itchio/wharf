@@ -12,7 +12,7 @@ require (
 	github.com/itchio/lake v0.0.0-20191018151306-175d146fd503
 	github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927
 	github.com/itchio/savior v0.0.0-20190702184736-b8b849654d01
-	github.com/itchio/screw v0.0.0-20191018142458-f361f6d1fb67
+	github.com/itchio/screw v0.0.0-20191018161534-50266ea9752a
 	github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08
 	github.com/pkg/errors v0.8.1
 	github.com/stretchr/testify v1.4.0

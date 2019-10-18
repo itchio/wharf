@@ -71,6 +71,8 @@ github.com/itchio/savior v0.0.0-20190702184736-b8b849654d01 h1:W+QljvzvaHQdgB/9R
 github.com/itchio/savior v0.0.0-20190702184736-b8b849654d01/go.mod h1:KyMj8mbcmn7QqpWmDZD1QWM2d5GAg5G2mPNTOak2rwI=
 github.com/itchio/screw v0.0.0-20191018142458-f361f6d1fb67 h1:CR2dSWxwbHntWon+L9PEAoA9i9zV3W4VZ42p+bqNbqo=
 github.com/itchio/screw v0.0.0-20191018142458-f361f6d1fb67/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
+github.com/itchio/screw v0.0.0-20191018161534-50266ea9752a h1:7iG2pfbs1CqCdPRuWbu3ljbesD/xQSiUfdMF3GxeCcI=
+github.com/itchio/screw v0.0.0-20191018161534-50266ea9752a/go.mod h1:VvpbutV6AQmyF6n99NYFeBmCm0VcgEMF3z/Pb+nBlu4=
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08 h1:VlCjOBMvVsqr/L/w7k4CW8WEQog5Hj53CihNyYyvvo4=
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08/go.mod h1:iU7U0LShC+6Wjkkymyl3dpCZyiDSGnY4N4DY+xt3yNg=
 github.com/klauspost/compress v1.7.1 h1:VRD0WLa8rweLB7alA5WMSVkoAtrI8xou5RrNd4JUlR0=
