@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -561,7 +560,7 @@ func Test_Scenarios(t *testing.T) {
 		},
 		corruptions: &testCorruption{
 			before: func(t *testing.T, dir string) {
-				wtest.Must(t, os.Rename(
+				wtest.Must(t, screw.Rename(
 					filepath.Join(dir, "base"),
 					filepath.Join(dir, "BASE"),
 				))
@@ -627,7 +626,7 @@ func Test_Scenarios(t *testing.T) {
 		},
 		corruptions: &testCorruption{
 			before: func(t *testing.T, dir string) {
-				wtest.Must(t, os.Rename(
+				wtest.Must(t, screw.Rename(
 					filepath.Join(dir, "apricot"),
 					filepath.Join(dir, "APRICOT"),
 				))
