@@ -328,8 +328,6 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 		return err
 	}
 
-	// ah.Consumer.Debugf("getting writer and truncating to %d", f.Size)
-	// writer, err = targetPool.GetWriterAndTruncate(fileIndex, f.Size)
 	ah.Consumer.Debugf("getting writer and *not* truncating")
 	writer, err = targetPool.GetWriter(fileIndex)
 	if err != nil {
@@ -357,7 +355,6 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 	if err != nil {
 		return err
 	}
-	ah.Consumer.Debugf("lastCount = %d", lastCount)
 
 	return err
 }
