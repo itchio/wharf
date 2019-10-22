@@ -46,6 +46,8 @@ type ValidatorContext struct {
 	// internal
 	Wounds         chan *Wound
 	WoundsConsumer WoundsConsumer
+
+	CaseFixStats *lake.CaseFixStats
 }
 
 const floatIntFactor = 10000.0
@@ -118,8 +120,10 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 				return err
 			}
 			if cfp, ok := targetPool.(lake.CaseFixerPool); ok {
+				vctx.CaseFixStats = &lake.CaseFixStats{}
 				err := cfp.FixExistingCase(lake.CaseFixParams{
 					Consumer: vctx.Consumer,
+					Stats:    vctx.CaseFixStats,
 				})
 				if err != nil {
 					return err
