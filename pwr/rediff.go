@@ -7,13 +7,13 @@ import (
 
 	"path/filepath"
 
-	"github.com/itchio/headway/united"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
+	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/wire"
-	"github.com/itchio/lake"
-	"github.com/itchio/lake/tlc"
 	"github.com/pkg/errors"
 )
 
@@ -210,7 +210,9 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 			}
 		}
 
-		if numBlockRange == 1 && numData == 0 && !rc.ForceMapAll {
+		if sourceFile.Size == 0 && !rc.ForceMapAll {
+			// don't need to bsdiff newly-empty files
+		} else if numBlockRange == 1 && numData == 0 && !rc.ForceMapAll {
 			// transpositions (renames, etc.) don't need bsdiff'ing :)
 		} else {
 			var diffMapping *DiffMapping
