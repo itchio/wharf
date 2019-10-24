@@ -34,7 +34,7 @@ type ValidatingPool struct {
 
 	// private //
 
-	hashGroups map[int64][]wsync.BlockHash
+	hashGroups HashGroups
 	sctx       *wsync.Context
 }
 
@@ -82,7 +82,8 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 	}
 
 	if vp.hashGroups == nil {
-		err := vp.makeHashGroups()
+		var err error
+		vp.hashGroups, err = MakeHashGroups(vp.Signature)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
