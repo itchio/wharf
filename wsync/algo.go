@@ -129,11 +129,29 @@ func (ctx *Context) ApplySingleFull(output io.Writer, pool lake.Pool, op Operati
 	return nil
 }
 
+// makeOperationCleaner filters out empty DATA ops that are *not*
+// the first operation. This makes patches slightly cleaner.
+func makeOperationCleaner(ops OperationWriter) OperationWriter {
+	sendCount := 0
+
+	return func(op Operation) error {
+		if sendCount > 0 && op.Type == OpData && len(op.Data) == 0 {
+			// discard
+			return nil
+		}
+
+		sendCount++
+		return ops(op)
+	}
+}
+
 // ComputeDiff creates the operation list to mutate the target signature into the source.
 // Any data operation from the OperationWriter must have the data copied out
 // within the span of the function; the data buffer underlying the operation
 // data is reused.
 func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops OperationWriter, preferredFileIndex int64) (err error) {
+	ops = makeOperationCleaner(ops)
+
 	minBufferSize := (ctx.blockSize * 2) + MaxDataOp
 	if len(ctx.buffer) < minBufferSize {
 		ctx.buffer = make([]byte, minBufferSize)
@@ -156,12 +174,10 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 
 	// Send the last operation if there is one waiting.
 	defer func() {
-		if prevOp == nil {
-			return
+		if prevOp != nil {
+			err = ops(*prevOp)
+			prevOp = nil
 		}
-
-		err = ops(*prevOp)
-		prevOp = nil
 	}()
 
 	// Combine OpBlockRanges together. To achieve this, we store the previous
@@ -176,9 +192,9 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 					return nil
 				}
 
-				opErr := ops(*prevOp)
-				if opErr != nil {
-					return errors.WithStack(opErr)
+				err := ops(*prevOp)
+				if err != nil {
+					return errors.WithStack(err)
 				}
 				// prevOp has been completely sent off, can no longer be combined with anything
 				prevOp = nil
@@ -187,16 +203,17 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 		case OpData:
 			// Never save a data operation, as it would corrupt the buffer.
 			if prevOp != nil {
-				opErr := ops(*prevOp)
-				if opErr != nil {
-					return errors.WithStack(opErr)
+				err := ops(*prevOp)
+				prevOp = nil
+				if err != nil {
+					return errors.WithStack(err)
 				}
 			}
-			opErr := ops(op)
-			if opErr != nil {
-				return errors.WithStack(opErr)
+
+			err := ops(op)
+			if err != nil {
+				return errors.WithStack(err)
 			}
-			prevOp = nil
 		}
 		return nil
 	}
