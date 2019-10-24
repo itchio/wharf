@@ -78,7 +78,6 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		// use a sensible default I/O-wise (whether we're reading from disk or network)
 		ah.NumWorkers = 2
 	}
-	ah.Consumer.Debugf("archive healer: using %d workers", ah.NumWorkers)
 
 	targetPool := fspool.New(container, ah.Target)
 
@@ -104,8 +103,6 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	}
 
 	processWound := func(wound *Wound) error {
-		ah.Consumer.Debugf("processing wound: %s", wound)
-
 		if !wound.Healthy() {
 			ah.totalCorrupted += wound.Size()
 			ah.hasWounds = true
@@ -207,7 +204,7 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 			}
 
 		default:
-			return fmt.Errorf("unknown wound kind: %d", wound.Kind)
+			return fmt.Errorf("Unknown wound kind: %d", wound.Kind)
 		}
 
 		return nil
@@ -239,6 +236,10 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		}
 	}
 
+	if ah.totalHealed > 0 {
+		ah.Consumer.Debugf("ArchiveHealed healed %s total", united.FormatBytes(ah.totalHealed))
+	}
+
 	return nil
 }
 
@@ -247,8 +248,6 @@ func (ah *ArchiveHealer) openArchive() (eos.File, error) {
 	defer ah.archiveLock.Unlock()
 
 	ah.archiveOnce.Do(func() {
-		ah.Consumer.Debugf("opening archive for worker!")
-
 		file, err := eos.Open(ah.ArchivePath, option.WithConsumer(ah.Consumer))
 		ah.archiveFile = file
 		ah.archiveFileErr = err
@@ -321,14 +320,13 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 
 	f := ah.container.Files[fileIndex]
 
-	ah.Consumer.Debugf("healing (%s) %s", f.Path, united.FormatBytes(f.Size))
+	ah.Consumer.Debugf("Healing (%s) %s", f.Path, united.FormatBytes(f.Size))
 
 	reader, err = sourcePool.GetReader(fileIndex)
 	if err != nil {
 		return err
 	}
 
-	ah.Consumer.Debugf("getting writer and *not* truncating")
 	writer, err = targetPool.GetWriter(fileIndex)
 	if err != nil {
 		return err
@@ -338,9 +336,9 @@ func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool lake.Pool, targ
 	if f, ok := writer.(*os.File); ok {
 		stats, err := f.Stat()
 		if err != nil {
-			ah.Consumer.Debugf("was a file but can't stat: %+v", err)
+			ah.Consumer.Debugf("Was a file but can't stat: %+v", err)
 		} else {
-			ah.Consumer.Debugf("was a file: %d bytes", stats.Size())
+			ah.Consumer.Debugf("Was a file: %s", united.FormatBytes(stats.Size()))
 		}
 	}
 
