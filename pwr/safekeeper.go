@@ -19,9 +19,12 @@ type safeKeeper struct {
 
 	open SafeKeeperOpen
 
-	sigLock  sync.Mutex
-	sigInfo  *SignatureInfo
-	sigError error
+	blockValidatorLock sync.Mutex
+	blockValidator     BlockValidator
+	sigError           error
+
+	bufLock sync.Mutex
+	buf     []byte
 
 	validBlocks map[int64]fileBlocks
 }
@@ -44,6 +47,10 @@ func NewSafeKeeper(params SafeKeeperParams) (lake.Pool, error) {
 	sk := &safeKeeper{
 		inner: params.Inner,
 		open:  params.Open,
+
+		validBlocks: make(map[int64]fileBlocks),
+
+		buf: make([]byte, BlockSize),
 	}
 	return sk, nil
 }
@@ -74,12 +81,12 @@ func (sk *safeKeeper) Close() error {
 	return sk.inner.Close()
 }
 
-func (sk *safeKeeper) getSignature() (*SignatureInfo, error) {
-	sk.sigLock.Lock()
-	defer sk.sigLock.Unlock()
+func (sk *safeKeeper) getBlockValidator() (BlockValidator, error) {
+	sk.blockValidatorLock.Lock()
+	defer sk.blockValidatorLock.Unlock()
 
-	if sk.sigInfo != nil {
-		return sk.sigInfo, nil
+	if sk.blockValidator != nil {
+		return sk.blockValidator, nil
 	}
 
 	if sk.sigError != nil {
@@ -105,20 +112,61 @@ func (sk *safeKeeper) getSignature() (*SignatureInfo, error) {
 		return nil, err
 	}
 
-	sk.sigInfo = sigInfo
-	return sk.sigInfo, nil
+	hashInfo, err := ComputeHashInfo(sigInfo)
+	if err != nil {
+		sk.sigError = err
+		return nil, err
+	}
+
+	sk.blockValidator = NewBlockValidator(hashInfo)
+	return sk.blockValidator, nil
 }
 
-func (sk *safeKeeper) validateBlock(fileIndex int64, offset int64) error {
-	blockNumber := skr.offset / BlockSize
-	if valid, done := skr.validBlocks[blockblockNumber]; ok {
+func (sk *safeKeeper) validateBlock(skr *safeKeeperReader) error {
+	sk.bufLock.Lock()
+	defer sk.bufLock.Unlock()
 
+	if _, ok := sk.validBlocks[skr.fileIndex]; !ok {
+		// first time checking blocks from this file
+		sk.validBlocks[skr.fileIndex] = make(fileBlocks)
 	}
+	blocks := sk.validBlocks[skr.fileIndex]
 
-	sig, err := skr.sk.getSignature()
-	if err != nil {
-		return 0, err
+	blockIndex := skr.offset / BlockSize
+	if _, checked := blocks[int(blockIndex)]; !checked {
+		bv, err := sk.getBlockValidator()
+		if err != nil {
+			return err
+		}
+
+		blockSize := bv.BlockSize(skr.fileIndex, blockIndex)
+		buf := sk.buf[:blockSize]
+
+		savedOffset := skr.offset
+		blockOffset := blockIndex * BlockSize
+		_, err = skr.rs.Seek(blockOffset, io.SeekStart)
+		if err != nil {
+			// restore offset
+			_, _ = skr.rs.Seek(savedOffset, io.SeekStart)
+			return err
+		}
+
+		readBytes, err := skr.rs.Read(buf)
+		if err != nil {
+			// restore offset
+			_, _ = skr.rs.Seek(savedOffset, io.SeekStart)
+			return err
+		}
+
+		data := buf[:readBytes]
+
+		validationError := bv.ValidateAsError(skr.fileIndex, blockIndex, data)
+		blocks[int(blockIndex)] = validationError
+
+		// restore offset
+		_, _ = skr.rs.Seek(savedOffset, io.SeekStart)
 	}
+	return blocks[int(blockIndex)]
 }
 
 type safeKeeperReader struct {
@@ -140,7 +188,7 @@ func (skr *safeKeeperReader) Seek(off int64, whence int) (int64, error) {
 }
 
 func (skr *safeKeeperReader) Read(p []byte) (int, error) {
-	err := skr.sr.validateBlock(skr.fileIndex, skr.rs, skr.offset)
+	err := skr.sk.validateBlock(skr)
 	if err != nil {
 		return 0, err
 	}

@@ -1,8 +1,6 @@
 package pwr
 
 import (
-	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/itchio/lake"
@@ -34,8 +32,8 @@ type ValidatingPool struct {
 
 	// private //
 
-	hashGroups HashGroups
-	sctx       *wsync.Context
+	hashInfo *HashInfo
+	sctx     *wsync.Context
 }
 
 var _ lake.WritablePool = (*ValidatingPool)(nil)
@@ -81,9 +79,9 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		}()
 	}
 
-	if vp.hashGroups == nil {
+	if vp.hashInfo == nil {
 		var err error
-		vp.hashGroups, err = MakeHashGroups(vp.Signature)
+		vp.hashInfo, err = ComputeHashInfo(vp.Signature)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -95,70 +93,20 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	hashGroup := vp.hashGroups[fileIndex]
-	blockIndex := int64(0)
-	file := vp.Container.Files[fileIndex]
-	fileSize := file.Size
-
+	bv := NewBlockValidator(vp.hashInfo)
+	var blockIndex int64
 	validate := func(data []byte) error {
-		weakHash, strongHash := vp.sctx.HashBlock(data)
-		start := blockIndex * BlockSize
-		size := ComputeBlockSize(fileSize, blockIndex)
+		var err error
 
-		if blockIndex >= int64(len(hashGroup)) {
-			if wounds == nil {
-				err := fmt.Errorf("%s: too large (%d blocks, tried to look up hash %d)",
-					file.Path, len(hashGroup), blockIndex)
-				return errors.WithStack(err)
-			}
-
-			wounds <- &Wound{
-				Kind:  WoundKind_FILE,
-				Index: fileIndex,
-				Start: start,
-				End:   start + size,
-			}
+		if wounds == nil {
+			err = bv.ValidateAsError(fileIndex, blockIndex, data)
 		} else {
-			bh := hashGroup[blockIndex]
-
-			if bh.WeakHash != weakHash {
-				if wounds == nil {
-					err := fmt.Errorf("%s: at block %d, expected weak hash %x, got %x", file.Path, blockIndex, bh.WeakHash, weakHash)
-					return errors.WithStack(err)
-				}
-
-				wounds <- &Wound{
-					Kind:  WoundKind_FILE,
-					Index: fileIndex,
-					Start: start,
-					End:   start + size,
-				}
-			} else if !bytes.Equal(bh.StrongHash, strongHash) {
-				if wounds == nil {
-					err := fmt.Errorf("%s: at block %d, expected strong hash %x, got %x", file.Path, blockIndex, bh.StrongHash, strongHash)
-					return errors.WithStack(err)
-				}
-
-				wounds <- &Wound{
-					Kind:  WoundKind_FILE,
-					Index: fileIndex,
-					Start: start,
-					End:   start + size,
-				}
-			} else {
-				if wounds != nil {
-					wounds <- &Wound{
-						Kind:  WoundKind_CLOSED_FILE,
-						Index: fileIndex,
-						Start: start,
-						End:   start + size,
-					}
-				}
-			}
+			wound := bv.ValidateAsWound(fileIndex, blockIndex, data)
+			wounds <- &wound
 		}
 
 		blockIndex++
-		return nil
+		return err
 	}
 
 	ocw := &onclose.Writer{
@@ -183,38 +131,6 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 	}
 
 	return dw, nil
-}
-
-func (vp *ValidatingPool) makeHashGroups() error {
-	// see blockpool's validator for a slightly different take on this
-	pathToFileIndex := make(map[string]int64)
-	for fileIndex, f := range vp.Container.Files {
-		pathToFileIndex[f.Path] = int64(fileIndex)
-	}
-
-	vp.hashGroups = make(map[int64][]wsync.BlockHash)
-	hashIndex := int64(0)
-
-	for _, f := range vp.Signature.Container.Files {
-		fileIndex := pathToFileIndex[f.Path]
-
-		if f.Size == 0 {
-			// empty files have a 0-length shortblock for historical reasons.
-			hashIndex++
-			continue
-		}
-
-		numBlocks := ComputeNumBlocks(f.Size)
-		vp.hashGroups[fileIndex] = vp.Signature.Hashes[hashIndex : hashIndex+numBlocks]
-		hashIndex += numBlocks
-	}
-
-	if hashIndex != int64(len(vp.Signature.Hashes)) {
-		err := fmt.Errorf("expected to have %d hashes in signature, had %d", hashIndex, len(vp.Signature.Hashes))
-		return errors.WithStack(err)
-	}
-
-	return nil
 }
 
 // Close closes the underlying pool (and its reader, if any)

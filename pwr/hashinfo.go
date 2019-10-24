@@ -1,13 +1,19 @@
 package pwr
 
 import (
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
 )
 
+type HashInfo struct {
+	Container *tlc.Container
+	Groups    HashGroups
+}
+
 type HashGroups = map[int64][]wsync.BlockHash
 
-func MakeHashGroups(sigInfo *SignatureInfo) (HashGroups, error) {
+func ComputeHashInfo(sigInfo *SignatureInfo) (*HashInfo, error) {
 	pathToFileIndex := make(map[string]int64)
 	for fileIndex, f := range sigInfo.Container.Files {
 		pathToFileIndex[f.Path] = int64(fileIndex)
@@ -31,9 +37,14 @@ func MakeHashGroups(sigInfo *SignatureInfo) (HashGroups, error) {
 	}
 
 	if hashIndex != int64(len(sigInfo.Hashes)) {
-		err := errors.Errorf("expected to have %d hashes in signature, had %d", hashIndex, len(vp.Signature.Hashes))
+		err := errors.Errorf("expected to have %d hashes in signature, had %d", hashIndex, len(sigInfo.Hashes))
 		return nil, errors.WithStack(err)
 	}
 
-	return hashGroups, nil
+	hashInfo := &HashInfo{
+		Container: sigInfo.Container,
+		Groups:    hashGroups,
+	}
+
+	return hashInfo, nil
 }
