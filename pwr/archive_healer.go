@@ -236,10 +236,6 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		}
 	}
 
-	if ah.totalHealed > 0 {
-		ah.Consumer.Debugf("ArchiveHealed healed %s total", united.FormatBytes(ah.totalHealed))
-	}
-
 	return nil
 }
 
