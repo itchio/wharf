@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/itchio/headway/united"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
 	"github.com/jgallagher/gosaca"
 	"github.com/pkg/errors"
 )
@@ -173,6 +173,16 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 
 	nbuf := ctx.nbuf.Bytes()
 	nbuflen := ctx.nbuf.Len()
+	if nbuflen == 0 {
+		// empty "new" file, only write EOF message
+		bsdc := &Control{}
+		bsdc.Eof = true
+		err := writeMessage(bsdc)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 
 	matches := make(chan Match, 256)
 
