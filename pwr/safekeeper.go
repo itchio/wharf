@@ -109,6 +109,18 @@ func (sk *safeKeeper) getSignature() (*SignatureInfo, error) {
 	return sk.sigInfo, nil
 }
 
+func (sk *safeKeeper) validateBlock(fileIndex int64, offset int64) error {
+	blockNumber := skr.offset / BlockSize
+	if valid, done := skr.validBlocks[blockblockNumber]; ok {
+
+	}
+
+	sig, err := skr.sk.getSignature()
+	if err != nil {
+		return 0, err
+	}
+}
+
 type safeKeeperReader struct {
 	// specified
 	rs        io.ReadSeeker
@@ -116,7 +128,7 @@ type safeKeeperReader struct {
 	fileIndex int64
 
 	// internal
-	offset      int64
+	offset int64
 }
 
 var _ io.ReadSeeker = (*safeKeeperReader)(nil)
@@ -128,12 +140,7 @@ func (skr *safeKeeperReader) Seek(off int64, whence int) (int64, error) {
 }
 
 func (skr *safeKeeperReader) Read(p []byte) (int, error) {
-	blockNumber := skr.offset / BlockSize
-	if valid, done := skr.validBlocks[blockblockNumber] {
-
-	}
-
-	sig, err := skr.sk.getSignature()
+	err := skr.sr.validateBlock(skr.fileIndex, skr.rs, skr.offset)
 	if err != nil {
 		return 0, err
 	}
