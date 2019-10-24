@@ -24,6 +24,20 @@ import (
 
 func Test_Scenarios(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
+		name: "becomes empty",
+		v1: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", seed: 0x1},
+			},
+		},
+		v2: testDirSettings{
+			entries: []testDirEntry{
+				{path: "file", seed: 0x1, size: -1},
+			},
+		},
+	})
+
+	runPatchingScenario(t, patchScenario{
 		name: "change one",
 		v1: testDirSettings{
 			entries: []testDirEntry{
@@ -714,6 +728,9 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		}()
 
 		consumer := &state.Consumer{
+			OnProgressLabel: func(label string) {
+				t.Logf("> %s", label)
+			},
 			OnMessage: func(level string, message string) {
 				t.Logf("[%s] %s", level, message)
 			},
