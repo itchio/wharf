@@ -146,9 +146,6 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 			prng.Seed(entry.seed)
 		}
 
-		data.Reset()
-		data.Grow(int(entry.size))
-
 		func() {
 			mode := 0644
 			if entry.mode != 0 {
@@ -156,9 +153,15 @@ func makeTestDir(t *testing.T, dir string, s testDirSettings) {
 			}
 
 			size := pwr.BlockSize*8 + 64
-			if entry.size != 0 {
+			if entry.size > 0 {
 				size = entry.size
 			}
+			if entry.size < 0 {
+				size = 0
+			}
+
+			data.Reset()
+			data.Grow(int(size))
 
 			f, fErr := screw.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(mode))
 			assert.NoError(t, fErr)
