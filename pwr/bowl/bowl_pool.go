@@ -33,8 +33,10 @@ type PoolBowlParams struct {
 
 // NewPoolBowl returns a bowl that applies all writes to
 // a writable pool
-func NewPoolBowl(params *PoolBowlParams) (Bowl, error) {
+func NewPoolBowl(params PoolBowlParams) (Bowl, error) {
 	// input validation
+
+	// TODO: use ozzo-validate here
 
 	if params.TargetContainer == nil {
 		return nil, errors.New("poolBowl: TargetContainer must not be nil")
