@@ -1,11 +1,9 @@
 package genie
 
 import (
-	"fmt"
-
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/pwr"
-	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"
 )
@@ -75,8 +73,7 @@ func (g *Genie) ParseContents(onComp CompositionListener) error {
 		}
 
 		if sh.FileIndex != int64(fileIndex) {
-			fmt.Printf("expected fileIndex = %d, got fileIndex %d\n", fileIndex, sh.FileIndex)
-			return errors.WithStack(pwr.ErrMalformedPatch)
+			return errors.Errorf("Malformed patch: expected fileIndex = %d, got fileIndex %d", fileIndex, sh.FileIndex)
 		}
 
 		err = g.analyzeFile(patchWire, int64(fileIndex), f.Size, onComp)

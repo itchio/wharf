@@ -18,6 +18,7 @@ import (
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/pwr/patcher"
+	"github.com/itchio/wharf/pwr/rediff"
 	"github.com/itchio/wharf/wtest"
 
 	"github.com/itchio/headway/state"
@@ -107,26 +108,17 @@ func Test_Naive(t *testing.T) {
 
 		// Rediff!
 		t.Logf("Rediffing...")
-		rc := pwr.RediffContext{
-			Consumer: consumer,
-
-			TargetContainer: targetContainer,
-			TargetPool:      targetPool,
-
-			SourceContainer: sourceContainer,
-			SourcePool:      pool,
-		}
-
-		patchReader := seeksource.FromBytes(patchBuffer.Bytes())
-		_, err = patchReader.Resume(nil)
+		rc, err := rediff.NewContext(rediff.Params{
+			Consumer:    consumer,
+			PatchReader: seeksource.FromBytes(patchBuffer.Bytes()),
+		})
 		wtest.Must(t, err)
 
-		wtest.Must(t, rc.AnalyzePatch(patchReader))
-
-		_, err = patchReader.Resume(nil)
-		wtest.Must(t, err)
-
-		wtest.Must(t, rc.OptimizePatch(patchReader, optimizedPatchBuffer))
+		wtest.Must(t, rc.Optimize(rediff.OptimizeParams{
+			TargetPool:  targetPool,
+			SourcePool:  pool,
+			PatchWriter: optimizedPatchBuffer,
+		}))
 	}
 
 	// Patch!

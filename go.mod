@@ -3,6 +3,7 @@ module github.com/itchio/wharf
 go 1.13
 
 require (
+	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/golang/protobuf v1.3.1
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/itchio/arkive v0.0.0-20190910190734-aa506bf6be35

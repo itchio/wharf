@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/itchio/wharf/pwr/drip"
 	"github.com/itchio/randsource"
+	"github.com/itchio/screw"
+	"github.com/itchio/wharf/pwr/drip"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -70,26 +70,26 @@ func MakeTestDir(t *testing.T, dir string, s TestDirSettings) {
 		Source: rand.New(rand.NewSource(s.Seed)),
 	}
 
-	Must(t, os.MkdirAll(dir, 0755))
+	Must(t, screw.MkdirAll(dir, 0o755))
 	data := new(bytes.Buffer)
 
 	for _, entry := range s.Entries {
 		path := filepath.Join(dir, filepath.FromSlash(entry.Path))
 
 		if entry.Dir {
-			mode := 0755
+			mode := 0o755
 			if entry.Mode != 0 {
 				mode = entry.Mode
 			}
-			Must(t, os.MkdirAll(entry.Path, os.FileMode(mode)))
+			Must(t, screw.MkdirAll(entry.Path, os.FileMode(mode)))
 			continue
 		} else if entry.Dest != "" {
-			Must(t, os.Symlink(entry.Dest, path))
+			Must(t, screw.Symlink(entry.Dest, path))
 			continue
 		}
 
 		parent := filepath.Dir(path)
-		mkErr := os.MkdirAll(parent, 0755)
+		mkErr := screw.MkdirAll(parent, 0o755)
 		if mkErr != nil {
 			if !os.IsExist(mkErr) {
 				Must(t, mkErr)
@@ -102,19 +102,21 @@ func MakeTestDir(t *testing.T, dir string, s TestDirSettings) {
 			prng.Seed(entry.Seed)
 		}
 
-		data.Reset()
-		data.Grow(int(entry.Size))
-
 		func() {
-			mode := 0644
+			mode := 0o644
 			if entry.Mode != 0 {
 				mode = entry.Mode
 			}
 
 			size := BlockSize*8 + 64
-			if entry.Size != 0 {
+			if entry.Size > 0 {
 				size = entry.Size
+			} else if entry.Size < 0 {
+				size = 0
 			}
+
+			data.Reset()
+			data.Grow(int(size))
 
 			f := new(bytes.Buffer)
 			var err error
@@ -177,21 +179,32 @@ func MakeTestDir(t *testing.T, dir string, s TestDirSettings) {
 				copy(finalBuf[s.NewStart:s.NewStart+s.Size], stagingBuf)
 			}
 
-			err = ioutil.WriteFile(path, finalBuf, os.FileMode(mode))
+			err = screw.WriteFile(path, finalBuf, os.FileMode(mode))
 			Must(t, err)
 		}()
 	}
 }
 
+func WipeAndMkdir(t *testing.T, dst string) {
+	Must(t, screw.RemoveAll(dst))
+	Must(t, screw.MkdirAll(dst, 0o755))
+}
+
+func WipeAndCpDir(t *testing.T, src string, dst string) {
+	Must(t, screw.RemoveAll(dst))
+	Must(t, screw.MkdirAll(dst, 0o755))
+	CpDir(t, src, dst)
+}
+
 func CpFile(t *testing.T, src string, dst string) {
-	sf, fErr := os.Open(src)
+	sf, fErr := screw.Open(src)
 	Must(t, fErr)
 	defer sf.Close()
 
 	info, fErr := sf.Stat()
 	Must(t, fErr)
 
-	df, fErr := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, info.Mode())
+	df, fErr := screw.OpenFile(dst, os.O_CREATE|os.O_WRONLY, info.Mode())
 	Must(t, fErr)
 	defer df.Close()
 
@@ -200,7 +213,7 @@ func CpFile(t *testing.T, src string, dst string) {
 }
 
 func CpDir(t *testing.T, src string, dst string) {
-	Must(t, os.MkdirAll(dst, 0755))
+	Must(t, screw.MkdirAll(dst, 0o755))
 
 	Must(t, filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		Must(t, err)
@@ -210,18 +223,18 @@ func CpDir(t *testing.T, src string, dst string) {
 		dstPath := filepath.Join(dst, name)
 
 		if info.IsDir() {
-			Must(t, os.MkdirAll(dstPath, info.Mode()))
+			Must(t, screw.MkdirAll(dstPath, info.Mode()))
 		} else if info.Mode()&os.ModeSymlink > 0 {
-			dest, fErr := os.Readlink(path)
+			dest, fErr := screw.Readlink(path)
 			Must(t, fErr)
 
-			Must(t, os.Symlink(dest, dstPath))
+			Must(t, screw.Symlink(dest, dstPath))
 		} else if info.Mode().IsRegular() {
-			df, fErr := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY, info.Mode())
+			df, fErr := screw.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY, info.Mode())
 			Must(t, fErr)
 			defer df.Close()
 
-			sf, fErr := os.Open(path)
+			sf, fErr := screw.Open(path)
 			Must(t, fErr)
 			defer sf.Close()
 
@@ -236,7 +249,7 @@ func CpDir(t *testing.T, src string, dst string) {
 }
 
 func AssertDirEmpty(t *testing.T, dir string) {
-	files, err := ioutil.ReadDir(dir)
+	files, err := screw.ReadDir(dir)
 	Must(t, err)
 	assert.Equal(t, 0, len(files))
 }

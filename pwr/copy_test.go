@@ -6,9 +6,10 @@ import (
 	"path"
 	"testing"
 
-	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
+	"github.com/itchio/wharf/wtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,12 +20,12 @@ func Test_CopyContainer(t *testing.T) {
 
 	src := path.Join(mainDir, "src")
 	dst := path.Join(mainDir, "dst")
-	makeTestDir(t, src, testDirSettings{
-		seed: 0x91738,
-		entries: []testDirEntry{
-			{path: "subdir/file-1", seed: 0x1},
-			{path: "file-1", seed: 0x2},
-			{path: "file-2", seed: 0x3},
+	wtest.MakeTestDir(t, src, wtest.TestDirSettings{
+		Seed: 0x91738,
+		Entries: []wtest.TestDirEntry{
+			{Path: "subdir/file-1", Seed: 0x1},
+			{Path: "file-1", Seed: 0x2},
+			{Path: "file-2", Seed: 0x3},
 		},
 	})
 

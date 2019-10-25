@@ -1,18 +1,17 @@
-package pwr
+package rediff
 
 import (
 	"fmt"
 	"io"
-	"time"
 
-	"path/filepath"
-
+	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/itchio/headway/state"
 	"github.com/itchio/headway/united"
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior"
 	"github.com/itchio/wharf/bsdiff"
+	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"
 )
@@ -45,90 +44,112 @@ func (dm DiffMappings) ToString(sourceContainer tlc.Container, targetContainer t
 	return s
 }
 
-// A Timeline contains time-coded events pertaining to the rediff process
-type Timeline struct {
-	Groups []TimelineGroup `json:"groups"`
-	Items  []TimelineItem  `json:"items"`
-}
-
-// A TimelineGroup is what timeline items are grouped by. All items
-// of a given group appear in the same row.
-type TimelineGroup struct {
-	ID      int    `json:"id"`
-	Content string `json:"content"`
-}
-
-// A TimelineItem represents a task that occured in a certain period of time
-type TimelineItem struct {
-	Start   float64 `json:"start"`
-	End     float64 `json:"end"`
-	Content string  `json:"content"`
-	Style   string  `json:"style"`
-	Title   string  `json:"title"`
-	Group   int     `json:"group"`
-}
-
-// RediffContext holds options for the rediff process, along with
+// Context holds options for the rediff process, along with
 // some state.
-type RediffContext struct {
-	SourcePool lake.Pool
-	TargetPool lake.Pool
+type context struct {
+	params Params
 
-	////////////////////
-	// optional
-	////////////////////
+	// set after analyze
+	targetContainer *tlc.Container
+	sourceContainer *tlc.Container
+	diffMappings    DiffMappings
+}
 
-	// RediffSizeLimit is the maximum size of a file we'll attempt to rediff.
+type Context interface {
+	GetTargetContainer() *tlc.Container
+	GetSourceContainer() *tlc.Container
+	Partitions() int
+	Optimize(params OptimizeParams) error
+}
+
+var _ Context = (*context)(nil)
+
+type Params struct {
+	// PatchReader is a source used twice: to find diff mappings, and then again
+	// to copy rsync operations for files that we won't optimize.
+	// rediff.Context is in charge of resuming, since it uses it twice.
+	PatchReader savior.SeekSource
+
+	// RediffSizeLimit (optional) is the maximum size of a file we'll attempt to rediff.
 	// If a file is larger than that, ops will just be copied.
-	RediffSizeLimit       int64
+	RediffSizeLimit int64
+
+	// optional
 	SuffixSortConcurrency int
-	Partitions            int
-	Compression           *CompressionSettings
-	Consumer              *state.Consumer
-	BsdiffStats           *bsdiff.DiffStats
-	Timeline              *Timeline
-	ForceMapAll           bool
+	// optional
+	Partitions int
+	// optional
+	Compression *pwr.CompressionSettings
+	// optional
+	Consumer *state.Consumer
+	// optional
+	BsdiffStats *bsdiff.DiffStats
+	// optional
+	ForceMapAll bool
+	// optional
+	MeasureMem bool
+}
 
-	////////////////////
-	// set on Analyze
-	////////////////////
+type OptimizeParams struct {
+	TargetPool lake.Pool
+	SourcePool lake.Pool
 
-	TargetContainer *tlc.Container
-	SourceContainer *tlc.Container
-
-	////////////////////
-	// internal
-	////////////////////
-
-	DiffMappings DiffMappings
-	MeasureMem   bool
+	PatchWriter io.Writer
 }
 
 const DefaultRediffSizeLimit = 4 * 1024 * 1024 * 1024 // 4GB
 
+// NewContext initializes the diffing process, it also analyzes the patch
+// to find diff mapping so that it's ready for optimization
+func NewContext(params Params) (Context, error) {
+	err := validation.ValidateStruct(&params,
+		validation.Field(&params.PatchReader, validation.Required),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// apply default params
+	if params.RediffSizeLimit == 0 {
+		params.RediffSizeLimit = DefaultRediffSizeLimit
+	}
+
+	rc := &context{
+		params: params,
+	}
+	err = rc.analyzePatch()
+	if err != nil {
+		return nil, err
+	}
+
+	return rc, nil
+}
+
 // AnalyzePatch parses a non-optimized patch, looking for good bsdiff'ing candidates
 // and building DiffMappings.
-func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
+func (rc *context) analyzePatch() error {
 	var err error
+	consumer := rc.params.Consumer
 
-	if rc.RediffSizeLimit == 0 {
-		rc.RediffSizeLimit = DefaultRediffSizeLimit
-	}
-
-	rctx := wire.NewReadContext(patchReader)
-
-	err = rctx.ExpectMagic(PatchMagic)
+	_, err = rc.params.PatchReader.Resume(nil)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 
-	ph := &PatchHeader{}
+	rctx := wire.NewReadContext(rc.params.PatchReader)
+
+	err = rctx.ExpectMagic(pwr.PatchMagic)
+	if err != nil {
+		return err
+	}
+
+	ph := &pwr.PatchHeader{}
 	err = rctx.ReadMessage(ph)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 
-	rctx, err = DecompressWire(rctx, ph.Compression)
+	rctx, err = pwr.DecompressWire(rctx, ph.Compression)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -138,27 +159,27 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	rc.TargetContainer = targetContainer
+	rc.targetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = rctx.ReadMessage(sourceContainer)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	rc.SourceContainer = sourceContainer
+	rc.sourceContainer = sourceContainer
 
-	rop := &SyncOp{}
+	rop := &pwr.SyncOp{}
 
 	targetPathsToIndex := make(map[string]int64)
 	for targetFileIndex, file := range targetContainer.Files {
 		targetPathsToIndex[file.Path] = int64(targetFileIndex)
 	}
 
-	rc.DiffMappings = make(DiffMappings)
+	rc.diffMappings = make(DiffMappings)
 
 	var doneBytes int64
 
-	sh := &SyncHeader{}
+	sh := &pwr.SyncHeader{}
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
 		sh.Reset()
@@ -171,8 +192,8 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 			return errors.WithStack(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex))
 		}
 
-		rc.Consumer.ProgressLabel(sourceFile.Path)
-		rc.Consumer.Progress(float64(doneBytes) / float64(sourceContainer.Size))
+		consumer.ProgressLabel(sourceFile.Path)
+		consumer.Progress(float64(doneBytes) / float64(sourceContainer.Size))
 
 		bytesReusedPerFileIndex := make(FileOrigin)
 		readingOps := true
@@ -187,32 +208,32 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 			}
 
 			switch rop.Type {
-			case SyncOp_BLOCK_RANGE:
+			case pwr.SyncOp_BLOCK_RANGE:
 				numBlockRange++
 				alreadyReused := bytesReusedPerFileIndex[rop.FileIndex]
 				lastBlockIndex := rop.BlockIndex + rop.BlockSpan
 				targetFile := targetContainer.Files[rop.FileIndex]
-				lastBlockSize := ComputeBlockSize(targetFile.Size, lastBlockIndex)
-				otherBlocksSize := BlockSize*rop.BlockSpan - 1
+				lastBlockSize := pwr.ComputeBlockSize(targetFile.Size, lastBlockIndex)
+				otherBlocksSize := pwr.BlockSize*rop.BlockSpan - 1
 
 				bytesReusedPerFileIndex[rop.FileIndex] = alreadyReused + otherBlocksSize + lastBlockSize
 
-			case SyncOp_DATA:
+			case pwr.SyncOp_DATA:
 				numData++
 
 			default:
 				switch rop.Type {
-				case SyncOp_HEY_YOU_DID_IT:
+				case pwr.SyncOp_HEY_YOU_DID_IT:
 					readingOps = false
 				default:
-					return errors.WithStack(ErrMalformedPatch)
+					return errors.Errorf("Malformed patch, unknown sync type op %d", rop.Type)
 				}
 			}
 		}
 
-		if sourceFile.Size == 0 && !rc.ForceMapAll {
+		if sourceFile.Size == 0 && !rc.params.ForceMapAll {
 			// don't need to bsdiff newly-empty files
-		} else if numBlockRange == 1 && numData == 0 && !rc.ForceMapAll {
+		} else if numBlockRange == 1 && numData == 0 && !rc.params.ForceMapAll {
 			// transpositions (renames, etc.) don't need bsdiff'ing :)
 		} else {
 			var diffMapping *DiffMapping
@@ -244,21 +265,21 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 				}
 			}
 
-			if sourceFile.Size > rc.RediffSizeLimit {
+			if sourceFile.Size > rc.params.RediffSizeLimit {
 				// source file is too large, skip rediff
 				diffMapping = nil
 			}
 
 			if diffMapping != nil {
 				targetFile := targetContainer.Files[diffMapping.TargetIndex]
-				if targetFile.Size > rc.RediffSizeLimit {
+				if targetFile.Size > rc.params.RediffSizeLimit {
 					// target file is too large, skip rediff
 					diffMapping = nil
 				}
 			}
 
 			if diffMapping != nil {
-				rc.DiffMappings[int64(sourceFileIndex)] = diffMapping
+				rc.diffMappings[int64(sourceFileIndex)] = diffMapping
 			}
 		}
 
@@ -270,46 +291,48 @@ func (rc *RediffContext) AnalyzePatch(patchReader savior.SeekSource) error {
 
 // OptimizePatch uses the information computed by AnalyzePatch to write a new version of
 // the patch, but with bsdiff instead of rsync diffs for each DiffMapping.
-func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWriter io.Writer) error {
-	var err error
+func (rc *context) Optimize(params OptimizeParams) error {
+	consumer := rc.params.Consumer
 
-	if rc.SourcePool == nil {
-		return errors.WithStack(fmt.Errorf("SourcePool cannot be nil"))
+	err := validation.ValidateStruct(&params,
+		validation.Field(&params.SourcePool, validation.Required),
+		validation.Field(&params.TargetPool, validation.Required),
+		validation.Field(&params.PatchWriter, validation.Required),
+	)
+	if err != nil {
+		return err
 	}
 
-	if rc.TargetPool == nil {
-		return errors.WithStack(fmt.Errorf("TargetPool cannot be nil"))
+	_, err = rc.params.PatchReader.Resume(nil)
+	if err != nil {
+		return err
 	}
 
-	if rc.DiffMappings == nil {
-		return errors.WithStack(fmt.Errorf("AnalyzePatch must be called before OptimizePatch"))
-	}
+	rctx := wire.NewReadContext(rc.params.PatchReader)
+	wctx := wire.NewWriteContext(params.PatchWriter)
 
-	rctx := wire.NewReadContext(patchReader)
-	wctx := wire.NewWriteContext(patchWriter)
-
-	err = wctx.WriteMagic(PatchMagic)
+	err = wctx.WriteMagic(pwr.PatchMagic)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = rctx.ExpectMagic(PatchMagic)
+	err = rctx.ExpectMagic(pwr.PatchMagic)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	ph := &PatchHeader{}
+	ph := &pwr.PatchHeader{}
 	err = rctx.ReadMessage(ph)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	compression := rc.Compression
+	compression := rc.params.Compression
 	if compression == nil {
 		compression = defaultRediffCompressionSettings()
 	}
 
-	wph := &PatchHeader{
+	wph := &pwr.PatchHeader{
 		Compression: compression,
 	}
 	err = wctx.WriteMessage(wph)
@@ -317,12 +340,12 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 		return errors.WithStack(err)
 	}
 
-	rctx, err = DecompressWire(rctx, ph.Compression)
+	rctx, err = pwr.DecompressWire(rctx, ph.Compression)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	wctx, err = CompressWire(wctx, wph.Compression)
+	wctx, err = pwr.CompressWire(wctx, wph.Compression)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -349,32 +372,24 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 		return errors.WithStack(err)
 	}
 
-	sh := &SyncHeader{}
-	bh := &BsdiffHeader{}
-	rop := &SyncOp{}
+	sh := &pwr.SyncHeader{}
+	bh := &pwr.BsdiffHeader{}
+	rop := &pwr.SyncOp{}
 
 	bdc := &bsdiff.DiffContext{
-		SuffixSortConcurrency: rc.SuffixSortConcurrency,
-		Partitions:            rc.Partitions,
-		Stats:                 rc.BsdiffStats,
-		MeasureMem:            rc.MeasureMem,
+		SuffixSortConcurrency: rc.params.SuffixSortConcurrency,
+		Partitions:            rc.params.Partitions,
+		Stats:                 rc.params.BsdiffStats,
+		MeasureMem:            rc.params.MeasureMem,
 	}
 
-	if rc.Timeline != nil {
-		rc.Timeline.Groups = append(rc.Timeline.Groups, TimelineGroup{
-			ID:      0,
-			Content: "Worker",
-		})
-	}
-
-	initialStart := time.Now()
 	bconsumer := &state.Consumer{}
 
 	var biggestSourceFile int64
 	var totalRediffSize int64
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
-		if _, ok := rc.DiffMappings[int64(sourceFileIndex)]; ok {
+		if _, ok := rc.diffMappings[int64(sourceFileIndex)]; ok {
 			if sourceFile.Size > biggestSourceFile {
 				biggestSourceFile = sourceFile.Size
 			}
@@ -396,7 +411,7 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 			return errors.WithStack(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex))
 		}
 
-		diffMapping := rc.DiffMappings[int64(sourceFileIndex)]
+		diffMapping := rc.diffMappings[int64(sourceFileIndex)]
 
 		if diffMapping == nil {
 			// if no mapping, just copy ops straight up
@@ -412,7 +427,7 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 					return errors.WithStack(err)
 				}
 
-				if rop.Type == SyncOp_HEY_YOU_DID_IT {
+				if rop.Type == pwr.SyncOp_HEY_YOU_DID_IT {
 					break
 				}
 
@@ -425,7 +440,7 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 			// signal bsdiff start to patcher
 			sh.Reset()
 			sh.FileIndex = int64(sourceFileIndex)
-			sh.Type = SyncHeader_BSDIFF
+			sh.Type = pwr.SyncHeader_BSDIFF
 			err = wctx.WriteMessage(sh)
 			if err != nil {
 				return errors.WithStack(err)
@@ -445,54 +460,41 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 					return errors.WithStack(err)
 				}
 
-				if rop.Type == SyncOp_HEY_YOU_DID_IT {
+				if rop.Type == pwr.SyncOp_HEY_YOU_DID_IT {
 					break
 				}
 			}
 
 			// then bsdiff
-			sourceFileReader, err := rc.SourcePool.GetReadSeeker(int64(sourceFileIndex))
+			sourceFileReader, err := params.SourcePool.GetReadSeeker(int64(sourceFileIndex))
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
-			targetFileReader, err := rc.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
+			targetFileReader, err := params.TargetPool.GetReadSeeker(diffMapping.TargetIndex)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
-			rc.Consumer.ProgressLabel(fmt.Sprintf(">%s", sourceFile.Path))
+			consumer.ProgressLabel(fmt.Sprintf(">%s", sourceFile.Path))
 
 			_, err = sourceFileReader.Seek(0, io.SeekStart)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
-			rc.Consumer.ProgressLabel(fmt.Sprintf("<%s", sourceFile.Path))
+			consumer.ProgressLabel(fmt.Sprintf("<%s", sourceFile.Path))
 
 			_, err = targetFileReader.Seek(0, io.SeekStart)
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
-			rc.Consumer.ProgressLabel(fmt.Sprintf("*%s", sourceFile.Path))
-
-			startTime := time.Now()
+			consumer.ProgressLabel(fmt.Sprintf("*%s", sourceFile.Path))
 
 			err = bdc.Do(targetFileReader, sourceFileReader, wctx.WriteMessage, bconsumer)
-
-			endTime := time.Now()
-
-			if rc.Timeline != nil {
-				heat := int(float64(sourceFile.Size) / float64(biggestSourceFile) * 240.0)
-				rc.Timeline.Items = append(rc.Timeline.Items, TimelineItem{
-					Content: filepath.Base(sourceFile.Path),
-					Style:   fmt.Sprintf("background-color: hsl(%d, 100%%, 50%%)", heat),
-					Title:   fmt.Sprintf("%s %s", united.FormatBytes(sourceFile.Size), sourceFile.Path),
-					Start:   startTime.Sub(initialStart).Seconds(),
-					End:     endTime.Sub(initialStart).Seconds(),
-					Group:   0,
-				})
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
 			doneSize += sourceFile.Size
@@ -500,14 +502,14 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 
 		// and don't forget to indicate success
 		rop.Reset()
-		rop.Type = SyncOp_HEY_YOU_DID_IT
+		rop.Type = pwr.SyncOp_HEY_YOU_DID_IT
 
 		err = wctx.WriteMessage(rop)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		rc.Consumer.Progress(float64(doneSize) / float64(totalRediffSize))
+		consumer.Progress(float64(doneSize) / float64(totalRediffSize))
 	}
 
 	err = wctx.Close()
@@ -518,9 +520,21 @@ func (rc *RediffContext) OptimizePatch(patchReader savior.SeekSource, patchWrite
 	return nil
 }
 
-func defaultRediffCompressionSettings() *CompressionSettings {
-	return &CompressionSettings{
-		Algorithm: CompressionAlgorithm_BROTLI,
+func (rc *context) Partitions() int {
+	return rc.params.Partitions
+}
+
+func (rc *context) GetSourceContainer() *tlc.Container {
+	return rc.sourceContainer
+}
+
+func (rc *context) GetTargetContainer() *tlc.Container {
+	return rc.targetContainer
+}
+
+func defaultRediffCompressionSettings() *pwr.CompressionSettings {
+	return &pwr.CompressionSettings{
+		Algorithm: pwr.CompressionAlgorithm_BROTLI,
 		Quality:   9,
 	}
 }

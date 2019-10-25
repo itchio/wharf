@@ -53,7 +53,7 @@ func (cs *CompressionSettings) ToString() string {
 // so that any messages written through the returned WriteContext will first be compressed.
 func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
 	if compression == nil {
-		return nil, errors.WithStack(fmt.Errorf("no compression specified"))
+		return nil, errors.Errorf("no compression specified")
 	}
 
 	if compression.Algorithm == CompressionAlgorithm_NONE {
@@ -62,7 +62,7 @@ func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 
 	compressor := compressors[compression.Algorithm]
 	if compressor == nil {
-		return nil, errors.WithStack(fmt.Errorf("no compressor registered for %s", compression.Algorithm.String()))
+		return nil, errors.Errorf("no compressor registered for %s", compression.Algorithm.String())
 	}
 
 	compressedWriter, err := compressor.Apply(ctx.Writer(), compression.Quality)
@@ -77,12 +77,12 @@ func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 // so that any messages read through the returned ReadContext will first be decompressed.
 func DecompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*wire.ReadContext, error) {
 	if compression == nil {
-		return nil, errors.WithStack(fmt.Errorf("no compression specified"))
+		return nil, errors.Errorf("no compression specified")
 	}
 
 	originalSource, ok := ctx.GetSource().(savior.SeekSource)
 	if !ok {
-		return nil, errors.WithStack(fmt.Errorf("can only DecompressWire when source is a savior.SeekSource"))
+		return nil, errors.Errorf("can only DecompressWire when source is a savior.SeekSource")
 	}
 
 	offset := originalSource.Tell()
@@ -99,7 +99,7 @@ func DecompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*w
 	} else {
 		decompressor := decompressors[compression.Algorithm]
 		if decompressor == nil {
-			return nil, errors.WithStack(fmt.Errorf("no decompressor registered for %s", compression.Algorithm.String()))
+			return nil, errors.Errorf("no decompressor registered for %s", compression.Algorithm.String())
 		}
 
 		var err error
@@ -115,7 +115,7 @@ func DecompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*w
 	}
 
 	if finalOffset != 0 {
-		return nil, errors.WithStack(fmt.Errorf("expected source to resume at 0, got %d", finalOffset))
+		return nil, errors.Errorf("expected source to resume at 0, got %d", finalOffset)
 	}
 
 	return wire.NewReadContext(finalSource), nil
