@@ -222,7 +222,7 @@ func runScenario(t *testing.T, params *bowlerParams) {
 		wp, err := zipwriterpool.New(p.SourceContainer, zw)
 		must(t, err)
 
-		b, err := bowl.NewPoolBowl(&bowl.PoolBowlParams{
+		b, err := bowl.NewPoolBowl(bowl.PoolBowlParams{
 			TargetContainer: p.TargetContainer,
 			TargetPool:      p.TargetPool,
 			SourceContainer: p.SourceContainer,

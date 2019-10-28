@@ -180,7 +180,7 @@ func (b *overlayBowl) GetWriter(sourceFileIndex int64) (EntryWriter, error) {
 	debugf("returning move writer for '%s'", sourceFile.Path)
 
 	wPath := b.stagePool.GetPath(sourceFileIndex)
-	return &freshEntryWriter{path: wPath}, nil
+	return &freshEntryWriter{path: wPath, file: sourceFile}, nil
 }
 
 func (b *overlayBowl) markOverlay(sourceFileIndex int64) {
@@ -719,7 +719,7 @@ func (b *overlayBowl) applyOverlays() error {
 		defer r.Close()
 
 		outputPath := filepath.Join(b.OutputFolder, nativePath)
-		w, err := screw.OpenFile(outputPath, os.O_WRONLY, 0644)
+		w, err := screw.OpenFile(outputPath, os.O_WRONLY, os.FileMode(file.Mode|tlc.ModeMask))
 		if err != nil {
 			return errors.WithStack(err)
 		}

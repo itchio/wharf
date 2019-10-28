@@ -87,7 +87,7 @@ func (b *freshBowl) Resume(c *BowlCheckpoint) error {
 }
 
 func (b *freshBowl) GetWriter(index int64) (EntryWriter, error) {
-	return &freshEntryWriter{path: b.OutputPool.GetPath(index)}, nil
+	return &freshEntryWriter{path: b.OutputPool.GetPath(index), file: b.SourceContainer.Files[index]}, nil
 }
 
 func (b *freshBowl) Transpose(t Transposition) (rErr error) {
@@ -140,6 +140,7 @@ type freshEntryWriter struct {
 	f      *os.File
 	path   string
 	offset int64
+	file   *tlc.File
 }
 
 var _ EntryWriter = (*freshEntryWriter)(nil)
@@ -154,7 +155,7 @@ func (few *freshEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
 		return 0, errors.WithStack(err)
 	}
 
-	f, err := screw.OpenFile(few.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
+	f, err := screw.OpenFile(few.path, os.O_CREATE|os.O_WRONLY, os.FileMode(few.file.Mode|tlc.ModeMask))
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
