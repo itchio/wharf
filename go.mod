@@ -3,6 +3,7 @@ module github.com/itchio/wharf
 go 1.13
 
 require (
+	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/golang/protobuf v1.3.1
 	github.com/hashicorp/golang-lru v0.5.1
