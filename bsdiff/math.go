@@ -381,7 +381,7 @@ func matchlen(a, b []byte) (i int) {
 func search(I []int, obuf, nbuf []byte, st, en int) (pos, n int) {
 	if en-st < 2 {
 		if en >= len(obuf) {
-			return I[st], 1
+			return I[st], matchlen(obuf[I[st]:], nbuf)
 		}
 
 		x := matchlen(obuf[I[st]:], nbuf)
