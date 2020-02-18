@@ -207,6 +207,7 @@ func Test_Naive(t *testing.T) {
 		}
 		err = pwr.AssertValid(out, sigInfo)
 		assert.Error(t, err)
+		assert.EqualValues(t, len(sourceIndexWhitelist), p.GetTouchedFiles())
 
 		t.Logf("Partially applied!")
 	}
