@@ -29,6 +29,8 @@ type savingPatcher struct {
 
 	rsyncCtx  *wsync.Context
 	bsdiffCtx *bsdiff.PatchContext
+
+	sourceIndexWhiteList map[int64]bool
 }
 
 var _ Patcher = (*savingPatcher)(nil)
@@ -174,9 +176,21 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool lake.Pool, bwl bowl.Bo
 			}
 		}
 
-		err := sp.processFile(c, targetPool, sh, bwl)
-		if err != nil {
-			return err
+		skip := false
+		if sp.sourceIndexWhiteList != nil && !sp.sourceIndexWhiteList[sh.FileIndex] {
+			skip = true
+		}
+
+		if skip {
+			err := sp.skipFile(c, sh)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := sp.processFile(c, targetPool, sh, bwl)
+			if err != nil {
+				return err
+			}
 		}
 
 		// reset checkpoint and increment
@@ -185,6 +199,26 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool lake.Pool, bwl bowl.Bo
 		c.BsdiffCheckpoint = nil
 		c.MessageCheckpoint = nil
 		c.SyncHeader = nil
+	}
+
+	return nil
+}
+
+func (sp *savingPatcher) skipFile(c *Checkpoint, sh *pwr.SyncHeader) error {
+	sp.consumer.ProgressLabel(sp.sourceContainer.Files[sh.FileIndex].Path)
+
+	var err error
+	op := &pwr.SyncOp{}
+
+	for {
+		err = sp.rctx.ReadMessage(op)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if op.Type == pwr.SyncOp_HEY_YOU_DID_IT {
+			break
+		}
 	}
 
 	return nil
@@ -225,4 +259,8 @@ func (sp *savingPatcher) Progress() float64 {
 	}
 
 	return sp.rctx.GetSource().Progress()
+}
+
+func (sp *savingPatcher) SetSourceIndexWhitelist(sourceIndexWhitelist map[int64]bool) {
+	sp.sourceIndexWhiteList = sourceIndexWhitelist
 }

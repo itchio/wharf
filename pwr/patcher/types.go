@@ -66,6 +66,7 @@ type Patcher interface {
 
 	GetSourceContainer() *tlc.Container
 	GetTargetContainer() *tlc.Container
+	SetSourceIndexWhitelist(sourceIndexWhitelist map[int64]bool)
 }
 
 // AfterSaveAction describes what the patcher should do after it saved.
