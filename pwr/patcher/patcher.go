@@ -27,6 +27,8 @@ type savingPatcher struct {
 	sourceContainer *tlc.Container
 	header          *pwr.PatchHeader
 
+	touchedFiles int64
+
 	rsyncCtx  *wsync.Context
 	bsdiffCtx *bsdiff.PatchContext
 
@@ -191,6 +193,7 @@ func (sp *savingPatcher) Resume(c *Checkpoint, targetPool lake.Pool, bwl bowl.Bo
 			if err != nil {
 				return err
 			}
+			sp.touchedFiles++
 		}
 
 		// reset checkpoint and increment
@@ -263,4 +266,8 @@ func (sp *savingPatcher) Progress() float64 {
 
 func (sp *savingPatcher) SetSourceIndexWhitelist(sourceIndexWhitelist map[int64]bool) {
 	sp.sourceIndexWhiteList = sourceIndexWhitelist
+}
+
+func (sp *savingPatcher) GetTouchedFiles() int64 {
+	return sp.touchedFiles
 }
