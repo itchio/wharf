@@ -12,7 +12,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/itchio/headway/state"
 	"github.com/itchio/headway/united"
-	"github.com/jgallagher/gosaca"
 	"github.com/pkg/errors"
 )
 
@@ -72,7 +71,6 @@ type DiffContext struct {
 	Stats *DiffStats
 
 	db bytes.Buffer
-	ws *gosaca.WorkSpace
 
 	obuf bytes.Buffer
 	nbuf bytes.Buffer
