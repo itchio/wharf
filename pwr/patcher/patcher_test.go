@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
 
 	"github.com/itchio/headway/united"
+	"github.com/itchio/lake"
 	"github.com/itchio/screw"
 	"github.com/itchio/wharf/wsync"
 	"github.com/pkg/errors"
@@ -161,6 +163,55 @@ func Test_Naive(t *testing.T) {
 		t.Logf("Patch applies cleanly!")
 	}
 
+	tryPatchSkip := func(t *testing.T, patchBytes []byte, all bool) {
+		consumer := &state.Consumer{
+			OnMessage: func(level string, message string) {
+				t.Logf("[%s] %s", level, message)
+			},
+		}
+
+		out := filepath.Join(dir, "out")
+		defer screw.RemoveAll(out)
+
+		patchReader := seeksource.FromBytes(patchBytes)
+
+		p, err := patcher.New(patchReader, consumer)
+		wtest.Must(t, err)
+
+		var targetPool lake.Pool = &explodingPool{}
+
+		sourceIndexWhitelist := make(map[int64]bool)
+		if !all {
+			for i := int64(0); i < int64(len(p.GetSourceContainer().Files)); i += 2 {
+				sourceIndexWhitelist[i] = true
+			}
+			targetPool = fspool.New(p.GetTargetContainer(), v1)
+		}
+		p.SetSourceIndexWhitelist(sourceIndexWhitelist)
+
+		b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
+			SourceContainer: p.GetSourceContainer(),
+			TargetContainer: p.GetTargetContainer(),
+			TargetPool:      targetPool,
+			OutputFolder:    out,
+		})
+		wtest.Must(t, err)
+
+		err = p.Resume(nil, targetPool, b)
+		wtest.Must(t, err)
+
+		// Validate!
+		sigInfo := &pwr.SignatureInfo{
+			Container: p.GetSourceContainer(),
+			Hashes:    sourceHashes,
+		}
+		err = pwr.AssertValid(out, sigInfo)
+		assert.Error(t, err)
+		assert.EqualValues(t, len(sourceIndexWhitelist), p.GetTouchedFiles())
+
+		t.Logf("Partially applied!")
+	}
+
 	tryPatchWithSaves := func(t *testing.T, patchBytes []byte) {
 		consumer := &state.Consumer{
 			OnMessage: func(level string, message string) {
@@ -250,6 +301,16 @@ func Test_Naive(t *testing.T) {
 			t.Logf("Applying %s %s patch (%d bytes) with saves", united.FormatBytes(int64(len(patchBytes))), kind, len(patchBytes))
 			tryPatchWithSaves(t, patchBytes)
 		})
+
+		t.Run(fmt.Sprintf("%s-skip-all", kind), func(t *testing.T) {
+			t.Logf("Applying %s %s patch (%d bytes) by skipping all entries", united.FormatBytes(int64(len(patchBytes))), kind, len(patchBytes))
+			tryPatchSkip(t, patchBytes, true)
+		})
+
+		t.Run(fmt.Sprintf("%s-skip-some", kind), func(t *testing.T) {
+			t.Logf("Applying %s %s patch (%d bytes) by skipping some entries", united.FormatBytes(int64(len(patchBytes))), kind, len(patchBytes))
+			tryPatchSkip(t, patchBytes, false)
+		})
 	}
 
 	tryPatch("simple", patchBuffer.Bytes())
@@ -271,4 +332,23 @@ func (psc *patcherSaveConsumer) ShouldSave() bool {
 
 func (psc *patcherSaveConsumer) Save(checkpoint *patcher.Checkpoint) (patcher.AfterSaveAction, error) {
 	return psc.save(checkpoint)
+}
+
+//
+
+type explodingPool struct{}
+
+var _ lake.Pool = (*explodingPool)(nil)
+
+func (ep *explodingPool) GetSize(fileIndex int64) int64 {
+	panic("pool exploded")
+}
+func (ep *explodingPool) GetReader(fileIndex int64) (io.Reader, error) {
+	panic("pool exploded")
+}
+func (ep *explodingPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
+	panic("pool exploded")
+}
+func (ep *explodingPool) Close() error {
+	return nil
 }

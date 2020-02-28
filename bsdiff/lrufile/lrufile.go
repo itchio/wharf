@@ -3,14 +3,11 @@ package lrufile
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/hashicorp/golang-lru/simplelru"
 
 	"github.com/pkg/errors"
 )
-
-var lruFileDumpStats = os.Getenv("LRU_FILE_DUMP_STATS") == "1"
 
 type File interface {
 	io.ReadSeeker

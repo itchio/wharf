@@ -58,6 +58,7 @@ type context struct {
 type Context interface {
 	GetTargetContainer() *tlc.Container
 	GetSourceContainer() *tlc.Container
+	GetDiffMappings() DiffMappings
 	Partitions() int
 	Optimize(params OptimizeParams) error
 }
@@ -114,29 +115,29 @@ func NewContext(params Params) (Context, error) {
 		params.RediffSizeLimit = DefaultRediffSizeLimit
 	}
 
-	rc := &context{
+	cx := &context{
 		params: params,
 	}
-	err = rc.analyzePatch()
+	err = cx.analyzePatch()
 	if err != nil {
 		return nil, err
 	}
 
-	return rc, nil
+	return cx, nil
 }
 
 // AnalyzePatch parses a non-optimized patch, looking for good bsdiff'ing candidates
 // and building DiffMappings.
-func (rc *context) analyzePatch() error {
+func (cx *context) analyzePatch() error {
 	var err error
-	consumer := rc.params.Consumer
+	consumer := cx.params.Consumer
 
-	_, err = rc.params.PatchReader.Resume(nil)
+	_, err = cx.params.PatchReader.Resume(nil)
 	if err != nil {
 		return err
 	}
 
-	rctx := wire.NewReadContext(rc.params.PatchReader)
+	rctx := wire.NewReadContext(cx.params.PatchReader)
 
 	err = rctx.ExpectMagic(pwr.PatchMagic)
 	if err != nil {
@@ -159,14 +160,14 @@ func (rc *context) analyzePatch() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	rc.targetContainer = targetContainer
+	cx.targetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = rctx.ReadMessage(sourceContainer)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	rc.sourceContainer = sourceContainer
+	cx.sourceContainer = sourceContainer
 
 	rop := &pwr.SyncOp{}
 
@@ -175,7 +176,7 @@ func (rc *context) analyzePatch() error {
 		targetPathsToIndex[file.Path] = int64(targetFileIndex)
 	}
 
-	rc.diffMappings = make(DiffMappings)
+	cx.diffMappings = make(DiffMappings)
 
 	var doneBytes int64
 
@@ -231,9 +232,9 @@ func (rc *context) analyzePatch() error {
 			}
 		}
 
-		if sourceFile.Size == 0 && !rc.params.ForceMapAll {
+		if sourceFile.Size == 0 && !cx.params.ForceMapAll {
 			// don't need to bsdiff newly-empty files
-		} else if numBlockRange == 1 && numData == 0 && !rc.params.ForceMapAll {
+		} else if numBlockRange == 1 && numData == 0 && !cx.params.ForceMapAll {
 			// transpositions (renames, etc.) don't need bsdiff'ing :)
 		} else {
 			var diffMapping *DiffMapping
@@ -265,21 +266,21 @@ func (rc *context) analyzePatch() error {
 				}
 			}
 
-			if sourceFile.Size > rc.params.RediffSizeLimit {
+			if sourceFile.Size > cx.params.RediffSizeLimit {
 				// source file is too large, skip rediff
 				diffMapping = nil
 			}
 
 			if diffMapping != nil {
 				targetFile := targetContainer.Files[diffMapping.TargetIndex]
-				if targetFile.Size > rc.params.RediffSizeLimit {
+				if targetFile.Size > cx.params.RediffSizeLimit {
 					// target file is too large, skip rediff
 					diffMapping = nil
 				}
 			}
 
 			if diffMapping != nil {
-				rc.diffMappings[int64(sourceFileIndex)] = diffMapping
+				cx.diffMappings[int64(sourceFileIndex)] = diffMapping
 			}
 		}
 
@@ -291,8 +292,8 @@ func (rc *context) analyzePatch() error {
 
 // OptimizePatch uses the information computed by AnalyzePatch to write a new version of
 // the patch, but with bsdiff instead of rsync diffs for each DiffMapping.
-func (rc *context) Optimize(params OptimizeParams) error {
-	consumer := rc.params.Consumer
+func (cx *context) Optimize(params OptimizeParams) error {
+	consumer := cx.params.Consumer
 
 	err := validation.ValidateStruct(&params,
 		validation.Field(&params.SourcePool, validation.Required),
@@ -303,12 +304,12 @@ func (rc *context) Optimize(params OptimizeParams) error {
 		return err
 	}
 
-	_, err = rc.params.PatchReader.Resume(nil)
+	_, err = cx.params.PatchReader.Resume(nil)
 	if err != nil {
 		return err
 	}
 
-	rctx := wire.NewReadContext(rc.params.PatchReader)
+	rctx := wire.NewReadContext(cx.params.PatchReader)
 	wctx := wire.NewWriteContext(params.PatchWriter)
 
 	err = wctx.WriteMagic(pwr.PatchMagic)
@@ -327,7 +328,7 @@ func (rc *context) Optimize(params OptimizeParams) error {
 		return errors.WithStack(err)
 	}
 
-	compression := rc.params.Compression
+	compression := cx.params.Compression
 	if compression == nil {
 		compression = defaultRediffCompressionSettings()
 	}
@@ -377,10 +378,10 @@ func (rc *context) Optimize(params OptimizeParams) error {
 	rop := &pwr.SyncOp{}
 
 	bdc := &bsdiff.DiffContext{
-		SuffixSortConcurrency: rc.params.SuffixSortConcurrency,
-		Partitions:            rc.params.Partitions,
-		Stats:                 rc.params.BsdiffStats,
-		MeasureMem:            rc.params.MeasureMem,
+		SuffixSortConcurrency: cx.params.SuffixSortConcurrency,
+		Partitions:            cx.params.Partitions,
+		Stats:                 cx.params.BsdiffStats,
+		MeasureMem:            cx.params.MeasureMem,
 	}
 
 	bconsumer := &state.Consumer{}
@@ -389,7 +390,7 @@ func (rc *context) Optimize(params OptimizeParams) error {
 	var totalRediffSize int64
 
 	for sourceFileIndex, sourceFile := range sourceContainer.Files {
-		if _, ok := rc.diffMappings[int64(sourceFileIndex)]; ok {
+		if _, ok := cx.diffMappings[int64(sourceFileIndex)]; ok {
 			if sourceFile.Size > biggestSourceFile {
 				biggestSourceFile = sourceFile.Size
 			}
@@ -411,7 +412,7 @@ func (rc *context) Optimize(params OptimizeParams) error {
 			return errors.WithStack(fmt.Errorf("Malformed patch, expected index %d, got %d", sourceFileIndex, sh.FileIndex))
 		}
 
-		diffMapping := rc.diffMappings[int64(sourceFileIndex)]
+		diffMapping := cx.diffMappings[int64(sourceFileIndex)]
 
 		if diffMapping == nil {
 			// if no mapping, just copy ops straight up
@@ -520,16 +521,20 @@ func (rc *context) Optimize(params OptimizeParams) error {
 	return nil
 }
 
-func (rc *context) Partitions() int {
-	return rc.params.Partitions
+func (cx *context) Partitions() int {
+	return cx.params.Partitions
 }
 
-func (rc *context) GetSourceContainer() *tlc.Container {
-	return rc.sourceContainer
+func (cx *context) GetSourceContainer() *tlc.Container {
+	return cx.sourceContainer
 }
 
-func (rc *context) GetTargetContainer() *tlc.Container {
-	return rc.targetContainer
+func (cx *context) GetTargetContainer() *tlc.Container {
+	return cx.targetContainer
+}
+
+func (cx *context) GetDiffMappings() DiffMappings {
+	return cx.diffMappings
 }
 
 func defaultRediffCompressionSettings() *pwr.CompressionSettings {
