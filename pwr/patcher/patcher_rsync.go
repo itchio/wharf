@@ -251,9 +251,6 @@ func (sp *savingPatcher) isFullFileOp(sh *pwr.SyncHeader, op *pwr.SyncOp) bool {
 	numOutputBlocks := pwr.ComputeNumBlocks(outputFile.Size)
 
 	// and it's gotta, well, span the full file
-	if op.BlockSpan != numOutputBlocks {
-		return false
-	}
-
-	return true
+	spansFullFile := op.BlockSpan == numOutputBlocks
+	return spansFullFile
 }

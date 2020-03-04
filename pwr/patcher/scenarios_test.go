@@ -26,7 +26,6 @@ import (
 func Test_Scenarios(t *testing.T) {
 	runPatchingScenario(t, patchScenario{
 		name: "becomes empty",
-		// TODO: migrate to wtest.TestDirSettings etc.
 		v1: wtest.TestDirSettings{
 			Entries: []wtest.TestDirEntry{
 				{Path: "file", Seed: 0x1},
@@ -684,11 +683,11 @@ const (
 )
 
 func runPatchingScenario(t *testing.T, scenario patchScenario) {
-	forwardScenario := *&scenario
+	forwardScenario := scenario
 	forwardScenario.name += "/forward"
 	runSinglePatchingScenario(t, forwardScenario, ScenarioForward)
 
-	backScenario := *&scenario
+	backScenario := scenario
 	backScenario.name += "/back"
 	backScenario.v1, backScenario.v2 = backScenario.v2, backScenario.v1
 	runSinglePatchingScenario(t, backScenario, ScenarioBack)

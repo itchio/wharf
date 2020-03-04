@@ -1,4 +1,6 @@
 *.coverprofile
+*.prof
+*.exe
 coverage.txt
 /src
 /pkg

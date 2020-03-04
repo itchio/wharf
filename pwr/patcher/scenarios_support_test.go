@@ -27,40 +27,6 @@ const largeAmount int64 = 16
 
 var testSymlinks = (runtime.GOOS != "windows")
 
-type testDirEntry struct {
-	path   string
-	mode   int
-	size   int64
-	seed   int64
-	dir    bool
-	dest   string
-	chunks []testDirChunk
-	bsmods []bsmod
-	data   []byte
-}
-
-type bsmod struct {
-	// corrupt one byte every `interval`
-	interval int64
-
-	// how much to add to the byte being corrupted
-	delta byte
-
-	// only corrupt `max` times at a time, then skip `skip*interval` bytes
-	max  int
-	skip int
-}
-
-type testDirChunk struct {
-	seed int64
-	size int64
-}
-
-type testDirSettings struct {
-	seed    int64
-	entries []testDirEntry
-}
-
 type nopCloserWriter struct {
 	writer io.Writer
 }
