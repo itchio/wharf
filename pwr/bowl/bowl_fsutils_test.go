@@ -146,9 +146,7 @@ func runBowler(t *testing.T, params *bowlerParams) {
 	}
 	params.makeTarget(bp)
 
-	targetContainer, err := tlc.WalkDir(targetFolder, &tlc.WalkOpts{
-		Filter: tlc.DefaultFilter,
-	})
+	targetContainer, err := tlc.WalkDir(targetFolder, tlc.WalkOpts{})
 	must(t, err)
 	b.TargetContainer = targetContainer
 
@@ -162,9 +160,7 @@ func runBowler(t *testing.T, params *bowlerParams) {
 	}
 	params.apply(bs)
 
-	sourceContainer, err := tlc.WalkDir(refFolder, &tlc.WalkOpts{
-		Filter: tlc.DefaultFilter,
-	})
+	sourceContainer, err := tlc.WalkDir(refFolder, tlc.WalkOpts{})
 	must(t, err)
 	b.SourceContainer = sourceContainer
 
@@ -211,9 +207,9 @@ func runBowler(t *testing.T, params *bowlerParams) {
 	}
 
 	if outFolder != "" {
-		refContainer, err := tlc.WalkDir(refFolder, &tlc.WalkOpts{Filter: tlc.DefaultFilter})
+		refContainer, err := tlc.WalkDir(refFolder, tlc.WalkOpts{})
 		must(t, err)
-		outContainer, err := tlc.WalkDir(outFolder, &tlc.WalkOpts{Filter: tlc.DefaultFilter})
+		outContainer, err := tlc.WalkDir(outFolder, tlc.WalkOpts{})
 		must(t, err)
 
 		must(t, refContainer.EnsureEqual(outContainer))

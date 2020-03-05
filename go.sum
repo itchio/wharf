@@ -64,8 +64,8 @@ github.com/itchio/httpkit v0.0.0-20200301151414-2207154e44d1 h1:C1HRom5DCRG024rj
 github.com/itchio/httpkit v0.0.0-20200301151414-2207154e44d1/go.mod h1:ttQmJg3MrzSL0TYYqececx1WLJWjUedAMWoJ0dUbbKA=
 github.com/itchio/kompress v0.0.0-20200301155538-5c2eecce9e51 h1:jipXtdsZClshNO8fKK8ItiVyqE9bKA09as+qjW/yjG0=
 github.com/itchio/kompress v0.0.0-20200301155538-5c2eecce9e51/go.mod h1:iLS+Eq+S26jTC4pbdDH6N5XtDqrjb4IOXtjj1HCzbuk=
-github.com/itchio/lake v0.0.0-20200301160735-98172e1a6370 h1:oawhd3tWCsEtZ0jfQicyKU2OKC6dARA/hgwhlTHaXQI=
-github.com/itchio/lake v0.0.0-20200301160735-98172e1a6370/go.mod h1:yF1QEd82Erd4OseK1riuaowmTZBPt/Xx+Y/zixJguKc=
+github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a h1:wiwopNWPhAzU5qnXW6vcn06Zd/bpXBdre1XNrXDjy5I=
+github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a/go.mod h1:yF1QEd82Erd4OseK1riuaowmTZBPt/Xx+Y/zixJguKc=
 github.com/itchio/ox v0.0.0-20191031175435-32d876f09b55 h1:EDWFa5o0RY51WpqKkZVaxd1Z7dvPHIJHs73qQPQ6nmA=
 github.com/itchio/ox v0.0.0-20191031175435-32d876f09b55/go.mod h1:OkOgnS4mtvTl2n9S65jTihpuQJxeldLBA/x3QSFHQFQ=
 github.com/itchio/ox v0.0.0-20200301160301-4e131878ba64 h1:Gj6bndN7NcJNYbymItdc55apxCYfhMj9DPSVLlilWSI=

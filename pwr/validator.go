@@ -462,7 +462,7 @@ func AssertValid(target string, signature *SignatureInfo) error {
 
 func AssertNoGhosts(target string, signature *SignatureInfo) error {
 	refContainer := signature.Container
-	gotContainer, err := tlc.WalkAny(target, &tlc.WalkOpts{})
+	gotContainer, err := tlc.WalkAny(target, tlc.WalkOpts{})
 	if err != nil {
 		return err
 	}

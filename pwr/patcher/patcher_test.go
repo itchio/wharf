@@ -76,10 +76,10 @@ func Test_Naive(t *testing.T) {
 		compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 		compression.Quality = 1
 
-		targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
+		targetContainer, err := tlc.WalkAny(v1, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
-		sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
+		sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
 		// Sign!

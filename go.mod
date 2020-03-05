@@ -11,7 +11,7 @@ require (
 	github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c
 	github.com/itchio/headway v0.0.0-20200301160421-e15721f23905
 	github.com/itchio/httpkit v0.0.0-20200301151414-2207154e44d1
-	github.com/itchio/lake v0.0.0-20200301160735-98172e1a6370
+	github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a
 	github.com/itchio/ox v0.0.0-20200301160301-4e131878ba64 // indirect
 	github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927
 	github.com/itchio/savior v0.0.0-20200301160120-c73741a23f8b

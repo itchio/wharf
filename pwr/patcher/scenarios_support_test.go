@@ -39,7 +39,7 @@ func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
 
 func applyCorruptions(t *testing.T, dir string, c testCorruption) {
 	dump := func() {
-		container, err := tlc.WalkAny(dir, &tlc.WalkOpts{})
+		container, err := tlc.WalkAny(dir, tlc.WalkOpts{})
 		wtest.Must(t, err)
 		container.Print(func(line string) {
 			t.Logf("%s", line)

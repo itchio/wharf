@@ -213,7 +213,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 	compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 	compression.Quality = 1
 
-	sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
+	sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
 	wtest.Must(t, err)
 
 	consumer := &state.Consumer{
@@ -225,7 +225,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 	signatureBuffer := new(bytes.Buffer)
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, &tlc.WalkOpts{})
+		targetContainer, dErr := tlc.WalkAny(v1, tlc.WalkOpts{})
 		wtest.Must(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)

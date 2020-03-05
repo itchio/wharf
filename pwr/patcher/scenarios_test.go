@@ -738,7 +738,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		}
 
 		assertValid := func(target string, signature *pwr.SignatureInfo) error {
-			targetContainer, err := tlc.WalkAny(target, &tlc.WalkOpts{})
+			targetContainer, err := tlc.WalkAny(target, tlc.WalkOpts{})
 			wtest.Must(t, err)
 
 			consumer.Debugf("===================================")
@@ -760,10 +760,10 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 		compression.Quality = 1
 
-		targetContainer, err := tlc.WalkAny(v1, &tlc.WalkOpts{})
+		targetContainer, err := tlc.WalkAny(v1, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
-		sourceContainer, err := tlc.WalkAny(v2, &tlc.WalkOpts{})
+		sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
 		consumer.Debugf("===================================")
