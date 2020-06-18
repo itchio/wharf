@@ -33,7 +33,6 @@ const MaxWoundSize int64 = 4 * 1024 * 1024 // 4MB
 type ValidatorContext struct {
 	WoundsPath string
 	HealPath   string
-	NumWorkers int
 
 	Consumer *state.Consumer
 
