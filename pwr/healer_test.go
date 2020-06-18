@@ -131,9 +131,8 @@ func Test_ArchiveHealer(t *testing.T) {
 
 	healValidate := func() {
 		vc := &ValidatorContext{
-			Consumer:   consumer,
-			HealPath:   fmt.Sprintf("archive,%s", archivePath),
-			NumWorkers: 1,
+			Consumer: consumer,
+			HealPath: fmt.Sprintf("archive,%s", archivePath),
 		}
 		wtest.Must(t, vc.Validate(context.Background(), targetDir, sigInfo))
 	}
