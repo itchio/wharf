@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	"github.com/itchio/lake"
@@ -60,13 +59,8 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 		vctx.Consumer = &state.Consumer{}
 	}
 
-	numWorkers := vctx.NumWorkers
-	if numWorkers == 0 {
-		numWorkers = runtime.NumCPU() + 1
-	}
-
 	vctx.Wounds = make(chan *Wound, 1024)
-	workerErrs := make(chan error, numWorkers)
+	workerErrs := make(chan error, 1)
 	consumerErrs := make(chan error, 1)
 	cancelled := make(chan struct{})
 
@@ -249,9 +243,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 	fileIndices := make(chan int64)
 
-	for i := 0; i < numWorkers; i++ {
-		go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
-	}
+	go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
 
 	var retErr error
 	sending := true
@@ -282,12 +274,10 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 	close(fileIndices)
 
 	// wait for all workers to finish
-	for i := 0; i < numWorkers; i++ {
-		err := <-workerErrs
-		if err != nil {
-			if retErr == nil {
-				retErr = err
-			}
+	err := <-workerErrs
+	if err != nil {
+		if retErr == nil {
+			retErr = err
 		}
 	}
 

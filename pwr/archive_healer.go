@@ -41,9 +41,6 @@ type ArchiveHealer struct {
 	archiveLock    sync.Mutex
 	archiveOnce    sync.Once
 
-	// number of workers running in parallel
-	NumWorkers int
-
 	// A consumer to report progress to
 	Consumer *state.Consumer
 
@@ -74,14 +71,9 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	files := make(map[int64]bool)
 	fileIndices := make(chan int64, len(container.Files))
 
-	if ah.NumWorkers == 0 {
-		// use a sensible default I/O-wise (whether we're reading from disk or network)
-		ah.NumWorkers = 2
-	}
-
 	targetPool := fspool.New(container, ah.Target)
 
-	errs := make(chan error, ah.NumWorkers)
+	errs := make(chan error, 1)
 
 	onChunkHealed := func(healedChunk int64) {
 		ah.progressMutex.Lock()
@@ -96,11 +88,9 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		}
 	}()
 
-	for i := 0; i < ah.NumWorkers; i++ {
-		go func() {
-			errs <- ah.heal(ctx, container, targetPool, fileIndices, onChunkHealed)
-		}()
-	}
+	go func() {
+		errs <- ah.heal(ctx, container, targetPool, fileIndices, onChunkHealed)
+	}()
 
 	processWound := func(wound *Wound) error {
 		if !wound.Healthy() {
@@ -227,13 +217,9 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	// queued everything
 	close(fileIndices)
 
-	// expecting up to NumWorkers done, some may still
-	// send errors
-	for i := 0; i < ah.NumWorkers; i++ {
-		err := <-errs
-		if err != nil {
-			return errors.WithStack(err)
-		}
+	err := <-errs
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -372,12 +358,6 @@ func (ah *ArchiveHealer) TotalCorrupted() int64 {
 // they're just partly corrupted
 func (ah *ArchiveHealer) TotalHealed() int64 {
 	return ah.totalHealed
-}
-
-// SetNumWorkers may be called before Do to adjust the concurrency
-// of ArchiveHealer (how many files it'll try to heal in parallel)
-func (ah *ArchiveHealer) SetNumWorkers(numWorkers int) {
-	ah.NumWorkers = numWorkers
 }
 
 // SetConsumer gives this healer a consumer to report progress to

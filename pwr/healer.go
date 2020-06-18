@@ -28,7 +28,6 @@ func NewLockMap(container *tlc.Container) LockMap {
 type Healer interface {
 	WoundsConsumer
 
-	SetNumWorkers(numWorkers int)
 	SetConsumer(consumer *state.Consumer)
 	SetLockMap(lockmap LockMap)
 	TotalHealed() int64
