@@ -1,20 +1,17 @@
 package cbrotli
 
 import (
-	"io"
-
-	"github.com/itchio/go-brotli/enc"
+	"github.com/andybalholm/brotli"
 	"github.com/itchio/wharf/pwr"
+	"io"
 )
 
-type brotliCompressor struct{}
+type Writer struct{}
 
-func (bc *brotliCompressor) Apply(writer io.Writer, quality int32) (io.Writer, error) {
-	return enc.NewBrotliWriter(writer, &enc.BrotliWriterOptions{
-		Quality: int(quality),
-	}), nil
+func (bc *Writer) Apply(writer io.Writer, quality int32) (io.Writer, error) {
+	return brotli.NewWriterLevel(writer, int(quality)), nil
 }
 
 func init() {
-	pwr.RegisterCompressor(pwr.CompressionAlgorithm_BROTLI, &brotliCompressor{})
+	pwr.RegisterCompressor(pwr.CompressionAlgorithm_BROTLI, &Writer{})
 }
