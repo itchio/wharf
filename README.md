@@ -20,7 +20,7 @@ protocol, along with the reference protobuf definition files.
 
 The complete spec is available online, as a book:
 
-  * :memo: <http://docs.itch.ovh/wharf/master/>
+  * :memo: <https://itch.io/docs/wharf/>
 
 And can be contributed to via its GitHub repository:
 
