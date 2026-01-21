@@ -227,7 +227,7 @@ func (wp *WoundsPrinter) Do(ctx context.Context, container *tlc.Container, wound
 
 			wp.totalCorrupted += wound.Size()
 			wp.hasWounds = true
-			wp.Consumer.Debugf(wound.PrettyString(container))
+			wp.Consumer.Debugf("%s", wound.PrettyString(container))
 		case <-ctx.Done():
 			return nil
 		}

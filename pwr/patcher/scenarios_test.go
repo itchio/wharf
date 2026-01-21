@@ -744,7 +744,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 			consumer.Debugf("===================================")
 			consumer.Debugf("validating container:")
 			targetContainer.Print(func(line string) {
-				consumer.Debugf(line)
+				consumer.Debugf("%s", line)
 			})
 			consumer.Debugf("===================================")
 
@@ -769,12 +769,12 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		consumer.Debugf("===================================")
 		consumer.Debugf("v1 contents:")
 		targetContainer.Print(func(line string) {
-			consumer.Debugf(line)
+			consumer.Debugf("%s", line)
 		})
 		consumer.Debugf("-----------------------------------")
 		consumer.Debugf("v2 contents:")
 		sourceContainer.Print(func(line string) {
-			consumer.Debugf(line)
+			consumer.Debugf("%s", line)
 		})
 		consumer.Debugf("===================================")
 
