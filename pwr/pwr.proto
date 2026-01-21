@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package io.itch.wharf.pwr;
-option go_package = "pwr";
+option go_package = "github.com/itchio/wharf/pwr";
 
 // Patch file format
 

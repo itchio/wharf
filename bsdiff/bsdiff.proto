@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package io.itch.wharf.bsdiff;
-option go_package = "bsdiff";
+option go_package = "github.com/itchio/wharf/bsdiff";
 
 // Control is a bsdiff operation, see https://twitter.com/fasterthanlime/status/790617515009437701
 message Control {

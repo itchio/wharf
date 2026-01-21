@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package io.itch.wharf.wire;
-option go_package = "wire";
+option go_package = "github.com/itchio/wharf/wire";
 
 message Sample {
     bytes data = 1;

@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package io.itch.wharf.pwr.overlay;
-option go_package = "overlay";
+option go_package = "github.com/itchio/wharf/pwr/overlay";
 
 // Overlay file format
 
