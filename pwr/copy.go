@@ -6,8 +6,8 @@ import (
 
 	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/state"
-	"github.com/itchio/lake/tlc"
 	"github.com/itchio/lake"
+	"github.com/itchio/lake/tlc"
 )
 
 // CopyContainer copies from one container to the other. Combined with fspool

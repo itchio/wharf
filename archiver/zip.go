@@ -3,7 +3,6 @@ package archiver
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -43,7 +42,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 			return
 		}
 
-		resBytes, resErr := ioutil.ReadFile(settings.ResumeFrom)
+		resBytes, resErr := os.ReadFile(settings.ResumeFrom)
 		if resErr != nil {
 			if errors.Cause(resErr) != os.ErrNotExist {
 				settings.Consumer.Warnf("Couldn't read resume file: %s", resErr.Error())
@@ -70,7 +69,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 		payload := fmt.Sprintf("%d", fileIndex)
 
-		wErr := ioutil.WriteFile(settings.ResumeFrom, []byte(payload), 0644)
+		wErr := os.WriteFile(settings.ResumeFrom, []byte(payload), 0644)
 		if wErr != nil {
 			if !warnedAboutWrite {
 				warnedAboutWrite = true
@@ -170,7 +169,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 						}
 						defer fileReader.Close()
 
-						linkname, lErr := ioutil.ReadAll(fileReader)
+						linkname, lErr := io.ReadAll(fileReader)
 						if settings.DryRun {
 							// muffin
 						} else {
@@ -201,7 +200,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 						}, fileReader)
 
 						if settings.DryRun {
-							_, err = io.Copy(ioutil.Discard, countingReader)
+							_, err = io.Copy(io.Discard, countingReader)
 							if err != nil {
 								return errors.WithStack(err)
 							}

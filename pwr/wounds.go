@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/itchio/headway/united"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/pkg/errors"

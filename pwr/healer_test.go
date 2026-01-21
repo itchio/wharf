@@ -5,23 +5,18 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/itchio/lake/pools"
-
 	"github.com/itchio/arkive/zip"
-
-	"github.com/itchio/lake/tlc"
-	"github.com/itchio/wharf/wtest"
-
 	"github.com/itchio/headway/state"
+	"github.com/itchio/lake/pools"
+	"github.com/itchio/lake/tlc"
 	"github.com/itchio/randsource"
-
+	"github.com/itchio/wharf/wtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,7 +37,7 @@ func Test_NewHealer(t *testing.T) {
 type healMethod func()
 
 func Test_ArchiveHealer(t *testing.T) {
-	mainDir, err := ioutil.TempDir("", "archivehealer")
+	mainDir, err := os.MkdirTemp("", "archivehealer")
 	assert.NoError(t, err)
 	defer os.RemoveAll(mainDir)
 
@@ -60,7 +55,7 @@ func Test_ArchiveHealer(t *testing.T) {
 	prng := randsource.Reader{
 		Source: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-	fakeData, err := ioutil.ReadAll(io.LimitReader(prng, 4*1024))
+	fakeData, err := io.ReadAll(io.LimitReader(prng, 4*1024))
 	wtest.Must(t, err)
 
 	nameFor := func(index int) string {
@@ -144,7 +139,7 @@ func Test_ArchiveHealer(t *testing.T) {
 
 	assertAllFilesHealed := func() {
 		for i := 0; i < numFiles; i++ {
-			data, err := ioutil.ReadFile(pathFor(i))
+			data, err := os.ReadFile(pathFor(i))
 			assert.NoError(t, err)
 
 			assert.Equal(t, fakeData, data)
@@ -159,19 +154,19 @@ func Test_ArchiveHealer(t *testing.T) {
 		assertAllFilesHealed()
 
 		t.Logf("...with one file too long (%s)", healMethod)
-		assert.NoError(t, ioutil.WriteFile(pathFor(3), bytes.Repeat(fakeData, 4), 0644))
+		assert.NoError(t, os.WriteFile(pathFor(3), bytes.Repeat(fakeData, 4), 0644))
 		doHeal()
 		assertAllFilesHealed()
 
 		t.Logf("...with one file too short (%s)", healMethod)
-		assert.NoError(t, ioutil.WriteFile(pathFor(7), fakeData[:1], 0644))
+		assert.NoError(t, os.WriteFile(pathFor(7), fakeData[:1], 0644))
 		doHeal()
 		assertAllFilesHealed()
 
 		t.Logf("...with one file slightly corrupted (%s)", healMethod)
 		corruptedFakeData := append([]byte{}, fakeData...)
 		corruptedFakeData[2] = 255
-		assert.NoError(t, ioutil.WriteFile(pathFor(9), corruptedFakeData, 0644))
+		assert.NoError(t, os.WriteFile(pathFor(9), corruptedFakeData, 0644))
 		doHeal()
 		assertAllFilesHealed()
 	}

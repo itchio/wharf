@@ -3,7 +3,7 @@ package patcher_test
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -699,7 +699,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 	t.Run(scenario.name, func(t *testing.T) {
 		log := t.Logf
 
-		mainDir, err := ioutil.TempDir("", "patch-cycle")
+		mainDir, err := os.MkdirTemp("", "patch-cycle")
 		wtest.Must(t, err)
 		defer screw.RemoveAll(mainDir)
 

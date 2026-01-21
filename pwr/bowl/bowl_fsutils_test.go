@@ -3,21 +3,17 @@ package bowl_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/itchio/screw"
-	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/pwr/bowl"
-
 	"github.com/itchio/headway/state"
-
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/pools/fspool"
 	"github.com/itchio/lake/tlc"
-
+	"github.com/itchio/screw"
+	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -124,17 +120,17 @@ func runBowler(t *testing.T, params *bowlerParams) {
 		t: t,
 	}
 
-	targetFolder, err := ioutil.TempDir("", "bowler-target")
+	targetFolder, err := os.MkdirTemp("", "bowler-target")
 	must(t, err)
 	defer screw.RemoveAll(targetFolder)
 	b.TargetFolder = targetFolder
 
-	refFolder, err := ioutil.TempDir("", "bowler-reference")
+	refFolder, err := os.MkdirTemp("", "bowler-reference")
 	must(t, err)
 	defer screw.RemoveAll(refFolder)
 	b.RefFolder = refFolder
 
-	freshFolder, err := ioutil.TempDir("", "bowler-fresh")
+	freshFolder, err := os.MkdirTemp("", "bowler-fresh")
 	must(t, err)
 	defer screw.RemoveAll(freshFolder)
 	b.FreshFolder = freshFolder
@@ -221,12 +217,12 @@ func runBowler(t *testing.T, params *bowlerParams) {
 		for index := range refContainer.Files {
 			refReader, err := refPool.GetReader(int64(index))
 			must(t, err)
-			refBytes, err := ioutil.ReadAll(refReader)
+			refBytes, err := io.ReadAll(refReader)
 			must(t, err)
 
 			outReader, err := outPool.GetReader(int64(index))
 			must(t, err)
-			outBytes, err := ioutil.ReadAll(outReader)
+			outBytes, err := io.ReadAll(outReader)
 			must(t, err)
 
 			assert.EqualValues(t, refBytes, outBytes)
@@ -261,7 +257,7 @@ func (bp *bowlerPreparator) file(path string, data []byte) {
 
 	targetPath := filepath.Join(bp.b.TargetFolder, path)
 	must(t, screw.MkdirAll(filepath.Dir(targetPath), 0755))
-	must(t, ioutil.WriteFile(targetPath, data, mode))
+	must(t, os.WriteFile(targetPath, data, mode))
 }
 
 // bowler simulator

@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/united"
 	"github.com/itchio/wharf/bsdiff/lrufile"
-	"github.com/itchio/headway/counter"
 	"github.com/pkg/errors"
 )
 

@@ -5,9 +5,11 @@
 Package wire is a generated protocol buffer package.
 
 It is generated from these files:
+
 	wire/wire.proto
 
 It has these top-level messages:
+
 	Sample
 */
 package wire

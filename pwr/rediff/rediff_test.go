@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -198,7 +197,7 @@ func Test_RediffStillBetter(t *testing.T) {
 func runRediffScenario(t *testing.T, scenario rediffScenario) {
 	log := t.Logf
 
-	mainDir, err := ioutil.TempDir("", "rediff")
+	mainDir, err := os.MkdirTemp("", "rediff")
 	wtest.Must(t, err)
 	wtest.Must(t, os.MkdirAll(mainDir, 0755))
 	defer os.RemoveAll(mainDir)

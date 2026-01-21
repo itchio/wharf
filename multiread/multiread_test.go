@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"strings"
 	"testing"
 	"time"
@@ -34,9 +33,9 @@ func Test_Simple(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot call Reader()")
 
-	go func() { var err error; b1, err = ioutil.ReadAll(r1); done <- err }()
-	go func() { var err error; b2, err = ioutil.ReadAll(r2); done <- err }()
-	go func() { var err error; b3, err = ioutil.ReadAll(r3); done <- err }()
+	go func() { var err error; b1, err = io.ReadAll(r1); done <- err }()
+	go func() { var err error; b2, err = io.ReadAll(r2); done <- err }()
+	go func() { var err error; b3, err = io.ReadAll(r3); done <- err }()
 
 	for i := 0; i < 4; i++ {
 		assert.NoError(t, <-done)
@@ -60,9 +59,9 @@ func Test_Error(t *testing.T) {
 	done3 := make(chan error)
 
 	go func() { doneMR <- mr.Do(context.Background()) }()
-	go func() { _, err := ioutil.ReadAll(r1); done1 <- err }()
-	go func() { _, err := ioutil.ReadAll(r2); done2 <- err }()
-	go func() { _, err := ioutil.ReadAll(r3); done3 <- err }()
+	go func() { _, err := io.ReadAll(r1); done1 <- err }()
+	go func() { _, err := io.ReadAll(r2); done2 <- err }()
+	go func() { _, err := io.ReadAll(r3); done3 <- err }()
 
 	drain := func(c chan error) {
 		t.Helper()

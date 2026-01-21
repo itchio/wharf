@@ -2,14 +2,13 @@ package archiver
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/itchio/headway/state"
+	"github.com/stretchr/testify/assert"
 )
 
 var testSymlinks bool = (runtime.GOOS != "windows")
@@ -50,7 +49,7 @@ func makeTestDir(t *testing.T, dir string) {
 }
 
 func Test_ZipUnzip(t *testing.T) {
-	tmpPath, err := ioutil.TempDir("", "zipunzip")
+	tmpPath, err := os.MkdirTemp("", "zipunzip")
 	assert.NoError(t, err)
 
 	defer os.RemoveAll(tmpPath)
@@ -104,7 +103,7 @@ func Test_ZipUnzip(t *testing.T) {
 }
 
 func Test_TarUntar(t *testing.T) {
-	tmpPath, err := ioutil.TempDir("", "taruntar")
+	tmpPath, err := os.MkdirTemp("", "taruntar")
 	assert.NoError(t, err)
 
 	defer os.RemoveAll(tmpPath)

@@ -3,16 +3,14 @@ package overlay_test
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/itchio/savior/seeksource"
-
 	"github.com/itchio/headway/united"
+	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/pwr/overlay"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -57,7 +55,7 @@ func TestOverlayWriterMemory(t *testing.T) {
 }
 
 func TestOverlayWriterFS(t *testing.T) {
-	dir, err := ioutil.TempDir("", "overlay")
+	dir, err := os.MkdirTemp("", "overlay")
 	must(t, err)
 
 	t.Logf("Using temp dir %s", dir)
@@ -185,7 +183,7 @@ func TestOverlayWriterFS(t *testing.T) {
 		_, err = patchedfile.Seek(0, io.SeekStart)
 		must(t, err)
 
-		result, err := ioutil.ReadAll(patchedfile)
+		result, err := io.ReadAll(patchedfile)
 		must(t, err)
 
 		assert.EqualValues(t, len(patched), len(result))

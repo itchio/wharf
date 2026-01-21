@@ -1,19 +1,17 @@
 package bsdiff
 
 import (
+	"bytes"
 	"fmt"
-	"io/ioutil"
+	"index/suffixarray"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"bytes"
-
-	"index/suffixarray"
-
-	"github.com/stretchr/testify/assert"
 	"github.com/itchio/headway/state"
 	"github.com/jgallagher/gosaca"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_QsufsortSeq(t *testing.T) {
@@ -170,12 +168,12 @@ func init() {
 	_, filename, _, _ := runtime.Caller(0)
 
 	var err error
-	dictwords, err = ioutil.ReadFile(filepath.Join(filepath.Dir(filename), "dictwords"))
+	dictwords, err = os.ReadFile(filepath.Join(filepath.Dir(filename), "dictwords"))
 	if err != nil {
 		fmt.Printf("Could not load dictwords, benchmarks won't be functional (see README.md)\n")
 	}
 
-	dictcalls, err = ioutil.ReadFile(filepath.Join(filepath.Dir(filename), "dictcalls"))
+	dictcalls, err = os.ReadFile(filepath.Join(filepath.Dir(filename), "dictcalls"))
 	if err != nil {
 		fmt.Printf("Could not load dictcalls, benchmarks won't be functional (see README.md)\n")
 	}

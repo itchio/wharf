@@ -10,9 +10,9 @@ import (
 
 	"github.com/itchio/headway/counter"
 
-	"github.com/itchio/httpkit/eos/option"
-	"github.com/itchio/httpkit/eos"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/httpkit/eos"
+	"github.com/itchio/httpkit/eos/option"
 	"github.com/pkg/errors"
 )
 

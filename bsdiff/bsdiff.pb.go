@@ -6,9 +6,11 @@
 Package bsdiff is a generated protocol buffer package.
 
 It is generated from these files:
+
 	bsdiff/bsdiff.proto
 
 It has these top-level messages:
+
 	Control
 */
 package bsdiff

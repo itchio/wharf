@@ -6,34 +6,32 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/itchio/headway/state"
 	"github.com/itchio/headway/united"
 	"github.com/itchio/lake"
+	"github.com/itchio/lake/pools/fspool"
+	"github.com/itchio/lake/tlc"
+	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/screw"
-	"github.com/itchio/wharf/wsync"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/pwr/bowl"
 	"github.com/itchio/wharf/pwr/patcher"
 	"github.com/itchio/wharf/pwr/rediff"
+	"github.com/itchio/wharf/wsync"
 	"github.com/itchio/wharf/wtest"
-
-	"github.com/itchio/headway/state"
-	"github.com/itchio/lake/pools/fspool"
-	"github.com/itchio/lake/tlc"
-	"github.com/itchio/savior/seeksource"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 
 	_ "github.com/itchio/wharf/compressors/cbrotli"
 	_ "github.com/itchio/wharf/decompressors/cbrotli"
 )
 
 func Test_Naive(t *testing.T) {
-	dir, err := ioutil.TempDir("", "patcher-noop")
+	dir, err := os.MkdirTemp("", "patcher-noop")
 	wtest.Must(t, err)
 	defer screw.RemoveAll(dir)
 
@@ -106,7 +104,7 @@ func Test_Naive(t *testing.T) {
 			TargetSignature: targetSignature,
 		}
 
-		wtest.Must(t, dctx.WritePatch(context.Background(), patchBuffer, ioutil.Discard))
+		wtest.Must(t, dctx.WritePatch(context.Background(), patchBuffer, io.Discard))
 
 		// Rediff!
 		t.Logf("Rediffing...")

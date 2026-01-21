@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/itchio/savior"
 	"github.com/itchio/headway/counter"
 	"github.com/itchio/headway/state"
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
+	"github.com/itchio/savior"
 	"github.com/itchio/wharf/werrors"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"

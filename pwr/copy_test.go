@@ -1,7 +1,6 @@
 package pwr
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -14,7 +13,7 @@ import (
 )
 
 func Test_CopyContainer(t *testing.T) {
-	mainDir, err := ioutil.TempDir("", "copycontainer")
+	mainDir, err := os.MkdirTemp("", "copycontainer")
 	assert.NoError(t, err)
 	defer os.RemoveAll(mainDir)
 

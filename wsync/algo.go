@@ -11,9 +11,10 @@
 // This allows us to handle renames gracefully (incl. partial rewrites)
 //
 // Definitions
-//   Source: The final content.
-//   Target: The content to be made into final content.
-//   Signature: The sequence of hashes used to identify the content.
+//
+//	Source: The final content.
+//	Target: The content to be made into final content.
+//	Signature: The sequence of hashes used to identify the content.
 package wsync
 
 import (

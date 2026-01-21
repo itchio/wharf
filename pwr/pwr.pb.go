@@ -5,9 +5,11 @@
 Package pwr is a generated protocol buffer package.
 
 It is generated from these files:
+
 	pwr/pwr.proto
 
 It has these top-level messages:
+
 	PatchHeader
 	SyncHeader
 	BsdiffHeader

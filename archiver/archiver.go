@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/itchio/httpkit/htfs"
+	"github.com/itchio/headway/state"
 	"github.com/itchio/httpkit/eos"
 	"github.com/itchio/httpkit/eos/option"
-	"github.com/itchio/headway/state"
+	"github.com/itchio/httpkit/htfs"
 
 	"github.com/pkg/errors"
 )
