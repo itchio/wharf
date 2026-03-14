@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/itchio/headway/counter"
@@ -53,7 +52,10 @@ func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractR
 		}
 
 		rel := header.Name
-		filename := path.Join(dir, filepath.FromSlash(rel))
+		filename, err := resolveExtractPath(dir, rel)
+		if err != nil {
+			return nil, err
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -72,6 +74,11 @@ func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractR
 			regCount++
 
 		case tar.TypeSymlink:
+			err = validateSymlinkTarget(dir, filename, header.Linkname)
+			if err != nil {
+				return nil, err
+			}
+
 			err = Symlink(header.Linkname, filename, settings.Consumer)
 			if err != nil {
 				return nil, errors.WithStack(err)

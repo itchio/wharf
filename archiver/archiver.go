@@ -1,9 +1,12 @@
 package archiver
 
 import (
+	stdErrors "errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/itchio/headway/state"
 	"github.com/itchio/httpkit/eos"
@@ -38,6 +41,10 @@ type CompressResult struct {
 type UncompressedSizeKnownFunc func(uncompressedSize int64)
 
 type EntryDoneFunc func(slashPath string)
+
+// ErrPathTraversal is returned when an archive entry attempts to escape the
+// extraction directory or write through a symlinked parent path.
+var ErrPathTraversal = stdErrors.New("path traversal detected")
 
 type ExtractSettings struct {
 	Consumer                *state.Consumer
@@ -87,6 +94,106 @@ func Extract(readerAt io.ReaderAt, size int64, destPath string, settings Extract
 		return nil, errors.WithStack(err)
 	}
 	return result, nil
+}
+
+func resolveDestPath(baseDir string, name string) (string, error) {
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	joined := filepath.Join(absBase, filepath.FromSlash(name))
+	absJoined, err := filepath.Abs(joined)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	if absJoined != absBase && !strings.HasPrefix(absJoined, absBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: %s", ErrPathTraversal, name)
+	}
+
+	return absJoined, nil
+}
+
+func ensureSafeParents(baseDir string, dstpath string) error {
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	relPath, err := filepath.Rel(absBase, dstpath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	parentRel := filepath.Dir(relPath)
+	if parentRel == "." {
+		return nil
+	}
+
+	current := absBase
+	for _, part := range strings.Split(parentRel, string(filepath.Separator)) {
+		if part == "" || part == "." {
+			continue
+		}
+
+		current = filepath.Join(current, part)
+
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return errors.WithStack(err)
+		}
+
+		if info.Mode()&os.ModeSymlink > 0 {
+			return fmt.Errorf("%w: parent path contains symlink: %s", ErrPathTraversal, current)
+		}
+
+		if !info.IsDir() {
+			return errors.Errorf("parent path is not a directory: %s", current)
+		}
+	}
+
+	return nil
+}
+
+func resolveExtractPath(baseDir string, name string) (string, error) {
+	dstpath, err := resolveDestPath(baseDir, name)
+	if err != nil {
+		return "", err
+	}
+
+	err = ensureSafeParents(baseDir, dstpath)
+	if err != nil {
+		return "", err
+	}
+
+	return dstpath, nil
+}
+
+func validateSymlinkTarget(baseDir string, dstpath string, linkname string) error {
+	if filepath.IsAbs(linkname) {
+		return fmt.Errorf("%w: absolute symlink target: %s", ErrPathTraversal, linkname)
+	}
+
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	resolvedTarget := filepath.Join(filepath.Dir(dstpath), linkname)
+	absTarget, err := filepath.Abs(resolvedTarget)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if absTarget != absBase && !strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) {
+		return fmt.Errorf("%w: symlink target escapes destination: %s", ErrPathTraversal, linkname)
+	}
+
+	return nil
 }
 
 func Mkdir(dstpath string) error {

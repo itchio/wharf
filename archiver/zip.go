@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -147,7 +146,10 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 				err = func() error {
 					rel := file.Name
-					filename := path.Join(dir, filepath.FromSlash(rel))
+					filename, err := resolveExtractPath(dir, rel)
+					if err != nil {
+						return err
+					}
 
 					info := file.FileInfo()
 					mode := info.Mode()
@@ -173,6 +175,11 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 						if settings.DryRun {
 							// muffin
 						} else {
+							lErr = validateSymlinkTarget(dir, filename, string(linkname))
+							if lErr != nil {
+								return lErr
+							}
+
 							lErr = Symlink(string(linkname), filename, settings.Consumer)
 							if lErr != nil {
 								return errors.WithStack(lErr)

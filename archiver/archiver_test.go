@@ -1,12 +1,17 @@
 package archiver
 
 import (
+	"archive/tar"
+	"bytes"
+	stdErrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/itchio/arkive/zip"
 	"github.com/itchio/headway/state"
 	"github.com/stretchr/testify/assert"
 )
@@ -31,7 +36,7 @@ func makeTestDir(t *testing.T, dir string) {
 		if !testSymlinks {
 			return
 		}
-		assert.NoError(t, os.Symlink(filepath.Join(dir, dest), filepath.Join(dir, name)))
+		assert.NoError(t, os.Symlink(dest, filepath.Join(dir, name)))
 	}
 
 	for i := range 4 {
@@ -46,6 +51,88 @@ func makeTestDir(t *testing.T, dir string) {
 
 	createLink("link1", "subdir/file-1")
 	createLink("link2", "file-3")
+}
+
+func mustWriteFile(t *testing.T, path string, data string) {
+	t.Helper()
+
+	assert.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	assert.NoError(t, os.WriteFile(path, []byte(data), 0644))
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	return string(data)
+}
+
+type zipTestEntry struct {
+	name string
+	body string
+	mode os.FileMode
+}
+
+func buildZip(t *testing.T, entries []zipTestEntry) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	for _, entry := range entries {
+		header := &zip.FileHeader{Name: entry.name}
+		header.SetMode(entry.mode)
+
+		w, err := zw.CreateHeader(header)
+		assert.NoError(t, err)
+
+		_, err = io.WriteString(w, entry.body)
+		assert.NoError(t, err)
+	}
+
+	assert.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+type tarTestEntry struct {
+	name     string
+	body     string
+	typeflag byte
+	linkname string
+	mode     int64
+}
+
+func buildTar(t *testing.T, entries []tarTestEntry) string {
+	t.Helper()
+
+	f, err := os.CreateTemp("", "wharf-archiver-*.tar")
+	assert.NoError(t, err)
+	defer f.Close()
+
+	tw := tar.NewWriter(f)
+	for _, entry := range entries {
+		header := &tar.Header{
+			Name:     entry.name,
+			Typeflag: entry.typeflag,
+			Linkname: entry.linkname,
+			Mode:     entry.mode,
+			Size:     int64(len(entry.body)),
+		}
+
+		if entry.typeflag == tar.TypeSymlink {
+			header.Size = 0
+		}
+
+		assert.NoError(t, tw.WriteHeader(header))
+		if entry.typeflag == tar.TypeReg {
+			_, err := io.WriteString(tw, entry.body)
+			assert.NoError(t, err)
+		}
+	}
+
+	assert.NoError(t, tw.Close())
+	return f.Name()
 }
 
 func Test_ZipUnzip(t *testing.T) {
@@ -142,4 +229,123 @@ func Test_TarUntar(t *testing.T) {
 
 	_, err = ExtractTar(archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
+}
+
+func Test_ZipRejectsPathTraversal(t *testing.T) {
+	tmpPath, err := os.MkdirTemp("", "zip-path-traversal")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpPath)
+
+	destDir := filepath.Join(tmpPath, "dest")
+	outsidePath := filepath.Join(tmpPath, "outside.txt")
+	mustWriteFile(t, outsidePath, "before")
+
+	payload := buildZip(t, []zipTestEntry{
+		{name: "../outside.txt", body: "zip-owned", mode: 0644},
+	})
+
+	_, err = Extract(bytes.NewReader(payload), int64(len(payload)), destDir, ExtractSettings{
+		Consumer:    &state.Consumer{},
+		Concurrency: 1,
+	})
+	assert.Error(t, err)
+	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
+	assert.Equal(t, "before", readFile(t, outsidePath))
+}
+
+func Test_TarRejectsPathTraversal(t *testing.T) {
+	tmpPath, err := os.MkdirTemp("", "tar-path-traversal")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpPath)
+
+	destDir := filepath.Join(tmpPath, "dest")
+	outsidePath := filepath.Join(tmpPath, "outside.txt")
+	mustWriteFile(t, outsidePath, "before")
+
+	archivePath := buildTar(t, []tarTestEntry{
+		{name: "../outside.txt", body: "tar-owned", typeflag: tar.TypeReg, mode: 0644},
+	})
+	defer os.Remove(archivePath)
+
+	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	assert.Error(t, err)
+	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
+	assert.Equal(t, "before", readFile(t, outsidePath))
+}
+
+func Test_TarRejectsExternalReplacement(t *testing.T) {
+	tmpPath, err := os.MkdirTemp("", "tar-external-replacement")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpPath)
+
+	destDir := filepath.Join(tmpPath, "dest")
+	victimDir := filepath.Join(tmpPath, "victim")
+	nestedPath := filepath.Join(victimDir, "nested.txt")
+	mustWriteFile(t, nestedPath, "keep-me")
+
+	archivePath := buildTar(t, []tarTestEntry{
+		{name: "../victim", body: "replacement", typeflag: tar.TypeReg, mode: 0644},
+	})
+	defer os.Remove(archivePath)
+
+	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	assert.Error(t, err)
+	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
+
+	info, statErr := os.Stat(victimDir)
+	assert.NoError(t, statErr)
+	assert.True(t, info.IsDir())
+	assert.Equal(t, "keep-me", readFile(t, nestedPath))
+}
+
+func Test_TarRejectsSymlinkTraversal(t *testing.T) {
+	if !testSymlinks {
+		t.Skip("symlink tests not applicable on Windows")
+	}
+
+	tmpPath, err := os.MkdirTemp("", "tar-symlink-traversal")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpPath)
+
+	destDir := filepath.Join(tmpPath, "dest")
+	outsidePath := filepath.Join(tmpPath, "pivoted.txt")
+	mustWriteFile(t, outsidePath, "before")
+
+	archivePath := buildTar(t, []tarTestEntry{
+		{name: "pivot", typeflag: tar.TypeSymlink, linkname: "..", mode: 0777},
+		{name: "pivot/pivoted.txt", body: "tar-owned", typeflag: tar.TypeReg, mode: 0644},
+	})
+	defer os.Remove(archivePath)
+
+	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	assert.Error(t, err)
+	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
+	assert.Equal(t, "before", readFile(t, outsidePath))
+}
+
+func Test_ZipRejectsSymlinkTraversal(t *testing.T) {
+	if !testSymlinks {
+		t.Skip("symlink tests not applicable on Windows")
+	}
+
+	tmpPath, err := os.MkdirTemp("", "zip-symlink-traversal")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpPath)
+
+	destDir := filepath.Join(tmpPath, "dest")
+	outsidePath := filepath.Join(tmpPath, "pivoted.txt")
+	mustWriteFile(t, outsidePath, "before")
+
+	payload := buildZip(t, []zipTestEntry{
+		{name: "pivot", body: "..", mode: os.ModeSymlink | 0777},
+		{name: "pivot/pivoted.txt", body: "zip-owned", mode: 0644},
+	})
+
+	_, err = Extract(bytes.NewReader(payload), int64(len(payload)), destDir, ExtractSettings{
+		Consumer:    &state.Consumer{},
+		Concurrency: 1,
+	})
+	assert.Error(t, err)
+	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
+	assert.Equal(t, "before", readFile(t, outsidePath))
 }
