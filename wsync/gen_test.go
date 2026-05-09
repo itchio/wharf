@@ -32,7 +32,7 @@ func must(t *testing.T, err error) {
 func (c *content) Fill(t *testing.T) {
 	c.Data = make([]byte, c.Len)
 	src := rand.NewSource(c.Seed)
-	_, err := randsource.Reader{src}.Read(c.Data)
+	_, err := randsource.Reader{Source: src}.Read(c.Data)
 	must(t, err)
 
 	if c.Alter > 0 {

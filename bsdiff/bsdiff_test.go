@@ -287,10 +287,7 @@ func (r *slowReader) Read(p []byte) (int, error) {
 	if r.offset >= len(r.data) {
 		return 0, io.EOF
 	}
-	end := r.offset + r.chunkSize
-	if end > len(r.data) {
-		end = len(r.data)
-	}
+	end := min(r.offset+r.chunkSize, len(r.data))
 	n := copy(p, r.data[r.offset:end])
 	r.offset += n
 	return n, nil

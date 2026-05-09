@@ -132,7 +132,7 @@ func ensureSafeParents(baseDir string, dstpath string) error {
 	}
 
 	current := absBase
-	for _, part := range strings.Split(parentRel, string(filepath.Separator)) {
+	for part := range strings.SplitSeq(parentRel, string(filepath.Separator)) {
 		if part == "" || part == "." {
 			continue
 		}

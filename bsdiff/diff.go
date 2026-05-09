@@ -332,7 +332,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	blockWorkersState := make([]blockWorkerState, numWorkers)
 
 	// initialize all channels
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		blockWorkersState[i].work = make(chan int, 1)
 		blockWorkersState[i].matches = make(chan Match, 256)
 		blockWorkersState[i].consumed = make(chan bool, 1)
@@ -340,7 +340,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 	}
 
 	// spin up workers
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		go func(workerState blockWorkerState, workerIndex int) {
 			for blockIndex := range workerState.work {
 				boundary := blockSize * blockIndex
@@ -365,7 +365,7 @@ func (ctx *DiffContext) Do(old, new io.Reader, writeMessage WriteMessageFunc, co
 			workerIndex = (workerIndex + 1) % numWorkers
 		}
 
-		for workerIndex := 0; workerIndex < numWorkers; workerIndex++ {
+		for workerIndex := range numWorkers {
 			close(blockWorkersState[workerIndex].work)
 		}
 		// fmt.Fprintf(os.Stderr, "Sent all blockworks\n")
