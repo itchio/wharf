@@ -70,7 +70,10 @@ type DiffContext struct {
 
 	Stats *DiffStats
 
-	db bytes.Buffer
+	// addBuf is reused across matches to hold the byte-difference payload of
+	// each Control.Add. Sized to match the current match length; capacity
+	// grows monotonically.
+	addBuf []byte
 
 	obuf bytes.Buffer
 	nbuf bytes.Buffer
@@ -109,14 +112,17 @@ func (ctx *DiffContext) writeMessages(obuf []byte, nbuf []byte, matches chan Mat
 			}
 		}
 
-		ctx.db.Reset()
-		ctx.db.Grow(match.addLength)
-
-		for i := 0; i < match.addLength; i++ {
-			ctx.db.WriteByte(nbuf[match.addNewStart+i] - obuf[match.addOldStart+i])
+		if cap(ctx.addBuf) < match.addLength {
+			ctx.addBuf = make([]byte, match.addLength)
+		} else {
+			ctx.addBuf = ctx.addBuf[:match.addLength]
 		}
+		subtractInto(ctx.addBuf,
+			nbuf[match.addNewStart:match.addNewStart+match.addLength],
+			obuf[match.addOldStart:match.addOldStart+match.addLength],
+		)
 
-		bsdc.Add = ctx.db.Bytes()
+		bsdc.Add = ctx.addBuf
 		bsdc.Copy = nbuf[match.copyStart():match.copyEnd]
 
 		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
