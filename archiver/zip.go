@@ -1,6 +1,7 @@
 package archiver
 
 import (
+	stdErrors "errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Newer arkive rejects unsafe entry names before any entry is read, with its
+// own error; callers check for ErrPathTraversal.
+func wrapInsecurePath(err error) error {
+	if stdErrors.Is(err, zip.ErrInsecurePath) {
+		return fmt.Errorf("%w: %v", ErrPathTraversal, err)
+	}
+	return errors.WithStack(err)
+}
+
 func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSettings) (*ExtractResult, error) {
 	dirCount := 0
 	regCount := 0
@@ -24,7 +34,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 
 	reader, err := zip.NewReader(readerAt, size)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, wrapInsecurePath(err)
 	}
 
 	var totalSize int64
@@ -127,7 +137,7 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 		go func() {
 			reader, err := zip.NewReader(readerAt, size)
 			if err != nil {
-				errs <- errors.WithStack(err)
+				errs <- wrapInsecurePath(err)
 				return
 			}
 

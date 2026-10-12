@@ -174,7 +174,8 @@ func resolveExtractPath(baseDir string, name string) (string, error) {
 }
 
 func validateSymlinkTarget(baseDir string, dstpath string, linkname string) error {
-	if filepath.IsAbs(linkname) {
+	// IsAbs is false for a rooted "/x" on Windows, which resolves against the volume root.
+	if filepath.IsAbs(linkname) || strings.HasPrefix(linkname, "/") || strings.Contains(linkname, `\`) {
 		return fmt.Errorf("%w: absolute symlink target: %s", ErrPathTraversal, linkname)
 	}
 

@@ -101,7 +101,10 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 		switch wound.Kind {
 		case WoundKind_DIR:
 			dirEntry := container.Dirs[wound.Index]
-			path := filepath.Join(ah.Target, filepath.FromSlash(dirEntry.Path))
+			path, err := tlc.ContainedPath(ah.Target, dirEntry.Path)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
 			stats, err := os.Lstat(path)
 			if err == nil {
@@ -125,10 +128,17 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 
 		case WoundKind_SYMLINK:
 			symlinkEntry := container.Symlinks[wound.Index]
-			path := filepath.Join(ah.Target, filepath.FromSlash(symlinkEntry.Path))
+			path, err := tlc.ContainedPath(ah.Target, symlinkEntry.Path)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			err = tlc.ContainedSymlinkTarget(ah.Target, path, symlinkEntry.Dest)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
 			dir := filepath.Dir(path)
-			err := os.MkdirAll(dir, 0o755)
+			err = os.MkdirAll(dir, 0o755)
 			if err != nil {
 				return errors.WithStack(err)
 			}

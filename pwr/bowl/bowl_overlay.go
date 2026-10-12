@@ -171,7 +171,10 @@ func (b *overlayBowl) GetWriter(sourceFileIndex int64) (EntryWriter, error) {
 			return nil, errors.WithStack(err)
 		}
 
-		wPath := b.stagePool.GetPath(sourceFileIndex)
+		wPath, err := b.stagePool.ContainedPath(sourceFileIndex)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 		return &overlayEntryWriter{path: wPath, readSeeker: r}, nil
 	}
 
@@ -180,7 +183,10 @@ func (b *overlayBowl) GetWriter(sourceFileIndex int64) (EntryWriter, error) {
 
 	debugf("returning move writer for '%s'", sourceFile.Path)
 
-	wPath := b.stagePool.GetPath(sourceFileIndex)
+	wPath, err := b.stagePool.ContainedPath(sourceFileIndex)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 	return &freshEntryWriter{path: wPath, file: sourceFile}, nil
 }
 
@@ -327,7 +333,10 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	outputPath := b.OutputFolder
 
 	processDir := func(dir *tlc.Dir) error {
-		path := filepath.Join(outputPath, filepath.FromSlash(dir.Path))
+		path, err := tlc.ContainedPath(outputPath, dir.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
 		stats, err := screw.Lstat(path)
 		if err == nil {
@@ -363,7 +372,14 @@ func (b *overlayBowl) ensureDirsAndSymlinks() error {
 	// TODO: behave like github.com/itchio/savior for symlinks on windows ?
 
 	processSymlink := func(symlink *tlc.Symlink) error {
-		path := filepath.Join(outputPath, filepath.FromSlash(symlink.Path))
+		path, err := tlc.ContainedPath(outputPath, symlink.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		err = tlc.ContainedSymlinkTarget(outputPath, path, symlink.Dest)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
 		stats, err := screw.Lstat(path)
 		if err == nil {
@@ -443,7 +459,6 @@ const (
 
 func (b *overlayBowl) applyTranspositions() error {
 	transpositions := make(map[string][]*pathTranspo)
-	outputPath := b.OutputFolder
 
 	for _, t := range b.transpositions {
 		targetFile := b.TargetContainer.Files[t.TargetIndex]
@@ -477,9 +492,11 @@ func (b *overlayBowl) applyTranspositions() error {
 				continue
 			}
 
-			oldAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(targetPath))
-			newAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(transpo.OutputPath))
-			err := b.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
+			oldAbsolutePath, newAbsolutePath, err := b.outputPair(targetPath, transpo.OutputPath)
+			if err != nil {
+				return err
+			}
+			err = b.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -488,8 +505,10 @@ func (b *overlayBowl) applyTranspositions() error {
 		if noop == nil {
 			// we treated the first transpo as being the rename, gotta do it now
 			transpo := group[0]
-			oldAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(targetPath))
-			newAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(transpo.OutputPath))
+			oldAbsolutePath, newAbsolutePath, err := b.outputPair(targetPath, transpo.OutputPath)
+			if err != nil {
+				return err
+			}
 
 			switch behavior {
 			case transpoBehaviorCopy:
@@ -565,8 +584,10 @@ func (b *overlayBowl) applyTranspositions() error {
 				// file wasn't touched at all
 			} else {
 				// file was renamed
-				oldAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(transpo.TargetPath))
-				newAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(transpo.OutputPath))
+				oldAbsolutePath, newAbsolutePath, err := b.outputPair(transpo.TargetPath, transpo.OutputPath)
+				if err != nil {
+					return err
+				}
 
 				switch behavior {
 				case transpoBehaviorCopy:
@@ -591,9 +612,11 @@ func (b *overlayBowl) applyTranspositions() error {
 	}
 
 	for _, rename := range cleanupRenames {
-		oldAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(rename.TargetPath))
-		newAbsolutePath := filepath.Join(outputPath, filepath.FromSlash(rename.OutputPath))
-		err := b.move(oldAbsolutePath, newAbsolutePath)
+		oldAbsolutePath, newAbsolutePath, err := b.outputPair(rename.TargetPath, rename.OutputPath)
+		if err != nil {
+			return err
+		}
+		err = b.move(oldAbsolutePath, newAbsolutePath)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -611,7 +634,18 @@ func (b *overlayBowl) copy(oldAbsolutePath string, newAbsolutePath string, mkdir
 		}
 	}
 
-	// fall back to copy + remove
+	// Both ends were contained by the caller, but a foreign symlink may sit at
+	// either leaf; opening would follow it.
+	if stat, err := screw.Lstat(oldAbsolutePath); err == nil && stat.Mode()&os.ModeSymlink != 0 {
+		return errors.WithStack(fmt.Errorf("%w: %s is a symlink", tlc.ErrPathEscape, oldAbsolutePath))
+	}
+	if stat, err := screw.Lstat(newAbsolutePath); err == nil && stat.Mode()&os.ModeSymlink != 0 {
+		err = screw.Remove(newAbsolutePath)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	reader, err := screw.Open(oldAbsolutePath)
 	if err != nil {
 		return errors.WithStack(err)
@@ -635,6 +669,34 @@ func (b *overlayBowl) copy(oldAbsolutePath string, newAbsolutePath string, mkdir
 	}
 
 	return nil
+}
+
+// prepareLeaf makes path (already contained) safe to open for writing: its
+// parent exists and no symlink sits at the leaf, since opening would follow it.
+func prepareLeaf(path string) error {
+	err := screw.MkdirAll(filepath.Dir(path), 0755)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if stat, err := screw.Lstat(path); err == nil && stat.Mode()&os.ModeSymlink != 0 {
+		err = screw.Remove(path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
+}
+
+func (b *overlayBowl) outputPair(oldPath, newPath string) (string, string, error) {
+	oldAbsolutePath, err := tlc.ContainedPath(b.OutputFolder, oldPath)
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	newAbsolutePath, err := tlc.ContainedPath(b.OutputFolder, newPath)
+	if err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	return oldAbsolutePath, newAbsolutePath, nil
 }
 
 func (b *overlayBowl) move(oldAbsolutePath string, newAbsolutePath string) error {
@@ -684,11 +746,16 @@ func (b *overlayBowl) applyMoves() error {
 			return errors.Errorf("overlaybowl: applyMoves: no such file %d", moveIndex)
 		}
 		debugf("applying move '%s'", file.Path)
-		nativePath := filepath.FromSlash(file.Path)
 
-		stagePath := filepath.Join(b.StageFolder, nativePath)
-		outputPath := filepath.Join(b.OutputFolder, nativePath)
-		err := b.move(stagePath, outputPath)
+		stagePath, err := tlc.ContainedPath(b.StageFolder, file.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		outputPath, err := tlc.ContainedPath(b.OutputFolder, file.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		err = b.move(stagePath, outputPath)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -706,16 +773,21 @@ func (b *overlayBowl) applyOverlays() error {
 			return errors.Errorf("overlaybowl: applyOverlays: no such file %d", overlaySourceFileIndex)
 		}
 		debugf("applying overlay '%s'", file.Path)
-		nativePath := filepath.FromSlash(file.Path)
 
-		stagePath := filepath.Join(b.StageFolder, nativePath)
+		stagePath, err := tlc.ContainedFilePath(b.StageFolder, file.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		r, err := filesource.Open(stagePath)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 		defer r.Close()
 
-		outputPath := filepath.Join(b.OutputFolder, nativePath)
+		outputPath, err := tlc.ContainedFilePath(b.OutputFolder, file.Path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		w, err := screw.OpenFile(outputPath, os.O_WRONLY, os.FileMode(file.Mode|tlc.ModeMask))
 		if err != nil {
 			return errors.WithStack(err)
@@ -835,9 +907,15 @@ func (b *overlayBowl) deleteGhosts() error {
 
 	for _, ghost := range ghosts {
 		debugf("ghost: %v", ghost)
-		op := filepath.Join(b.OutputFolder, filepath.FromSlash(ghost.Path))
+		// A ghost under a parent that has since become a symlink was removed
+		// along with that parent; following the link would delete elsewhere.
+		op, err := tlc.ContainedPath(b.OutputFolder, ghost.Path)
+		if err != nil {
+			debugf("ghost not reachable, bye bye! (%v)", err)
+			continue
+		}
 
-		_, err := screw.Lstat(op)
+		_, err = screw.Lstat(op)
 		if err != nil {
 			debugf("ghost already gone, bye bye! (%v)", err)
 			continue
@@ -945,9 +1023,9 @@ func (w *overlayEntryWriter) Save() (*WriterCheckpoint, error) {
 }
 
 func (w *overlayEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
-	err := screw.MkdirAll(filepath.Dir(w.path), 0755)
+	err := prepareLeaf(w.path)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return 0, err
 	}
 
 	f, err := screw.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))

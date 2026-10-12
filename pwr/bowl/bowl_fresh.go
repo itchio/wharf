@@ -3,7 +3,6 @@ package bowl
 import (
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/pools/fspool"
@@ -87,7 +86,11 @@ func (b *freshBowl) Resume(c *BowlCheckpoint) error {
 }
 
 func (b *freshBowl) GetWriter(index int64) (EntryWriter, error) {
-	return &freshEntryWriter{path: b.OutputPool.GetPath(index), file: b.SourceContainer.Files[index]}, nil
+	path, err := b.OutputPool.ContainedPath(index)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &freshEntryWriter{path: path, file: b.SourceContainer.Files[index]}, nil
 }
 
 func (b *freshBowl) Transpose(t Transposition) (rErr error) {
@@ -150,9 +153,9 @@ func (few *freshEntryWriter) Tell() int64 {
 }
 
 func (few *freshEntryWriter) Resume(c *WriterCheckpoint) (int64, error) {
-	err := screw.MkdirAll(filepath.Dir(few.path), 0755)
+	err := prepareLeaf(few.path)
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return 0, err
 	}
 
 	f, err := screw.OpenFile(few.path, os.O_CREATE|os.O_WRONLY, os.FileMode(few.file.Mode|tlc.ModeMask))
