@@ -873,6 +873,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 					wtest.Must(t, err)
 
 					targetPool := fspool.New(p.GetTargetContainer(), v1)
+					defer targetPool.Close()
 
 					b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 						SourceContainer: p.GetSourceContainer(),
@@ -908,6 +909,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 					}
 
 					targetPool := fspool.New(p.GetTargetContainer(), outDir)
+					defer targetPool.Close()
 
 					b, err := bowl.NewOverlayBowl(bowl.OverlayBowlParams{
 						SourceContainer: p.GetSourceContainer(),

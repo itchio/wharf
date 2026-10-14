@@ -34,6 +34,7 @@ func PatchFresh(params PatchFreshParams) error {
 	}
 
 	targetPool := fspool.New(pat.GetTargetContainer(), params.TargetDir)
+	defer targetPool.Close()
 
 	bwl, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 		TargetContainer: pat.GetTargetContainer(),

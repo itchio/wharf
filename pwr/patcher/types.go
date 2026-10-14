@@ -61,6 +61,8 @@ type BsdiffCheckpoint struct {
 // bowls (patch to overlay, then commit that overlay in-place), etc.
 type Patcher interface {
 	SetSaveConsumer(sc SaveConsumer)
+	// Resume reads from targetPool but does not close it; the caller owns it
+	// and may keep using it across checkpoints.
 	Resume(checkpoint *Checkpoint, targetPool lake.Pool, bowl bowl.Bowl) error
 	Progress() float64
 

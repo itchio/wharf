@@ -138,6 +138,7 @@ func Test_Naive(t *testing.T) {
 		wtest.Must(t, err)
 
 		targetPool := fspool.New(p.GetTargetContainer(), v1)
+		defer targetPool.Close()
 
 		b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 			SourceContainer: p.GetSourceContainer(),
@@ -184,6 +185,7 @@ func Test_Naive(t *testing.T) {
 				sourceIndexWhitelist[i] = true
 			}
 			targetPool = fspool.New(p.GetTargetContainer(), v1)
+			defer targetPool.Close()
 		}
 		p.SetSourceIndexWhitelist(sourceIndexWhitelist)
 
@@ -237,6 +239,7 @@ func Test_Naive(t *testing.T) {
 		})
 
 		targetPool := fspool.New(p.GetTargetContainer(), v1)
+		defer targetPool.Close()
 
 		b, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 			SourceContainer: p.GetSourceContainer(),
