@@ -9,10 +9,10 @@ require (
 	github.com/itchio/arkive v0.0.0-20260424164943-5eabdbdce5c8
 	github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
-	github.com/itchio/httpkit v0.0.0-20260213231528-25109ada88c9
-	github.com/itchio/lake v0.0.0-20261012222958-69979fefd028
+	github.com/itchio/httpkit v0.0.0-20261014001543-804157f68bf3
+	github.com/itchio/lake v0.0.0-20261014002703-c21855d4ccaf
 	github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927
-	github.com/itchio/savior v0.0.0-20200618124148-6034e878d75b
+	github.com/itchio/savior v0.0.0-20261014002740-9a7f4832f631
 	github.com/itchio/screw v0.0.0-20260221011136-e674b460b040
 	github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08
 	github.com/pkg/errors v0.9.1

@@ -1,6 +1,7 @@
 package pwr
 
 import (
+	"context"
 	"os"
 	"path"
 	"testing"
@@ -28,7 +29,7 @@ func Test_CopyContainer(t *testing.T) {
 		},
 	})
 
-	container, err := tlc.WalkAny(src, tlc.WalkOpts{})
+	container, err := tlc.WalkAny(context.Background(), src, tlc.WalkOpts{})
 	assert.NoError(t, err)
 
 	inPool := fspool.New(container, src)

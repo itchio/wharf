@@ -81,10 +81,10 @@ func Test_ArchiveHealer(t *testing.T) {
 
 	assert.NoError(t, zw.Close())
 
-	container, err := tlc.WalkAny(archivePath, tlc.WalkOpts{})
+	container, err := tlc.WalkAny(context.Background(), archivePath, tlc.WalkOpts{})
 	assert.NoError(t, err)
 
-	pool, err := pools.New(container, archivePath)
+	pool, err := pools.New(context.Background(), container, archivePath)
 	wtest.Must(t, err)
 
 	consumer := &state.Consumer{}

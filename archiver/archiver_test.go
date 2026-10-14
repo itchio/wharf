@@ -3,6 +3,7 @@ package archiver
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -160,20 +161,20 @@ func Test_ZipUnzip(t *testing.T) {
 	}
 
 	t.Logf("Extracting over non-existent destination")
-	_, err = ExtractPath(archivePath, extractedDir, xSettings)
+	_, err = ExtractPath(context.Background(), archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 
 	resumeFilePath := filepath.Join(tmpPath, "resumeinfo")
 
 	t.Logf("Extracting over already-extracted dir")
-	_, err = ExtractPath(archivePath, extractedDir, ExtractSettings{
+	_, err = ExtractPath(context.Background(), archivePath, extractedDir, ExtractSettings{
 		Consumer:   xSettings.Consumer,
 		ResumeFrom: resumeFilePath,
 	})
 	assert.NoError(t, err)
 
 	t.Logf("Extracting over already-extracted dir (with resume)")
-	_, err = ExtractPath(archivePath, extractedDir, ExtractSettings{
+	_, err = ExtractPath(context.Background(), archivePath, extractedDir, ExtractSettings{
 		Consumer:   xSettings.Consumer,
 		ResumeFrom: resumeFilePath,
 	})
@@ -185,7 +186,7 @@ func Test_ZipUnzip(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NoError(t, dumbFile.Close())
 
-	_, err = ExtractPath(archivePath, extractedDir, xSettings)
+	_, err = ExtractPath(context.Background(), archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 }
 
@@ -214,11 +215,11 @@ func Test_TarUntar(t *testing.T) {
 	}
 
 	t.Logf("Extracting over non-existent destination")
-	_, err = ExtractTar(archivePath, extractedDir, xSettings)
+	_, err = ExtractTar(context.Background(), archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 
 	t.Logf("Extracting over already-extracted dir")
-	_, err = ExtractTar(archivePath, extractedDir, xSettings)
+	_, err = ExtractTar(context.Background(), archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 
 	t.Logf("Extracting, one of the dirs is a file now")
@@ -227,7 +228,7 @@ func Test_TarUntar(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NoError(t, dumbFile.Close())
 
-	_, err = ExtractTar(archivePath, extractedDir, xSettings)
+	_, err = ExtractTar(context.Background(), archivePath, extractedDir, xSettings)
 	assert.NoError(t, err)
 }
 
@@ -267,7 +268,7 @@ func Test_TarRejectsPathTraversal(t *testing.T) {
 	})
 	defer os.Remove(archivePath)
 
-	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	_, err = ExtractTar(context.Background(), archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
 	assert.Error(t, err)
 	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
 	assert.Equal(t, "before", readFile(t, outsidePath))
@@ -288,7 +289,7 @@ func Test_TarRejectsExternalReplacement(t *testing.T) {
 	})
 	defer os.Remove(archivePath)
 
-	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	_, err = ExtractTar(context.Background(), archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
 	assert.Error(t, err)
 	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
 
@@ -317,7 +318,7 @@ func Test_TarRejectsSymlinkTraversal(t *testing.T) {
 	})
 	defer os.Remove(archivePath)
 
-	_, err = ExtractTar(archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
+	_, err = ExtractTar(context.Background(), archivePath, destDir, ExtractSettings{Consumer: &state.Consumer{}})
 	assert.Error(t, err)
 	assert.True(t, stdErrors.Is(err, ErrPathTraversal))
 	assert.Equal(t, "before", readFile(t, outsidePath))

@@ -235,12 +235,12 @@ func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container,
 	return nil
 }
 
-func (ah *ArchiveHealer) openArchive() (eos.File, error) {
+func (ah *ArchiveHealer) openArchive(ctx context.Context) (eos.File, error) {
 	ah.archiveLock.Lock()
 	defer ah.archiveLock.Unlock()
 
 	ah.archiveOnce.Do(func() {
-		file, err := eos.Open(ah.ArchivePath, option.WithConsumer(ah.Consumer))
+		file, err := eos.Open(ctx, ah.ArchivePath, option.WithConsumer(ah.Consumer))
 		ah.archiveFile = file
 		ah.archiveFileErr = err
 	})
@@ -266,7 +266,7 @@ func (ah *ArchiveHealer) heal(ctx context.Context, container *tlc.Container, tar
 
 			// lazily open file
 			if sourcePool == nil {
-				file, err := ah.openArchive()
+				file, err := ah.openArchive(ctx)
 				if err != nil {
 					return errors.WithStack(err)
 				}

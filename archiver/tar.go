@@ -2,6 +2,7 @@ package archiver
 
 import (
 	"archive/tar"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -16,14 +17,14 @@ import (
 )
 
 // Does not preserve users, nor permission, except the executable bit
-func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractResult, error) {
+func ExtractTar(ctx context.Context, archive string, dir string, settings ExtractSettings) (*ExtractResult, error) {
 	settings.Consumer.Infof("Extracting %s to %s", eos.Redact(archive), dir)
 
 	dirCount := 0
 	regCount := 0
 	symlinkCount := 0
 
-	file, err := eos.Open(archive, option.WithConsumer(settings.Consumer))
+	file, err := eos.Open(ctx, archive, option.WithConsumer(settings.Consumer))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

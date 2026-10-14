@@ -1,6 +1,7 @@
 package archiver
 
 import (
+	"context"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -55,11 +56,11 @@ type ExtractSettings struct {
 	Concurrency             int
 }
 
-func ExtractPath(archive string, destPath string, settings ExtractSettings) (*ExtractResult, error) {
+func ExtractPath(ctx context.Context, archive string, destPath string, settings ExtractSettings) (*ExtractResult, error) {
 	var result *ExtractResult
 	var err error
 
-	file, err := eos.Open(archive, option.WithConsumer(settings.Consumer))
+	file, err := eos.Open(ctx, archive, option.WithConsumer(settings.Consumer))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

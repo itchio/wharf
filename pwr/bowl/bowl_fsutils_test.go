@@ -1,6 +1,7 @@
 package bowl_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -195,7 +196,7 @@ func runBowler(t *testing.T, params *bowlerParams) {
 		outFolder = targetFolder
 	case bowlModeZip:
 		outFolder = freshFolder
-		_, err = archiver.ExtractPath(mbp.ZipFilePath, outFolder, archiver.ExtractSettings{
+		_, err = archiver.ExtractPath(context.Background(), mbp.ZipFilePath, outFolder, archiver.ExtractSettings{
 			Consumer: &state.Consumer{},
 		})
 		must(t, err)

@@ -1,6 +1,7 @@
 package patcher_test
 
 import (
+	"context"
 	"io"
 	"runtime"
 	"testing"
@@ -39,7 +40,7 @@ func (ncw *nopCloserWriter) Write(buf []byte) (int, error) {
 
 func applyCorruptions(t *testing.T, dir string, c testCorruption) {
 	dump := func() {
-		container, err := tlc.WalkAny(dir, tlc.WalkOpts{})
+		container, err := tlc.WalkAny(context.Background(), dir, tlc.WalkOpts{})
 		wtest.Must(t, err)
 		container.Print(func(line string) {
 			t.Logf("%s", line)

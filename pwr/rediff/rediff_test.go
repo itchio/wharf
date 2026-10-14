@@ -212,7 +212,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 	compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 	compression.Quality = 1
 
-	sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
+	sourceContainer, err := tlc.WalkAny(context.Background(), v2, tlc.WalkOpts{})
 	wtest.Must(t, err)
 
 	consumer := &state.Consumer{
@@ -224,7 +224,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 	signatureBuffer := new(bytes.Buffer)
 
 	func() {
-		targetContainer, dErr := tlc.WalkAny(v1, tlc.WalkOpts{})
+		targetContainer, dErr := tlc.WalkAny(context.Background(), v1, tlc.WalkOpts{})
 		wtest.Must(t, dErr)
 
 		targetPool := fspool.New(targetContainer, v1)
@@ -282,7 +282,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 
 		signature, sErr := pwr.ReadSignature(context.Background(), sigReader)
 		wtest.Must(t, sErr)
-		wtest.Must(t, pwr.AssertValid(v1After, signature))
+		wtest.Must(t, pwr.AssertValid(context.Background(), v1After, signature))
 		log("Original applies cleanly")
 	}()
 
@@ -340,7 +340,7 @@ func runRediffScenario(t *testing.T, scenario rediffScenario) {
 			})
 			wtest.Must(t, err)
 
-			wtest.Must(t, pwr.AssertValid(v1After, signature))
+			wtest.Must(t, pwr.AssertValid(context.Background(), v1After, signature))
 			log("Optimized patch applies cleanly.")
 		}()
 	}()

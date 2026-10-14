@@ -738,7 +738,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		}
 
 		assertValid := func(target string, signature *pwr.SignatureInfo) error {
-			targetContainer, err := tlc.WalkAny(target, tlc.WalkOpts{})
+			targetContainer, err := tlc.WalkAny(context.Background(), target, tlc.WalkOpts{})
 			wtest.Must(t, err)
 
 			consumer.Debugf("===================================")
@@ -760,10 +760,10 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 		compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 		compression.Quality = 1
 
-		targetContainer, err := tlc.WalkAny(v1, tlc.WalkOpts{})
+		targetContainer, err := tlc.WalkAny(context.Background(), v1, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
-		sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
+		sourceContainer, err := tlc.WalkAny(context.Background(), v2, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
 		consumer.Debugf("===================================")
@@ -889,7 +889,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 					wtest.Must(t, b.Commit())
 
 					wtest.Must(t, assertValid(outDir, v2Sig))
-					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
+					wtest.Must(t, pwr.AssertNoGhosts(context.Background(), outDir, v2Sig))
 				}()
 
 				applyInPlace := func(beforePatch func()) error {
@@ -968,7 +968,7 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 				func() {
 					log("Applying %s in-place (v1) -> (v2)", patch.Name)
 					wtest.Must(t, applyInPlace(func() {}))
-					wtest.Must(t, pwr.AssertNoGhosts(outDir, v2Sig))
+					wtest.Must(t, pwr.AssertNoGhosts(context.Background(), outDir, v2Sig))
 				}()
 			}
 

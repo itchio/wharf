@@ -74,10 +74,10 @@ func Test_Naive(t *testing.T) {
 		compression.Algorithm = pwr.CompressionAlgorithm_BROTLI
 		compression.Quality = 1
 
-		targetContainer, err := tlc.WalkAny(v1, tlc.WalkOpts{})
+		targetContainer, err := tlc.WalkAny(context.Background(), v1, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
-		sourceContainer, err := tlc.WalkAny(v2, tlc.WalkOpts{})
+		sourceContainer, err := tlc.WalkAny(context.Background(), v2, tlc.WalkOpts{})
 		wtest.Must(t, err)
 
 		// Sign!
@@ -155,8 +155,8 @@ func Test_Naive(t *testing.T) {
 			Container: p.GetSourceContainer(),
 			Hashes:    sourceHashes,
 		}
-		wtest.Must(t, pwr.AssertValid(out, sigInfo))
-		wtest.Must(t, pwr.AssertNoGhosts(out, sigInfo))
+		wtest.Must(t, pwr.AssertValid(context.Background(), out, sigInfo))
+		wtest.Must(t, pwr.AssertNoGhosts(context.Background(), out, sigInfo))
 
 		t.Logf("Patch applies cleanly!")
 	}
@@ -203,7 +203,7 @@ func Test_Naive(t *testing.T) {
 			Container: p.GetSourceContainer(),
 			Hashes:    sourceHashes,
 		}
-		err = pwr.AssertValid(out, sigInfo)
+		err = pwr.AssertValid(context.Background(), out, sigInfo)
 		assert.Error(t, err)
 		assert.EqualValues(t, len(sourceIndexWhitelist), p.GetTouchedFiles())
 
@@ -278,7 +278,7 @@ func Test_Naive(t *testing.T) {
 		}
 
 		// Validate!
-		wtest.Must(t, pwr.AssertValid(out, &pwr.SignatureInfo{
+		wtest.Must(t, pwr.AssertValid(context.Background(), out, &pwr.SignatureInfo{
 			Container: p.GetSourceContainer(),
 			Hashes:    sourceHashes,
 		}))

@@ -1,6 +1,7 @@
 package bowl
 
 import (
+	"context"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -778,7 +779,7 @@ func (b *overlayBowl) applyOverlays() error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		r, err := filesource.Open(stagePath)
+		r, err := filesource.Open(context.Background(), stagePath)
 		if err != nil {
 			return errors.WithStack(err)
 		}

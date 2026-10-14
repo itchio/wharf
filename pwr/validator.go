@@ -108,7 +108,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 		// if we have a healer, we may want to fix case first
 		if screw.IsCaseInsensitiveFS() {
-			targetPool, err := pools.New(signature.Container, target)
+			targetPool, err := pools.New(ctx, signature.Container, target)
 			if err != nil {
 				return err
 			}
@@ -242,7 +242,7 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 	fileIndices := make(chan int64)
 
-	go vctx.validate(target, signature, fileIndices, workerErrs, onProgress, cancelled)
+	go vctx.validate(ctx, target, signature, fileIndices, workerErrs, onProgress, cancelled)
 
 	var retErr error
 	sending := true
@@ -295,12 +295,12 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 type onProgressFunc func(delta int64)
 
-func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, fileIndices chan int64,
+func (vctx *ValidatorContext) validate(ctx context.Context, target string, signature *SignatureInfo, fileIndices chan int64,
 	errs chan error, onProgress onProgressFunc, cancelled chan struct{}) {
 
 	var retErr error
 
-	targetPool, err := pools.New(signature.Container, target)
+	targetPool, err := pools.New(ctx, signature.Container, target)
 	if err != nil {
 		errs <- err
 		return
@@ -435,13 +435,13 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 
 // AssertValid validates target in FailFast mode - it's a shorthand
 // so that setting up ValidatorContext isn't needed
-func AssertValid(target string, signature *SignatureInfo) error {
+func AssertValid(ctx context.Context, target string, signature *SignatureInfo) error {
 	vctx := &ValidatorContext{
 		FailFast: true,
 		Consumer: &state.Consumer{},
 	}
 
-	err := vctx.Validate(context.Background(), target, signature)
+	err := vctx.Validate(ctx, target, signature)
 	if err != nil {
 		return err
 	}
@@ -449,9 +449,9 @@ func AssertValid(target string, signature *SignatureInfo) error {
 	return nil
 }
 
-func AssertNoGhosts(target string, signature *SignatureInfo) error {
+func AssertNoGhosts(ctx context.Context, target string, signature *SignatureInfo) error {
 	refContainer := signature.Container
-	gotContainer, err := tlc.WalkAny(target, tlc.WalkOpts{})
+	gotContainer, err := tlc.WalkAny(ctx, target, tlc.WalkOpts{})
 	if err != nil {
 		return err
 	}
