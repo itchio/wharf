@@ -1,6 +1,7 @@
 package rediff
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/itchio/lake"
 	"github.com/itchio/lake/tlc"
 	"github.com/itchio/savior"
+	"github.com/itchio/savior/seeksource"
 	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/pwr"
 	"github.com/itchio/wharf/wire"
@@ -54,6 +56,13 @@ type context struct {
 	targetContainer *tlc.Container
 	sourceContainer *tlc.Container
 	diffMappings    DiffMappings
+
+	// decompressedBody holds the entire decompressed patch body (everything
+	// after the magic + PatchHeader). analyzePatch reads it once via the
+	// real decompressor and caches it here; Optimize then reads from this
+	// buffer directly, skipping the redundant second brotli decompression.
+	// Cleared at the end of Optimize to release the memory.
+	decompressedBody []byte
 }
 
 type Context interface {
@@ -151,8 +160,23 @@ func (cx *context) analyzePatch() error {
 		return err
 	}
 
-	rctx, err = pwr.DecompressWire(rctx, ph.Compression)
+	decompRctx, err := pwr.DecompressWire(rctx, ph.Compression)
 	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Drain the entire decompressed body into a buffer here so Optimize
+	// can re-read it without paying for a second brotli decode. Memory
+	// cost: full decompressed body (typically 1.5–2× compressed patch
+	// size). Released at the end of Optimize.
+	var decompBuf bytes.Buffer
+	if _, err := io.Copy(&decompBuf, decompRctx.GetSource()); err != nil {
+		return errors.WithStack(err)
+	}
+	cx.decompressedBody = decompBuf.Bytes()
+
+	rctx = wire.NewReadContext(seeksource.FromBytes(cx.decompressedBody))
+	if _, err := rctx.GetSource().Resume(nil); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -305,26 +329,19 @@ func (cx *context) Optimize(params OptimizeParams) error {
 		return err
 	}
 
-	_, err = cx.params.PatchReader.Resume(nil)
-	if err != nil {
-		return err
+	// Read from the analyzePatch-populated decompressedBody cache instead
+	// of re-decompressing the patch. Saves a full brotli decode pass on
+	// the input side.
+	if cx.decompressedBody == nil {
+		return errors.Errorf("rediff: Optimize called without prior analyzePatch (decompressed body cache missing)")
 	}
-
-	rctx := wire.NewReadContext(cx.params.PatchReader)
+	rctx := wire.NewReadContext(seeksource.FromBytes(cx.decompressedBody))
+	if _, err := rctx.GetSource().Resume(nil); err != nil {
+		return errors.WithStack(err)
+	}
 	wctx := wire.NewWriteContext(params.PatchWriter)
 
 	err = wctx.WriteMagic(pwr.PatchMagic)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = rctx.ExpectMagic(pwr.PatchMagic)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	ph := &pwr.PatchHeader{}
-	err = rctx.ReadMessage(ph)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -338,11 +355,6 @@ func (cx *context) Optimize(params OptimizeParams) error {
 		Compression: compression,
 	}
 	err = wctx.WriteMessage(wph)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	rctx, err = pwr.DecompressWire(rctx, ph.Compression)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -519,6 +531,9 @@ func (cx *context) Optimize(params OptimizeParams) error {
 		return errors.WithStack(err)
 	}
 
+	// Release the decompressed body cache now that we're done with it.
+	cx.decompressedBody = nil
+
 	return nil
 }
 
@@ -538,9 +553,14 @@ func (cx *context) GetDiffMappings() DiffMappings {
 	return cx.diffMappings
 }
 
+// defaultRediffCompressionSettings sets the brotli quality used when the
+// caller doesn't pass Params.Compression. q=7 trades a small (<1%) size
+// growth for materially faster brotli encode on already-bsdiff'd Control
+// streams. q=6 was tried first and produced +1.75% size on a real-world
+// 275MB patch, violating the ±1% size gate.
 func defaultRediffCompressionSettings() *pwr.CompressionSettings {
 	return &pwr.CompressionSettings{
 		Algorithm: pwr.CompressionAlgorithm_BROTLI,
-		Quality:   9,
+		Quality:   7,
 	}
 }
