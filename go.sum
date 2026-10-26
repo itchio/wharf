@@ -71,8 +71,8 @@ github.com/itchio/arkive v0.0.0-20260424164943-5eabdbdce5c8 h1:pSMXKB+oJ1ebQykvG
 github.com/itchio/arkive v0.0.0-20260424164943-5eabdbdce5c8/go.mod h1:1jjAAhUnNDwHiqnC9YpwH5inlJ1/zZ+eL+MmEh8oGb0=
 github.com/itchio/dskompress v0.0.0-20190702113811-5e6f499be697 h1:u3Q2WkrIPYlGEw4fjcImSOrkivWd6SVb0BF0Ehoih9c=
 github.com/itchio/dskompress v0.0.0-20190702113811-5e6f499be697/go.mod h1:clqOV8HXYpbDC3Bzia6urYIkfgwP1FnDr/C0q8KELmo=
-github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c h1:Jf20xV/yR/O6eSUqLTuXhka/+54YR59sGwN7b3MkxYk=
-github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c/go.mod h1:oRXh43p/JW9kWosasd+2kHfDpb1ec4m7YrZ5E39s1iI=
+github.com/itchio/go-brotli v0.0.0-20261025215007-eae0c1b3416b h1:VTtZxRSdEY1NKBN+fEiK2/ZiUcRI5qaFQgqB2CIk5i0=
+github.com/itchio/go-brotli v0.0.0-20261025215007-eae0c1b3416b/go.mod h1:9mEFT8nN2dZ+j+0rfQAu0iTCdzChKnXElYtPEQQuTS0=
 github.com/itchio/headway v0.0.0-20191015112415-46f64dd4d524/go.mod h1:Iif+7HeesRB0PvTYf0gOIFX8lj0za0SUsWryENQYt1E=
 github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4 h1:vOYjkMs+aVNeHU0d6MCctyEyxn02n0l3Zw6dsU9AsEs=
 github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4/go.mod h1:1/4tbTrV3G/Su53pnKBpa5mv3cVkLweRAq/xRnulSQI=

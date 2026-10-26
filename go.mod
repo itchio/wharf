@@ -1,13 +1,13 @@
 module github.com/itchio/wharf
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/golang/protobuf v1.5.4
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/itchio/arkive v0.0.0-20260424164943-5eabdbdce5c8
-	github.com/itchio/go-brotli v0.0.0-20190702114328-3f28d645a45c
+	github.com/itchio/go-brotli v0.0.0-20261025215007-eae0c1b3416b
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
 	github.com/itchio/httpkit v0.0.0-20261014001543-804157f68bf3
 	github.com/itchio/lake v0.0.0-20261014002703-c21855d4ccaf
