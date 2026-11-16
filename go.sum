@@ -91,8 +91,8 @@ github.com/itchio/screw v0.0.0-20260221011136-e674b460b040/go.mod h1:YwbHHVRIS/r
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08 h1:VlCjOBMvVsqr/L/w7k4CW8WEQog5Hj53CihNyYyvvo4=
 github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08/go.mod h1:iU7U0LShC+6Wjkkymyl3dpCZyiDSGnY4N4DY+xt3yNg=
 github.com/klauspost/compress v1.7.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
-github.com/klauspost/compress v1.18.3 h1:9PJRvfbmTabkOX8moIpXPbMMbYN60bWImDDU7L+/6zw=
-github.com/klauspost/compress v1.18.3/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
+github.com/klauspost/compress v1.18.7 h1:aUyZsS4kH3QTKurYhAOwAHxllVPnOthb3vPfnF1Ehjw=
+github.com/klauspost/compress v1.18.7/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid v1.2.1/go.mod h1:Pj4uuM528wm8OyEC2QMXAi2YiTZ96dNQPGgoMS4s3ek=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.2.0/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=

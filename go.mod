@@ -42,7 +42,7 @@ require (
 	github.com/itchio/dskompress v0.0.0-20190702113811-5e6f499be697 // indirect
 	github.com/itchio/kompress v0.0.0-20200301155538-5c2eecce9e51 // indirect
 	github.com/itchio/ox v0.0.0-20200826161350-12c6ca18d236 // indirect
-	github.com/klauspost/compress v1.18.3 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
