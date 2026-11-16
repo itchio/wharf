@@ -929,6 +929,13 @@ func runSinglePatchingScenario(t *testing.T, scenario patchScenario, direction S
 						return errors.WithStack(err)
 					}
 
+					// fspool holds the last file it read open, and Windows refuses
+					// to rename a directory with open handles beneath it.
+					err = targetPool.Close()
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
 					err = b.Commit()
 					if err != nil {
 						return err
