@@ -6,18 +6,18 @@ require (
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/golang/protobuf v1.5.4
 	github.com/hashicorp/golang-lru v1.0.2
-	github.com/itchio/arkive v0.0.0-20260424164943-5eabdbdce5c8
+	github.com/itchio/arkive v0.0.0-20260428180635-32e8e9c72151
 	github.com/itchio/go-brotli v0.0.0-20261025215007-eae0c1b3416b
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
-	github.com/itchio/httpkit v0.0.0-20261014001543-804157f68bf3
-	github.com/itchio/lake v0.0.0-20261014002703-c21855d4ccaf
-	github.com/itchio/randsource v0.0.0-20190703104731-3f6d22f91927
+	github.com/itchio/httpkit v0.0.0-20261014203241-1452ce76013a
+	github.com/itchio/lake v0.0.0-20261014205523-683452196911
+	github.com/itchio/randsource v0.0.0-20260216215536-1b48147d46e5
 	github.com/itchio/savior v0.0.0-20261014002740-9a7f4832f631
 	github.com/itchio/screw v0.0.0-20260221011136-e674b460b040
 	github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -26,7 +26,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e // indirect
-	github.com/efarrer/iothrottler v0.0.3 // indirect
 	github.com/getlantern/context v0.0.0-20220418194847-3d5e7a086201 // indirect
 	github.com/getlantern/errors v1.0.4 // indirect
 	github.com/getlantern/golog v0.0.0-20230503153817-8e72de7e0a65 // indirect
@@ -52,8 +51,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
