@@ -70,7 +70,7 @@ type DiffContext struct {
 
 	Stats *DiffStats
 
-	db bytes.Buffer
+	addBuf []byte
 
 	obuf bytes.Buffer
 	nbuf bytes.Buffer
@@ -109,14 +109,17 @@ func (ctx *DiffContext) writeMessages(obuf []byte, nbuf []byte, matches chan Mat
 			}
 		}
 
-		ctx.db.Reset()
-		ctx.db.Grow(match.addLength)
-
-		for i := 0; i < match.addLength; i++ {
-			ctx.db.WriteByte(nbuf[match.addNewStart+i] - obuf[match.addOldStart+i])
+		if cap(ctx.addBuf) < match.addLength {
+			ctx.addBuf = make([]byte, match.addLength)
+		}
+		add := ctx.addBuf[:match.addLength]
+		newBytes := nbuf[match.addNewStart : match.addNewStart+match.addLength]
+		oldBytes := obuf[match.addOldStart : match.addOldStart+match.addLength]
+		for i := range add {
+			add[i] = newBytes[i] - oldBytes[i]
 		}
 
-		bsdc.Add = ctx.db.Bytes()
+		bsdc.Add = add
 		bsdc.Copy = nbuf[match.copyStart():match.copyEnd]
 
 		if ctx.Stats != nil && ctx.Stats.BiggestAdd < int64(len(bsdc.Add)) {
