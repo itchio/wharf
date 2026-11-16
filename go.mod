@@ -10,7 +10,7 @@ require (
 	github.com/itchio/go-brotli v0.0.0-20261025215007-eae0c1b3416b
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
 	github.com/itchio/httpkit v0.0.0-20261014203241-1452ce76013a
-	github.com/itchio/lake v0.0.0-20261014205523-683452196911
+	github.com/itchio/lake v0.0.0-20261116221603-5676c62cf560
 	github.com/itchio/randsource v0.0.0-20260216215536-1b48147d46e5
 	github.com/itchio/savior v0.0.0-20261014002740-9a7f4832f631
 	github.com/itchio/screw v0.0.0-20260221011136-e674b460b040
