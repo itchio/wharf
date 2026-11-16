@@ -182,6 +182,9 @@ func ExtractZip(readerAt io.ReaderAt, size int64, dir string, settings ExtractSe
 						defer fileReader.Close()
 
 						linkname, lErr := io.ReadAll(fileReader)
+						if lErr != nil {
+							return errors.WithStack(lErr)
+						}
 						if settings.DryRun {
 							// muffin
 						} else {

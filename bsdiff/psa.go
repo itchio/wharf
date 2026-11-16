@@ -8,13 +8,7 @@ type PSA struct {
 	buf        []byte
 	boundaries []int
 
-	I    []int
-	done chan bool
-}
-
-type BucketGroup struct {
-	numSuffixes   int
-	bucketNumbers []int
+	I []int
 }
 
 func NewPSA(p int, buf []byte, I []int) *PSA {

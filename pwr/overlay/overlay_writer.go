@@ -18,8 +18,7 @@ const overlayBufSize = 128 * 1024     // 128KiB
 const overlaySameThreshold = 8 * 1024 // 8KiB
 
 type overlayWriter struct {
-	cw          *counter.Writer
-	writeOffset int64
+	cw *counter.Writer
 
 	r          io.Reader
 	readOffset int64

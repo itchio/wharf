@@ -101,9 +101,7 @@ func NewOverlayBowl(params OverlayBowlParams) (Bowl, error) {
 		return nil, errors.New("overlaybowl: StageFolder must not be nil")
 	}
 
-	var err error
-
-	err = screw.MkdirAll(params.StageFolder, 0755)
+	err := screw.MkdirAll(params.StageFolder, 0755)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

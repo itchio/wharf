@@ -213,10 +213,10 @@ func (cx *context) analyzePatch() error {
 			case pwr.SyncOp_BLOCK_RANGE:
 				numBlockRange++
 				alreadyReused := bytesReusedPerFileIndex[rop.FileIndex]
-				lastBlockIndex := rop.BlockIndex + rop.BlockSpan
+				lastBlockIndex := rop.BlockIndex + rop.BlockSpan - 1
 				targetFile := targetContainer.Files[rop.FileIndex]
 				lastBlockSize := pwr.ComputeBlockSize(targetFile.Size, lastBlockIndex)
-				otherBlocksSize := pwr.BlockSize*rop.BlockSpan - 1
+				otherBlocksSize := pwr.BlockSize * (rop.BlockSpan - 1)
 
 				bytesReusedPerFileIndex[rop.FileIndex] = alreadyReused + otherBlocksSize + lastBlockSize
 

@@ -20,7 +20,6 @@ package wsync
 import (
 	"crypto/md5"
 	"io"
-	"os"
 
 	"github.com/itchio/lake"
 	"github.com/pkg/errors"
@@ -101,7 +100,7 @@ func (ctx *Context) ApplySingleFull(output io.Writer, pool lake.Pool, op Operati
 			return nil
 		}
 
-		_, err = target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
+		_, err = target.Seek(blockSize*op.BlockIndex, io.SeekStart)
 		if err != nil {
 			if failFast {
 				return errors.WithStack(err)

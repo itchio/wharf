@@ -3,7 +3,6 @@ package bsdiff
 import (
 	"bytes"
 	"fmt"
-	"index/suffixarray"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,22 +64,6 @@ func benchQsuf(input []byte, concurrency int, b *testing.B) {
 		r = qsufsort(input, ctx, consumer)
 	}
 	result = r
-}
-
-var sa *suffixarray.Index
-
-func benchSuffixarray(input []byte, b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		sa = suffixarray.New(input)
-	}
-}
-
-var saz *SuffixArrayZ
-
-func benchSuffixarrayz(input []byte, b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		NewSuffixArrayZ(input)
-	}
 }
 
 func benchGosaca(input []byte, b *testing.B) {

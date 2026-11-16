@@ -11,8 +11,6 @@ import (
 
 type OverlayPatchContext struct{}
 
-const overlayPatchBufSize = 32 * 1024
-
 func (ctx *OverlayPatchContext) Patch(r savior.Source, w io.WriteSeeker) error {
 	// it's imperative that we buffer here, or gob.Decoder will
 	// make its own bufio.Reader and everything will break

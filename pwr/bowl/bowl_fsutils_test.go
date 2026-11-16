@@ -19,61 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func ditto(dst string, src string) error {
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		dstPath := filepath.Join(dst, relPath)
-
-		switch {
-		case info.IsDir():
-			err = screw.MkdirAll(dstPath, info.Mode())
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		case info.Mode()&os.ModeSymlink > 0:
-			return errors.New("don't know how to ditto symlink")
-		default:
-			err = func() error {
-				r, err := screw.Open(path)
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				defer r.Close()
-
-				w, err := screw.OpenFile(dstPath, os.O_CREATE, info.Mode())
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				defer w.Close()
-
-				_, err = io.Copy(w, r)
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				return nil
-			}()
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
-}
-
 //////////////////////////////
 // bowler
 //////////////////////////////
@@ -237,20 +182,6 @@ type bowlerPreparator struct {
 	b *bowler
 }
 
-func (bp *bowlerPreparator) dir(path string) {
-	t := bp.b.t
-
-	must(t, screw.MkdirAll(filepath.Join(bp.b.TargetFolder, path), 0755))
-}
-
-func (bp *bowlerPreparator) symlink(path string, dest string) {
-	t := bp.b.t
-
-	targetPath := filepath.Join(bp.b.TargetFolder, path)
-	must(t, screw.MkdirAll(filepath.Dir(targetPath), 0755))
-	must(t, screw.Symlink(dest, targetPath))
-}
-
 func (bp *bowlerPreparator) file(path string, data []byte) {
 	t := bp.b.t
 
@@ -301,6 +232,7 @@ func (bs *bowlerSimulator) patch(sourcePath string, data []byte) {
 		sourceIndex := findFile(t, bs.b.SourceContainer, sourcePath)
 
 		w, err := bs.bowl.GetWriter(sourceIndex)
+		must(t, err)
 		defer func() {
 			must(t, w.Close())
 		}()

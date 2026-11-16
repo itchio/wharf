@@ -48,8 +48,6 @@ type ValidatorContext struct {
 	CaseFixStats *lake.CaseFixStats
 }
 
-const floatIntFactor = 10000.0
-
 // Validate checks the directory at target using the container info and hashes
 // contained in signature. FailFast mode returns an error on the first corruption
 // seen, other modes write wounds to a file or for a wounds consumer, like a healer.
