@@ -36,6 +36,18 @@ type DiffContext struct {
 	SavedBytes int64
 }
 
+// SourceChangedError is returned by WritePatch when the number of bytes read
+// for a source file differs from its size in SourceContainer.
+type SourceChangedError struct {
+	Path         string
+	ExpectedSize int64
+	ActualSize   int64
+}
+
+func (e *SourceChangedError) Error() string {
+	return fmt.Sprintf("source %q: expected %d bytes, read %d bytes", e.Path, e.ExpectedSize, e.ActualSize)
+}
+
 // WritePatch outputs a pwr patch to patchWriter
 func (dctx *DiffContext) WritePatch(ctx context.Context, patchWriter io.Writer, signatureWriter io.Writer) error {
 	if dctx.Compression == nil {
@@ -151,7 +163,8 @@ func (dctx *DiffContext) WritePatch(ctx context.Context, patchWriter io.Writer, 
 			preferredFileIndex = oldIndex
 		}
 
-		mr := multiread.New(counter.NewReaderCallback(onSourceRead, sourceReader))
+		countingReader := counter.NewReaderCallback(onSourceRead, sourceReader)
+		mr := multiread.New(countingReader)
 		diffReader := mr.Reader()
 		signReader := mr.Reader()
 
@@ -169,6 +182,14 @@ func (dctx *DiffContext) WritePatch(ctx context.Context, patchWriter io.Writer, 
 		)
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		if read := countingReader.Count(); read != f.Size {
+			return errors.WithStack(&SourceChangedError{
+				Path:         f.Path,
+				ExpectedSize: f.Size,
+				ActualSize:   read,
+			})
 		}
 
 		err = patchWire.WriteMessage(syncDelimiter)
